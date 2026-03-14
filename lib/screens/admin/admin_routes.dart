@@ -21,21 +21,21 @@ class AdminRoutes extends StatelessWidget {
                 Row(
                   children: [
                     _MiniStat(
-                      icon: '🗺️',
+                      icon: Icons.map_rounded,
                       label: 'Total Routes',
                       value: '18',
                       color: AppTheme.adminEmerald,
                     ),
                     const SizedBox(width: 10),
                     _MiniStat(
-                      icon: '🤖',
+                      icon: Icons.star_rounded,
                       label: 'AI Optimized',
                       value: '6',
                       color: AppTheme.purple,
                     ),
                     const SizedBox(width: 10),
                     _MiniStat(
-                      icon: '📍',
+                      icon: Icons.location_on_rounded,
                       label: 'Stops',
                       value: '84',
                       color: AppTheme.info,
@@ -48,11 +48,11 @@ class AdminRoutes extends StatelessWidget {
                 GlassCard(
                   gradient: LinearGradient(
                     colors: [
-                      AppTheme.purple.withOpacity(0.15),
-                      AppTheme.info.withOpacity(0.08),
+                      AppTheme.purple.withValues(alpha: 0.15),
+                      AppTheme.info.withValues(alpha: 0.08),
                     ],
                   ),
-                  borderColor: AppTheme.purple.withOpacity(0.25),
+                  borderColor: AppTheme.purple.withValues(alpha: 0.25),
                   padding: const EdgeInsets.all(18),
                   child: Row(
                     children: [
@@ -128,10 +128,10 @@ class AdminRoutes extends StatelessWidget {
                                 width: 44,
                                 height: 44,
                                 decoration: BoxDecoration(
-                                  color: r.color.withOpacity(0.15),
+                                  color: r.color.withValues(alpha: 0.15),
                                   borderRadius: BorderRadius.circular(14),
                                   border: Border.all(
-                                    color: r.color.withOpacity(0.3),
+                                    color: r.color.withValues(alpha: 0.3),
                                   ),
                                 ),
                                 child: Center(
@@ -176,22 +176,22 @@ class AdminRoutes extends StatelessWidget {
                           Row(
                             children: [
                               _RouteDetail(
-                                icon: '📍',
+                                icon: Icons.location_on_rounded,
                                 label: 'Stops',
                                 value: r.stops,
                               ),
                               _RouteDetail(
-                                icon: '🕐',
+                                icon: Icons.star_rounded,
                                 label: 'Duration',
                                 value: r.duration,
                               ),
                               _RouteDetail(
-                                icon: '📏',
+                                icon: Icons.star_rounded,
                                 label: 'Distance',
                                 value: r.distance,
                               ),
                               _RouteDetail(
-                                icon: '🚌',
+                                icon: Icons.directions_bus_rounded,
                                 label: 'Bus',
                                 value: r.bus,
                               ),
@@ -205,7 +205,7 @@ class AdminRoutes extends StatelessWidget {
                               vertical: 8,
                             ),
                             decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.04),
+                              color: Colors.white.withValues(alpha: 0.04),
                               borderRadius: BorderRadius.circular(10),
                             ),
                             child: Row(
@@ -369,7 +369,8 @@ class _Header extends StatelessWidget {
 }
 
 class _MiniStat extends StatelessWidget {
-  final String icon, label, value;
+  final IconData icon;
+  final String label, value;
   final Color color;
   const _MiniStat({
     required this.icon,
@@ -383,12 +384,15 @@ class _MiniStat extends StatelessWidget {
       child: GlassCard(
         padding: const EdgeInsets.all(12),
         gradient: LinearGradient(
-          colors: [color.withOpacity(0.12), color.withOpacity(0.04)],
+          colors: [
+            color.withValues(alpha: 0.12),
+            color.withValues(alpha: 0.04),
+          ],
         ),
-        borderColor: color.withOpacity(0.2),
+        borderColor: color.withValues(alpha: 0.2),
         child: Column(
           children: [
-            Text(icon, style: const TextStyle(fontSize: 20)),
+            Icon(icon, color: color, size: 24),
             const SizedBox(height: 4),
             Text(
               value,
@@ -410,7 +414,8 @@ class _MiniStat extends StatelessWidget {
 }
 
 class _RouteDetail extends StatelessWidget {
-  final String icon, label, value;
+  final IconData icon;
+  final String label, value;
   const _RouteDetail({
     required this.icon,
     required this.label,
@@ -433,7 +438,7 @@ class _RouteDetail extends StatelessWidget {
           Text(
             label,
             style: TextStyle(
-              color: Colors.white.withOpacity(0.35),
+              color: Colors.white.withValues(alpha: 0.35),
               fontSize: 10,
             ),
           ),

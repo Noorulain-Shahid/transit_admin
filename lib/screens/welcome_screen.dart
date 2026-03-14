@@ -133,7 +133,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                       height: dot.size,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: dot.color.withOpacity(0.6),
+                        color: dot.color.withValues(alpha: 0.6),
                       ),
                     ),
                   ),
@@ -163,7 +163,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                               borderRadius: BorderRadius.circular(32),
                               boxShadow: [
                                 BoxShadow(
-                                  color: AppTheme.adminEmerald.withOpacity(0.5),
+                                  color: AppTheme.adminEmerald.withValues(alpha: 0.5),
                                   blurRadius: 40,
                                   offset: const Offset(0, 20),
                                 ),
@@ -238,7 +238,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                                     child: Text(
                                       f,
                                       style: TextStyle(
-                                        color: Colors.white.withOpacity(0.8),
+                                        color: Colors.white.withValues(alpha: 0.8),
                                         fontSize: 12,
                                         fontWeight: FontWeight.w500,
                                       ),

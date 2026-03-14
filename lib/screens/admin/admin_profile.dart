@@ -31,7 +31,7 @@ class AdminProfile extends StatelessWidget {
                     borderRadius: BorderRadius.circular(24),
                     boxShadow: [
                       BoxShadow(
-                        color: AppTheme.adminEmerald.withOpacity(0.4),
+                        color: AppTheme.adminEmerald.withValues(alpha: 0.4),
                         blurRadius: 24,
                         offset: const Offset(0, 10),
                       ),
@@ -69,11 +69,23 @@ class AdminProfile extends StatelessWidget {
                 // ── Quick stats ──────────────────────────────
                 Row(
                   children: [
-                    _ProfileStat(icon: '🚌', label: 'Buses', value: '12'),
+                    _ProfileStat(
+                      icon: Icons.directions_bus_rounded,
+                      label: 'Buses',
+                      value: '12',
+                    ),
                     const SizedBox(width: 10),
-                    _ProfileStat(icon: '🗺️', label: 'Routes', value: '18'),
+                    _ProfileStat(
+                      icon: Icons.map_rounded,
+                      label: 'Routes',
+                      value: '18',
+                    ),
                     const SizedBox(width: 10),
-                    _ProfileStat(icon: '👥', label: 'Users', value: '562'),
+                    _ProfileStat(
+                      icon: Icons.people_alt_rounded,
+                      label: 'Users',
+                      value: '562',
+                    ),
                   ],
                 ),
                 const SizedBox(height: 16),
@@ -84,27 +96,27 @@ class AdminProfile extends StatelessWidget {
                   child: Column(
                     children: [
                       _OptionRow(
-                        icon: '📊',
+                        icon: Icons.star_rounded,
                         label: 'Dashboard',
                         onTap: () => onNavigate(0),
                       ),
                       _OptionRow(
-                        icon: '🚌',
+                        icon: Icons.directions_bus_rounded,
                         label: 'Fleet Management',
                         onTap: () => onNavigate(1),
                       ),
                       _OptionRow(
-                        icon: '🗺️',
+                        icon: Icons.map_rounded,
                         label: 'Route Management',
                         onTap: () => onNavigate(2),
                       ),
                       _OptionRow(
-                        icon: '👥',
+                        icon: Icons.people_alt_rounded,
                         label: 'User Management',
                         onTap: () => onNavigate(3),
                       ),
                       _OptionRow(
-                        icon: '💰',
+                        icon: Icons.account_balance_wallet_rounded,
                         label: 'Fee Management',
                         onTap: () => onNavigate(4),
                       ),
@@ -119,21 +131,25 @@ class AdminProfile extends StatelessWidget {
                   child: Column(
                     children: [
                       _OptionRow(
-                        icon: '⚙️',
+                        icon: Icons.settings_rounded,
                         label: 'App Settings',
                         onTap: () {},
                       ),
                       _OptionRow(
-                        icon: '🔔',
+                        icon: Icons.notifications_rounded,
                         label: 'Notification Settings',
                         onTap: () {},
                       ),
                       _OptionRow(
-                        icon: '🔒',
+                        icon: Icons.lock_rounded,
                         label: 'Security & Privacy',
                         onTap: () {},
                       ),
-                      _OptionRow(icon: '📋', label: 'Audit Logs', onTap: () {}),
+                      _OptionRow(
+                        icon: Icons.star_rounded,
+                        label: 'Audit Logs',
+                        onTap: () {},
+                      ),
                     ],
                   ),
                 ),
@@ -176,11 +192,11 @@ class AdminProfile extends StatelessWidget {
                   child: GlassCard(
                     gradient: LinearGradient(
                       colors: [
-                        AppTheme.error.withOpacity(0.1),
-                        AppTheme.error.withOpacity(0.04),
+                        AppTheme.error.withValues(alpha: 0.1),
+                        AppTheme.error.withValues(alpha: 0.04),
                       ],
                     ),
-                    borderColor: AppTheme.error.withOpacity(0.2),
+                    borderColor: AppTheme.error.withValues(alpha: 0.2),
                     padding: const EdgeInsets.all(16),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -209,7 +225,8 @@ class AdminProfile extends StatelessWidget {
 }
 
 class _ProfileStat extends StatelessWidget {
-  final String icon, label, value;
+  final IconData icon;
+  final String label, value;
   const _ProfileStat({
     required this.icon,
     required this.label,
@@ -222,7 +239,7 @@ class _ProfileStat extends StatelessWidget {
         padding: const EdgeInsets.symmetric(vertical: 14),
         child: Column(
           children: [
-            Text(icon, style: const TextStyle(fontSize: 22)),
+            Icon(icon, color: AppTheme.adminAccent, size: 26),
             const SizedBox(height: 4),
             Text(
               value,
@@ -244,7 +261,8 @@ class _ProfileStat extends StatelessWidget {
 }
 
 class _OptionRow extends StatelessWidget {
-  final String icon, label;
+  final IconData icon;
+  final String label;
   final VoidCallback onTap;
   const _OptionRow({
     required this.icon,
@@ -260,7 +278,7 @@ class _OptionRow extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         child: Row(
           children: [
-            Text(icon, style: const TextStyle(fontSize: 18)),
+            Icon(icon, color: AppTheme.adminAccent, size: 22),
             const SizedBox(width: 14),
             Expanded(
               child: Text(

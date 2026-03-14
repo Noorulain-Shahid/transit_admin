@@ -67,7 +67,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     shape: BoxShape.circle,
                     gradient: RadialGradient(
                       colors: [
-                        AppTheme.adminEmerald.withOpacity(0.4),
+                        AppTheme.adminEmerald.withValues(alpha: 0.4),
                         Colors.transparent,
                       ],
                     ),
@@ -148,10 +148,10 @@ class _LoginScreenState extends State<LoginScreen> {
                                 vertical: 12,
                               ),
                               decoration: BoxDecoration(
-                                color: AppTheme.adminEmerald.withOpacity(0.12),
+                                color: AppTheme.adminEmerald.withValues(alpha: 0.12),
                                 borderRadius: BorderRadius.circular(12),
                                 border: Border.all(
-                                  color: AppTheme.adminEmerald.withOpacity(0.3),
+                                  color: AppTheme.adminEmerald.withValues(alpha: 0.3),
                                 ),
                               ),
                               child: Column(
@@ -248,10 +248,10 @@ class _LoginScreenState extends State<LoginScreen> {
                                 vertical: 10,
                               ),
                               decoration: BoxDecoration(
-                                color: AppTheme.error.withOpacity(0.1),
+                                color: AppTheme.error.withValues(alpha: 0.1),
                                 borderRadius: BorderRadius.circular(10),
                                 border: Border.all(
-                                  color: AppTheme.error.withOpacity(0.3),
+                                  color: AppTheme.error.withValues(alpha: 0.3),
                                 ),
                               ),
                               child: Row(
@@ -315,7 +315,7 @@ class _FieldLabel extends StatelessWidget {
     return Text(
       text,
       style: TextStyle(
-        color: Colors.white.withOpacity(0.6),
+        color: Colors.white.withValues(alpha: 0.6),
         fontSize: 11,
         fontWeight: FontWeight.w700,
         letterSpacing: 0.8,

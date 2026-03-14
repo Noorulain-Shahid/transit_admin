@@ -18,29 +18,40 @@ extension AppColors on BuildContext {
   Color get textHint => isDark ? Colors.white24 : const Color(0xFFCBD5E1);
 
   // Surfaces / cards
-  Color get cardBg => isDark ? Colors.white.withOpacity(0.06) : Colors.white;
+  Color get cardBg => isDark ? Colors.white.withValues(alpha: 0.06) : Colors.white;
   Color get cardBgElevated =>
-      isDark ? Colors.white.withOpacity(0.10) : const Color(0xFFF1F5F9);
+      isDark ? Colors.white.withValues(alpha: 0.10) : const Color(0xFFF1F5F9);
   Color get surfaceBorder =>
-      isDark ? Colors.white.withOpacity(0.10) : const Color(0xFFE2E8F0);
+      isDark ? Colors.white.withValues(alpha: 0.10) : const Color(0xFFE2E8F0);
 
   // Inputs
   Color get inputFill =>
-      isDark ? Colors.white.withOpacity(0.05) : const Color(0xFFF1F5F9);
+      isDark ? Colors.white.withValues(alpha: 0.05) : const Color(0xFFF1F5F9);
   Color get inputBorder =>
-      isDark ? Colors.white.withOpacity(0.12) : const Color(0xFFE2E8F0);
+      isDark ? Colors.white.withValues(alpha: 0.12) : const Color(0xFFE2E8F0);
 }
 
 class AppTheme {
   // ── Background ────────────────────────────────────────────────────────────
-  static const Color bgDarkest = Color.fromARGB(255, 99, 74, 192);
-  static const Color bgDark = Color.fromARGB(255, 45, 18, 95);
+  static const Color bgDarkest = Color.fromARGB(255, 16, 9, 44);
+  static const Color bgDark = Color.fromARGB(255, 39, 14, 83);
   static const Color bgDarkBlue = Color.fromARGB(255, 42, 41, 94);
 
   // ── Light backgrounds ─────────────────────────────────────────────────────
-  static const Color lightBg1 = Color(0xFFF0FDF4);
-  static const Color lightBg2 = Color(0xFFECFDF5);
+  static const Color lightBg1 = Color(0xFFF8FAFC);
+  static const Color lightBg2 = Color(0xFFEEF2FF);
   static const Color lightBg3 = Color(0xFFF0F9FF);
+
+  // ── Parent (purple) ───────────────────────────────────────────────────────
+  static const Color parentPurple = Color(0xFF7C3AED);
+  static const Color parentIndigo = Color(0xFF4F46E5);
+  static const Color parentAccent = Color(0xFFA78BFA);
+  static const Color parentLight = Color(0xFFC4B5FD);
+
+  // ── Driver (cyan) ─────────────────────────────────────────────────────────
+  static const Color driverCyan = Color(0xFF0EA5E9);
+  static const Color driverTeal = Color(0xFF0891B2);
+  static const Color driverAccent = Color(0xFF38BDF8);
 
   // ── Admin (emerald) ───────────────────────────────────────────────────────
   static const Color adminEmerald = Color(0xFF059669);
@@ -48,16 +59,7 @@ class AppTheme {
   static const Color adminAccent = Color(0xFF34D399);
   static const Color adminLight = Color(0xFF6EE7B7);
 
-  // ── Role colors (for user management display) ─────────────────────────────
-  static const Color parentPurple = Color(0xFF7C3AED);
-  static const Color parentIndigo = Color(0xFF4F46E5);
-  static const Color parentAccent = Color(0xFFA78BFA);
-  static const Color parentLight = Color(0xFFC4B5FD);
-
-  static const Color driverCyan = Color(0xFF0EA5E9);
-  static const Color driverTeal = Color(0xFF0891B2);
-  static const Color driverAccent = Color(0xFF38BDF8);
-
+  // ── Student (amber/orange) ────────────────────────────────────────────────
   static const Color studentAmber = Color(0xFFF59E0B);
   static const Color studentOrange = Color(0xFFEA580C);
   static const Color studentAccent = Color(0xFFFBBF24);
@@ -136,12 +138,12 @@ class AppTheme {
   }) {
     return BoxDecoration(
       color: gradient == null
-          ? (color ?? Colors.white.withOpacity(0.06))
+          ? (color ?? Colors.white.withValues(alpha: 0.06))
           : null,
       gradient: gradient,
       borderRadius: BorderRadius.circular(radius),
       border: Border.all(
-        color: borderColor ?? Colors.white.withOpacity(0.10),
+        color: borderColor ?? Colors.white.withValues(alpha: 0.10),
         width: borderWidth,
       ),
       boxShadow: shadows,
@@ -155,8 +157,8 @@ class AppTheme {
       brightness: Brightness.dark,
       scaffoldBackgroundColor: bgDarkest,
       colorScheme: const ColorScheme.dark(
-        primary: adminEmerald,
-        secondary: adminAccent,
+        primary: parentPurple,
+        secondary: driverCyan,
         surface: bgDark,
       ),
       textTheme: const TextTheme(
@@ -208,21 +210,21 @@ class AppTheme {
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: Colors.white.withOpacity(0.05),
+        fillColor: Colors.white.withValues(alpha: 0.05),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide(color: Colors.white.withOpacity(0.12)),
+          borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.12)),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide(color: Colors.white.withOpacity(0.12)),
+          borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.12)),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: adminAccent, width: 1.5),
+          borderSide: const BorderSide(color: parentAccent, width: 1.5),
         ),
         hintStyle: TextStyle(
-          color: Colors.white.withOpacity(0.25),
+          color: Colors.white.withValues(alpha: 0.25),
           fontSize: 15,
         ),
         contentPadding: const EdgeInsets.symmetric(
@@ -238,7 +240,7 @@ class AppTheme {
     const textDark = Color(0xFF1E293B);
     const textMid = Color(0xFF64748B);
     const textLight = Color(0xFF94A3B8);
-    const surface = Color(0xFFF0FDF4);
+    const surface = Color(0xFFF8FAFC);
     const border = Color(0xFFE2E8F0);
 
     return ThemeData(
@@ -246,8 +248,8 @@ class AppTheme {
       brightness: Brightness.light,
       scaffoldBackgroundColor: surface,
       colorScheme: const ColorScheme.light(
-        primary: adminEmerald,
-        secondary: adminAccent,
+        primary: parentPurple,
+        secondary: driverCyan,
         surface: surface,
       ),
       textTheme: const TextTheme(
@@ -310,7 +312,7 @@ class AppTheme {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: adminEmerald, width: 1.5),
+          borderSide: const BorderSide(color: parentPurple, width: 1.5),
         ),
         hintStyle: const TextStyle(color: textLight, fontSize: 15),
         contentPadding: const EdgeInsets.symmetric(

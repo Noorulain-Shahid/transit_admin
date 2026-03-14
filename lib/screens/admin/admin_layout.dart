@@ -21,13 +21,31 @@ class _AdminLayoutState extends State<AdminLayout> {
 
   void _goToTab(int index) => setState(() => _tab = index);
 
-  static const _navItems = [
-    _NavItem(icon: '📊', label: 'Dashboard'),
-    _NavItem(icon: '🚌', label: 'Fleet'),
-    _NavItem(icon: '🗺️', label: 'Routes'),
-    _NavItem(icon: '👥', label: 'Users'),
-    _NavItem(icon: '💰', label: 'Fees'),
-    _NavItem(icon: '👤', label: 'Profile'),
+  List<_NavItem> get _navItems => const [
+    _NavItem(
+      iconPath: 'assets/images/navbar/home_transparent.png',
+      label: 'Dashboard',
+    ),
+    _NavItem(
+      iconPath: 'assets/images/splash_screen/bus_splash_icon.png',
+      label: 'Fleet',
+    ),
+    _NavItem(
+      iconPath: 'assets/images/navbar/track_transparent.png',
+      label: 'Routes',
+    ),
+    _NavItem(
+      iconPath: 'assets/images/navbar/student.png',
+      label: 'Users',
+    ),
+    _NavItem(
+      iconPath: 'assets/images/navbar/fees.png',
+      label: 'Fees',
+    ),
+    _NavItem(
+      iconPath: 'assets/images/navbar/user_transparent.png',
+      label: 'Profile',
+    ),
   ];
 
   @override
@@ -59,20 +77,34 @@ class _AdminLayoutState extends State<AdminLayout> {
   }
 
   Widget _buildNav() {
-    return ClipRect(
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-        child: Container(
-          decoration: BoxDecoration(
-            color: context.isDark
-                ? Colors.black.withOpacity(0.45)
-                : Colors.white.withOpacity(0.85),
-            border: Border(top: BorderSide(color: context.cardBgElevated)),
-          ),
-          child: SafeArea(
-            top: false,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 6),
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(10, 0, 10, 12),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(40),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+            child: Container(
+              decoration: BoxDecoration(
+                color: context.isDark
+                    ? Colors.white.withValues(alpha: 0.10)
+                    : Colors.white.withValues(alpha: 0.55),
+                borderRadius: BorderRadius.circular(40),
+                border: Border.all(
+                  color: context.isDark
+                      ? Colors.white.withValues(alpha: 0.18)
+                      : Colors.white.withValues(alpha: 0.80),
+                  width: 1.5,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.18),
+                    blurRadius: 28,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
               child: Row(
                 children: List.generate(_navItems.length, (i) {
                   final isActive = _tab == i;
@@ -80,39 +112,57 @@ class _AdminLayoutState extends State<AdminLayout> {
                     child: GestureDetector(
                       onTap: () => _goToTab(i),
                       behavior: HitTestBehavior.opaque,
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          AnimatedContainer(
-                            duration: const Duration(milliseconds: 200),
-                            padding: const EdgeInsets.all(6),
-                            decoration: isActive
-                                ? BoxDecoration(
-                                    color: AppTheme.adminEmerald.withOpacity(
-                                      0.2,
-                                    ),
-                                    borderRadius: BorderRadius.circular(12),
-                                  )
-                                : null,
-                            child: Text(
-                              _navItems[i].icon,
-                              style: TextStyle(fontSize: isActive ? 20 : 18),
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 250),
+                        curve: Curves.easeInOut,
+                        padding: const EdgeInsets.symmetric(
+                          vertical: 6,
+                          horizontal: 4,
+                        ),
+                        decoration: isActive
+                            ? BoxDecoration(
+                                color: context.isDark
+                                    ? Colors.white.withValues(alpha: 0.20)
+                                    : Colors.white.withValues(alpha: 0.72),
+                                borderRadius: BorderRadius.circular(30),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withValues(alpha: 0.10),
+                                    blurRadius: 10,
+                                    offset: const Offset(0, 3),
+                                  ),
+                                ],
+                              )
+                            : null,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Image.asset(
+                              _navItems[i].iconPath,
+                              width: isActive ? 26 : 22,
+                              height: isActive ? 26 : 22,
+                              cacheWidth: 64,
+                              cacheHeight: 64,
+                              fit: BoxFit.contain,
+                              filterQuality: FilterQuality.medium,
                             ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            _navItems[i].label,
-                            style: TextStyle(
-                              color: isActive
-                                  ? AppTheme.adminAccent
-                                  : context.textTertiary,
-                              fontSize: 10,
-                              fontWeight: isActive
-                                  ? FontWeight.w700
-                                  : FontWeight.w500,
+                            const SizedBox(height: 2),
+                            Text(
+                              _navItems[i].label,
+                              style: TextStyle(
+                                color: isActive
+                                    ? AppTheme.adminAccent
+                                    : context.textTertiary,
+                                fontSize: isActive ? 10 : 9,
+                                fontWeight: isActive
+                                    ? FontWeight.w700
+                                    : FontWeight.w400,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                              maxLines: 1,
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
                   );
@@ -127,6 +177,7 @@ class _AdminLayoutState extends State<AdminLayout> {
 }
 
 class _NavItem {
-  final String icon, label;
-  const _NavItem({required this.icon, required this.label});
+  final String iconPath;
+  final String label;
+  const _NavItem({required this.iconPath, required this.label});
 }

@@ -28,21 +28,21 @@ class _AdminStudentsState extends State<AdminStudents> {
                 Row(
                   children: [
                     _MiniStat(
-                      icon: '👥',
+                      icon: Icons.people_alt_rounded,
                       label: 'Total',
                       value: '562',
                       color: AppTheme.adminEmerald,
                     ),
                     const SizedBox(width: 10),
                     _MiniStat(
-                      icon: '🎓',
+                      icon: Icons.school_rounded,
                       label: 'Students',
                       value: '486',
                       color: AppTheme.studentAmber,
                     ),
                     const SizedBox(width: 10),
                     _MiniStat(
-                      icon: '⏳',
+                      icon: Icons.hourglass_empty_rounded,
                       label: 'Pending',
                       value: '14',
                       color: AppTheme.warning,
@@ -92,11 +92,11 @@ class _AdminStudentsState extends State<AdminStudents> {
                     padding: const EdgeInsets.all(16),
                     gradient: LinearGradient(
                       colors: [
-                        AppTheme.warning.withOpacity(0.1),
+                        AppTheme.warning.withValues(alpha: 0.1),
                         Colors.transparent,
                       ],
                     ),
-                    borderColor: AppTheme.warning.withOpacity(0.2),
+                    borderColor: AppTheme.warning.withValues(alpha: 0.2),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -119,7 +119,7 @@ class _AdminStudentsState extends State<AdminStudents> {
                                 vertical: 3,
                               ),
                               decoration: BoxDecoration(
-                                color: AppTheme.warning.withOpacity(0.2),
+                                color: AppTheme.warning.withValues(alpha: 0.2),
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               child: const Text(
@@ -339,7 +339,8 @@ class _Header extends StatelessWidget {
 }
 
 class _MiniStat extends StatelessWidget {
-  final String icon, label, value;
+  final IconData icon;
+  final String label, value;
   final Color color;
   const _MiniStat({
     required this.icon,
@@ -353,12 +354,15 @@ class _MiniStat extends StatelessWidget {
       child: GlassCard(
         padding: const EdgeInsets.all(12),
         gradient: LinearGradient(
-          colors: [color.withOpacity(0.12), color.withOpacity(0.04)],
+          colors: [
+            color.withValues(alpha: 0.12),
+            color.withValues(alpha: 0.04),
+          ],
         ),
-        borderColor: color.withOpacity(0.2),
+        borderColor: color.withValues(alpha: 0.2),
         child: Column(
           children: [
-            Text(icon, style: const TextStyle(fontSize: 20)),
+            Icon(icon, color: color, size: 24),
             const SizedBox(height: 4),
             Text(
               value,
@@ -398,13 +402,13 @@ class _FilterChip extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
           decoration: BoxDecoration(
             color: active
-                ? AppTheme.adminEmerald.withOpacity(0.2)
+                ? AppTheme.adminEmerald.withValues(alpha: 0.2)
                 : context.cardBg,
             borderRadius: BorderRadius.circular(10),
             border: Border.all(
               color: active
-                  ? AppTheme.adminAccent.withOpacity(0.5)
-                  : Colors.white.withOpacity(0.1),
+                  ? AppTheme.adminAccent.withValues(alpha: 0.5)
+                  : Colors.white.withValues(alpha: 0.1),
             ),
           ),
           child: Text(
@@ -431,7 +435,7 @@ class _PendingUserRow extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.04),
+          color: Colors.white.withValues(alpha: 0.04),
           borderRadius: BorderRadius.circular(14),
           border: Border.all(color: context.cardBg),
         ),
@@ -441,7 +445,7 @@ class _PendingUserRow extends StatelessWidget {
               width: 40,
               height: 40,
               decoration: BoxDecoration(
-                color: user.color.withOpacity(0.15),
+                color: user.color.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Center(
@@ -495,9 +499,9 @@ class _ActionBtn extends StatelessWidget {
       width: 30,
       height: 30,
       decoration: BoxDecoration(
-        color: color.withOpacity(0.15),
+        color: color.withValues(alpha: 0.15),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withOpacity(0.3)),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
       child: Center(
         child: Text(
@@ -526,9 +530,9 @@ class _UserCard extends StatelessWidget {
             width: 42,
             height: 42,
             decoration: BoxDecoration(
-              color: user.color.withOpacity(0.15),
+              color: user.color.withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: user.color.withOpacity(0.3)),
+              border: Border.all(color: user.color.withValues(alpha: 0.3)),
             ),
             child: Center(
               child: Text(user.icon, style: const TextStyle(fontSize: 20)),
@@ -596,7 +600,7 @@ class _SeatRow extends StatelessWidget {
             child: Text(
               route,
               style: TextStyle(
-                color: Colors.white.withOpacity(0.6),
+                color: Colors.white.withValues(alpha: 0.6),
                 fontSize: 12,
               ),
             ),

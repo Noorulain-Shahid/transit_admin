@@ -28,11 +28,11 @@ class _AdminFeesState extends State<AdminFees> {
                 GlassCard(
                   gradient: LinearGradient(
                     colors: [
-                      AppTheme.adminEmerald.withOpacity(0.15),
-                      AppTheme.adminEmerald.withOpacity(0.05),
+                      AppTheme.adminEmerald.withValues(alpha: 0.15),
+                      AppTheme.adminEmerald.withValues(alpha: 0.05),
                     ],
                   ),
-                  borderColor: AppTheme.adminEmerald.withOpacity(0.25),
+                  borderColor: AppTheme.adminEmerald.withValues(alpha: 0.25),
                   padding: const EdgeInsets.all(20),
                   child: Column(
                     children: [
@@ -66,7 +66,7 @@ class _AdminFeesState extends State<AdminFees> {
                               vertical: 6,
                             ),
                             decoration: BoxDecoration(
-                              color: AppTheme.success.withOpacity(0.15),
+                              color: AppTheme.success.withValues(alpha: 0.15),
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: Row(
@@ -184,11 +184,11 @@ class _AdminFeesState extends State<AdminFees> {
                   padding: const EdgeInsets.all(18),
                   gradient: LinearGradient(
                     colors: [
-                      AppTheme.warning.withOpacity(0.1),
+                      AppTheme.warning.withValues(alpha: 0.1),
                       Colors.transparent,
                     ],
                   ),
-                  borderColor: AppTheme.warning.withOpacity(0.2),
+                  borderColor: AppTheme.warning.withValues(alpha: 0.2),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -383,9 +383,9 @@ class _FeeStatPill extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 10),
         decoration: BoxDecoration(
-          color: color.withOpacity(0.12),
+          color: color.withValues(alpha: 0.12),
           borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: color.withOpacity(0.2)),
+          border: Border.all(color: color.withValues(alpha: 0.2)),
         ),
         child: Column(
           children: [
@@ -428,13 +428,13 @@ class _FilterChip extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
           decoration: BoxDecoration(
             color: active
-                ? AppTheme.adminEmerald.withOpacity(0.2)
+                ? AppTheme.adminEmerald.withValues(alpha: 0.2)
                 : context.cardBg,
             borderRadius: BorderRadius.circular(10),
             border: Border.all(
               color: active
-                  ? AppTheme.adminAccent.withOpacity(0.5)
-                  : Colors.white.withOpacity(0.1),
+                  ? AppTheme.adminAccent.withValues(alpha: 0.5)
+                  : Colors.white.withValues(alpha: 0.1),
             ),
           ),
           child: Text(
@@ -464,7 +464,7 @@ class _FeeCard extends StatelessWidget {
             width: 42,
             height: 42,
             decoration: BoxDecoration(
-              color: fee.statusColor.withOpacity(0.12),
+              color: fee.statusColor.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(14),
             ),
             child: const Center(
@@ -530,7 +530,7 @@ class _InvoiceRow extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.04),
+          color: Colors.white.withValues(alpha: 0.04),
           borderRadius: BorderRadius.circular(12),
         ),
         child: Row(
@@ -568,7 +568,7 @@ class _InvoiceRow extends StatelessWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
-                color: AppTheme.info.withOpacity(0.15),
+                color: AppTheme.info.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(6),
               ),
               child: const Text(
@@ -598,7 +598,7 @@ class _ReminderRow extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.04),
+          color: Colors.white.withValues(alpha: 0.04),
           borderRadius: BorderRadius.circular(12),
         ),
         child: Row(
@@ -618,7 +618,7 @@ class _ReminderRow extends StatelessWidget {
                   Text(
                     '$amount · $daysOverdue days overdue',
                     style: TextStyle(
-                      color: AppTheme.error.withOpacity(0.7),
+                      color: AppTheme.error.withValues(alpha: 0.7),
                       fontSize: 11,
                     ),
                   ),
@@ -628,9 +628,11 @@ class _ReminderRow extends StatelessWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               decoration: BoxDecoration(
-                color: AppTheme.warning.withOpacity(0.15),
+                color: AppTheme.warning.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: AppTheme.warning.withOpacity(0.3)),
+                border: Border.all(
+                  color: AppTheme.warning.withValues(alpha: 0.3),
+                ),
               ),
               child: const Text(
                 'Send Reminder',

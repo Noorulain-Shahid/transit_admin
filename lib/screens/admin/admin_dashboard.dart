@@ -20,7 +20,7 @@ class AdminDashboard extends StatelessWidget {
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
                 colors: [
-                  AppTheme.adminEmerald.withOpacity(0.2),
+                  AppTheme.adminEmerald.withValues(alpha: 0.2),
                   Colors.transparent,
                 ],
               ),
@@ -69,7 +69,7 @@ class AdminDashboard extends StatelessWidget {
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(14),
                     border: Border.all(
-                      color: AppTheme.adminEmerald.withOpacity(0.5),
+                      color: AppTheme.adminEmerald.withValues(alpha: 0.5),
                       width: 2,
                     ),
                   ),
@@ -95,28 +95,28 @@ class AdminDashboard extends StatelessWidget {
                   childAspectRatio: 1.6,
                   children: [
                     _AdminStatCard(
-                      icon: '🚌',
+                      icon: Icons.directions_bus_rounded,
                       label: 'Active Buses',
                       value: '12',
                       sub: '2 delayed',
                       color: AppTheme.adminEmerald,
                     ),
                     _AdminStatCard(
-                      icon: '👨‍🎓',
+                      icon: Icons.school_rounded,
                       label: 'Students',
                       value: '486',
                       sub: '14 pending',
                       color: AppTheme.info,
                     ),
                     _AdminStatCard(
-                      icon: '🗺️',
+                      icon: Icons.route_rounded,
                       label: 'Routes',
                       value: '18',
                       sub: '3 optimized today',
                       color: AppTheme.purple,
                     ),
                     _AdminStatCard(
-                      icon: '💰',
+                      icon: Icons.account_balance_wallet_rounded,
                       label: 'Revenue',
                       value: '₹4.2L',
                       sub: '₹38K pending',
@@ -151,10 +151,14 @@ class AdminDashboard extends StatelessWidget {
                                 vertical: 4,
                               ),
                               decoration: BoxDecoration(
-                                color: AppTheme.adminAccent.withOpacity(0.15),
+                                color: AppTheme.adminAccent.withValues(
+                                  alpha: 0.15,
+                                ),
                                 borderRadius: BorderRadius.circular(8),
                                 border: Border.all(
-                                  color: AppTheme.adminAccent.withOpacity(0.3),
+                                  color: AppTheme.adminAccent.withValues(
+                                    alpha: 0.3,
+                                  ),
                                 ),
                               ),
                               child: Text(
@@ -259,10 +263,14 @@ class AdminDashboard extends StatelessWidget {
                                 vertical: 4,
                               ),
                               decoration: BoxDecoration(
-                                color: AppTheme.adminAccent.withOpacity(0.15),
+                                color: AppTheme.adminAccent.withValues(
+                                  alpha: 0.15,
+                                ),
                                 borderRadius: BorderRadius.circular(8),
                                 border: Border.all(
-                                  color: AppTheme.adminAccent.withOpacity(0.3),
+                                  color: AppTheme.adminAccent.withValues(
+                                    alpha: 0.3,
+                                  ),
                                 ),
                               ),
                               child: Text(
@@ -280,19 +288,19 @@ class AdminDashboard extends StatelessWidget {
                       _ApprovalRow(
                         name: 'Ali Hassan',
                         type: 'Student Registration',
-                        icon: '🎓',
+                        icon: Icons.school_rounded,
                         color: AppTheme.studentAmber,
                       ),
                       _ApprovalRow(
                         name: 'Fatima Khan',
                         type: 'Parent Registration',
-                        icon: '👨‍👩‍👧',
+                        icon: Icons.family_restroom_rounded,
                         color: AppTheme.parentPurple,
                       ),
                       _ApprovalRow(
                         name: 'Route C Extension',
                         type: 'Route Change Request',
-                        icon: '🗺️',
+                        icon: Icons.alt_route_rounded,
                         color: AppTheme.info,
                       ),
                     ],
@@ -356,28 +364,28 @@ class AdminDashboard extends StatelessWidget {
                       Row(
                         children: [
                           _QuickAction(
-                            icon: '🗺️',
+                            icon: Icons.add_location_alt_rounded,
                             label: 'Add Route',
                             color: AppTheme.info,
                             onTap: () => onNavigate(2),
                           ),
                           const SizedBox(width: 10),
                           _QuickAction(
-                            icon: '👥',
+                            icon: Icons.person_add_rounded,
                             label: 'Add User',
                             color: AppTheme.purple,
                             onTap: () => onNavigate(3),
                           ),
                           const SizedBox(width: 10),
                           _QuickAction(
-                            icon: '🚌',
+                            icon: Icons.directions_bus_filled_rounded,
                             label: 'Add Bus',
                             color: AppTheme.adminEmerald,
                             onTap: () => onNavigate(1),
                           ),
                           const SizedBox(width: 10),
                           _QuickAction(
-                            icon: '📊',
+                            icon: Icons.analytics_rounded,
                             label: 'Report',
                             color: AppTheme.warning,
                             onTap: () {},
@@ -399,7 +407,8 @@ class AdminDashboard extends StatelessWidget {
 // ─── Widgets ──────────────────────────────────────────────────────────────────
 
 class _AdminStatCard extends StatelessWidget {
-  final String icon, label, value, sub;
+  final IconData icon;
+  final String label, value, sub;
   final Color color;
   const _AdminStatCard({
     required this.icon,
@@ -414,9 +423,9 @@ class _AdminStatCard extends StatelessWidget {
     return GlassCard(
       padding: const EdgeInsets.all(14),
       gradient: LinearGradient(
-        colors: [color.withOpacity(0.15), color.withOpacity(0.05)],
+        colors: [color.withValues(alpha: 0.15), color.withValues(alpha: 0.05)],
       ),
-      borderColor: color.withOpacity(0.2),
+      borderColor: color.withValues(alpha: 0.2),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisAlignment: MainAxisAlignment.center,
@@ -427,12 +436,10 @@ class _AdminStatCard extends StatelessWidget {
                 width: 32,
                 height: 32,
                 decoration: BoxDecoration(
-                  color: color.withOpacity(0.2),
+                  color: color.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: Center(
-                  child: Text(icon, style: const TextStyle(fontSize: 16)),
-                ),
+                child: Center(child: Icon(icon, color: color, size: 20)),
               ),
               const SizedBox(width: 8),
               Expanded(
@@ -451,14 +458,14 @@ class _AdminStatCard extends StatelessWidget {
           Text(
             label,
             style: TextStyle(
-              color: Colors.white.withOpacity(0.6),
+              color: Colors.white.withValues(alpha: 0.6),
               fontSize: 12,
               fontWeight: FontWeight.w600,
             ),
           ),
           Text(
             sub,
-            style: TextStyle(color: color.withOpacity(0.8), fontSize: 11),
+            style: TextStyle(color: color.withValues(alpha: 0.8), fontSize: 11),
           ),
         ],
       ),
@@ -531,7 +538,7 @@ class _BusStatusRow extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.04),
+          color: Colors.white.withValues(alpha: 0.04),
           borderRadius: BorderRadius.circular(14),
           border: Border.all(color: context.cardBg),
         ),
@@ -541,7 +548,7 @@ class _BusStatusRow extends StatelessWidget {
               width: 38,
               height: 38,
               decoration: BoxDecoration(
-                color: statusColor.withOpacity(0.15),
+                color: statusColor.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: const Center(
@@ -576,7 +583,7 @@ class _BusStatusRow extends StatelessWidget {
                 Text(
                   '$students students',
                   style: TextStyle(
-                    color: Colors.white.withOpacity(0.35),
+                    color: Colors.white.withValues(alpha: 0.35),
                     fontSize: 11,
                   ),
                 ),
@@ -590,7 +597,8 @@ class _BusStatusRow extends StatelessWidget {
 }
 
 class _ApprovalRow extends StatelessWidget {
-  final String name, type, icon;
+  final String name, type;
+  final IconData icon;
   final Color color;
   const _ApprovalRow({
     required this.name,
@@ -606,7 +614,7 @@ class _ApprovalRow extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.04),
+          color: Colors.white.withValues(alpha: 0.04),
           borderRadius: BorderRadius.circular(14),
           border: Border.all(color: context.cardBg),
         ),
@@ -616,12 +624,10 @@ class _ApprovalRow extends StatelessWidget {
               width: 38,
               height: 38,
               decoration: BoxDecoration(
-                color: color.withOpacity(0.15),
+                color: color.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: Center(
-                child: Text(icon, style: const TextStyle(fontSize: 18)),
-              ),
+              child: Center(child: Icon(icon, color: color, size: 22)),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -667,9 +673,9 @@ class _SmallBtn extends StatelessWidget {
       width: 32,
       height: 32,
       decoration: BoxDecoration(
-        color: color.withOpacity(0.15),
+        color: color.withValues(alpha: 0.15),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: color.withOpacity(0.3)),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
       child: Center(
         child: Text(
@@ -702,9 +708,9 @@ class _MaintenanceRow extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: color.withOpacity(0.06),
+          color: color.withValues(alpha: 0.06),
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: color.withOpacity(0.15)),
+          border: Border.all(color: color.withValues(alpha: 0.15)),
         ),
         child: Row(
           children: [
@@ -712,7 +718,7 @@ class _MaintenanceRow extends StatelessWidget {
               width: 38,
               height: 38,
               decoration: BoxDecoration(
-                color: color.withOpacity(0.15),
+                color: color.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: const Center(
@@ -757,7 +763,8 @@ class _MaintenanceRow extends StatelessWidget {
 }
 
 class _QuickAction extends StatelessWidget {
-  final String icon, label;
+  final IconData icon;
+  final String label;
   final Color color;
   final VoidCallback onTap;
   const _QuickAction({
@@ -775,18 +782,18 @@ class _QuickAction extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 14),
           decoration: BoxDecoration(
-            color: color.withOpacity(0.1),
+            color: color.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: color.withOpacity(0.2)),
+            border: Border.all(color: color.withValues(alpha: 0.2)),
           ),
           child: Column(
             children: [
-              Text(icon, style: const TextStyle(fontSize: 22)),
+              Icon(icon, color: color, size: 26),
               const SizedBox(height: 4),
               Text(
                 label,
                 style: TextStyle(
-                  color: Colors.white.withOpacity(0.7),
+                  color: Colors.white.withValues(alpha: 0.7),
                   fontSize: 11,
                   fontWeight: FontWeight.w600,
                 ),
