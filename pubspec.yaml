@@ -1,4 +1,4 @@
-﻿name: transit_admin
+name: transit_admin
 description: "TransitPro Admin Panel - Fleet & Operations Management"
 publish_to: 'none'
 version: 0.1.0
@@ -19,6 +19,10 @@ dependencies:
   flutter_polyline_points: ^2.1.0
   http: ^1.2.0
   shared_preferences: ^2.3.0
+  firebase_core: ^4.7.0
+  cloud_firestore: ^6.3.0
+  firebase_auth: ^6.4.0
+  google_sign_in: ^7.2.0
 
 dev_dependencies:
   flutter_test:

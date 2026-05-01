@@ -1,11 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'firebase_options.dart';
 import 'app/router.dart';
 import 'theme/app_theme.dart';
 import 'theme/theme_provider.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
   SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
   runApp(const TransitAdminApp());
 }
@@ -19,7 +24,8 @@ class TransitAdminApp extends StatefulWidget {
 
 class _TransitAdminAppState extends State<TransitAdminApp> {
   @override
-  void initState() {
+  void initState() {+
+
     super.initState();
     ThemeProvider.instance.addListener(_onThemeChanged);
   }
