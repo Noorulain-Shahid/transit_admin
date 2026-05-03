@@ -47,9 +47,9 @@ class AuthService {
         idToken: googleAuth.idToken,
       );
 
-      final UserCredential userCredential =
-          await _firebaseAuth.signInWithCredential(credential);
-      
+      final UserCredential userCredential = await _firebaseAuth
+          .signInWithCredential(credential);
+
       return userCredential;
     } catch (e) {
       debugPrint('Error signing in with Google: $e');

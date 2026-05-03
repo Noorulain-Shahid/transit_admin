@@ -8,9 +8,7 @@ import 'theme/theme_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
   runApp(const TransitAdminApp());
 }
@@ -24,8 +22,7 @@ class TransitAdminApp extends StatefulWidget {
 
 class _TransitAdminAppState extends State<TransitAdminApp> {
   @override
-  void initState() {+
-
+  void initState() {
     super.initState();
     ThemeProvider.instance.addListener(_onThemeChanged);
   }

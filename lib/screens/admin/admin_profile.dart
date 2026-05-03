@@ -37,8 +37,12 @@ class AdminProfile extends StatelessWidget {
                       ),
                     ],
                   ),
-                  child: const Center(
-                    child: Text('🛡️', style: TextStyle(fontSize: 40)),
+                  child: Center(
+                    child: Image.asset(
+                      'assets/images/navbar/user_transparent.png',
+                      width: 40,
+                      height: 40,
+                    ),
                   ),
                 ),
                 const SizedBox(height: 14),

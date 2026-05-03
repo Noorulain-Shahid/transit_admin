@@ -82,7 +82,7 @@ void main() {
       "'📰'": "Icons.article_rounded",
       // admin_profile specifics
       "'👤'": "Icons.person_rounded",
-      "'🚌'": "Icons.directions_bus_rounded",
+      // duplicate removed
     };
 
     // Manually fixing them up
@@ -92,7 +92,6 @@ void main() {
     final RegExp iconRegex = RegExp(r"icon:\s*'([^']+)'");
     content = content.replaceAllMapped(iconRegex, (match) {
       String? emoji = match.group(1);
-      String fullMatch = match.group(0)!;
       // In dart reading utf-8, it will be the actual emojis.
       for (final entry in iconMap.entries) {
         if (entry.key == "'$emoji'") {

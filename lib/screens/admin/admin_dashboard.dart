@@ -38,7 +38,7 @@ class AdminDashboard extends StatelessWidget {
                           fontSize: 13,
                         ),
                       ),
-                      const SizedBox(height: 4),
+                      const SizedBox(height: 12),
                       Text(
                         'Control Center',
                         style: TextStyle(
@@ -58,8 +58,12 @@ class AdminDashboard extends StatelessWidget {
                     borderRadius: BorderRadius.circular(14),
                     border: Border.all(color: context.inputBorder),
                   ),
-                  child: const Center(
-                    child: Text('🔔', style: TextStyle(fontSize: 18)),
+                  child: Center(
+                    child: Image.asset(
+                      'assets/images/notification_bell_off.png',
+                      width: 24,
+                      height: 24,
+                    ),
                   ),
                 ),
                 const SizedBox(width: 10),
@@ -73,8 +77,12 @@ class AdminDashboard extends StatelessWidget {
                       width: 2,
                     ),
                   ),
-                  child: const Center(
-                    child: Text('🛡️', style: TextStyle(fontSize: 22)),
+                  child: Center(
+                    child: Image.asset(
+                      'assets/images/stats/safety.png',
+                      width: 24,
+                      height: 24,
+                    ),
                   ),
                 ),
               ],
@@ -95,28 +103,28 @@ class AdminDashboard extends StatelessWidget {
                   childAspectRatio: 1.6,
                   children: [
                     _AdminStatCard(
-                      icon: Icons.directions_bus_rounded,
+                      imagePath: 'assets/images/stats/active_buses.png',
                       label: 'Active Buses',
                       value: '12',
                       sub: '2 delayed',
                       color: AppTheme.adminEmerald,
                     ),
                     _AdminStatCard(
-                      icon: Icons.school_rounded,
+                      imagePath: 'assets/images/navbar/student.png',
                       label: 'Students',
                       value: '486',
                       sub: '14 pending',
                       color: AppTheme.info,
                     ),
                     _AdminStatCard(
-                      icon: Icons.route_rounded,
+                      imagePath: 'assets/images/navbar/track_transparent.png',
                       label: 'Routes',
                       value: '18',
                       sub: '3 optimized today',
                       color: AppTheme.purple,
                     ),
                     _AdminStatCard(
-                      icon: Icons.account_balance_wallet_rounded,
+                      imagePath: 'assets/images/navbar/fees.png',
                       label: 'Revenue',
                       value: '₹4.2L',
                       sub: '₹38K pending',
@@ -124,7 +132,7 @@ class AdminDashboard extends StatelessWidget {
                     ),
                   ],
                 ),
-                const SizedBox(height: 16),
+                // const SizedBox(height: 0),
 
                 // ── Fleet health overview ──────────────────────────
                 GlassCard(
@@ -288,19 +296,19 @@ class AdminDashboard extends StatelessWidget {
                       _ApprovalRow(
                         name: 'Ali Hassan',
                         type: 'Student Registration',
-                        icon: Icons.school_rounded,
+                        imagePath: 'assets/images/navbar/student.png',
                         color: AppTheme.studentAmber,
                       ),
                       _ApprovalRow(
                         name: 'Fatima Khan',
                         type: 'Parent Registration',
-                        icon: Icons.family_restroom_rounded,
+                        imagePath: 'assets/images/navbar/user_transparent.png',
                         color: AppTheme.parentPurple,
                       ),
                       _ApprovalRow(
                         name: 'Route C Extension',
                         type: 'Route Change Request',
-                        icon: Icons.alt_route_rounded,
+                        imagePath: 'assets/images/navbar/track_transparent.png',
                         color: AppTheme.info,
                       ),
                     ],
@@ -364,28 +372,30 @@ class AdminDashboard extends StatelessWidget {
                       Row(
                         children: [
                           _QuickAction(
-                            icon: Icons.add_location_alt_rounded,
+                            imagePath:
+                                'assets/images/navbar/track_transparent.png',
                             label: 'Add Route',
                             color: AppTheme.info,
                             onTap: () => onNavigate(2),
                           ),
                           const SizedBox(width: 10),
                           _QuickAction(
-                            icon: Icons.person_add_rounded,
+                            imagePath:
+                                'assets/images/navbar/user_transparent.png',
                             label: 'Add User',
                             color: AppTheme.purple,
                             onTap: () => onNavigate(3),
                           ),
                           const SizedBox(width: 10),
                           _QuickAction(
-                            icon: Icons.directions_bus_filled_rounded,
+                            imagePath: 'assets/images/stats/active_buses.png',
                             label: 'Add Bus',
                             color: AppTheme.adminEmerald,
                             onTap: () => onNavigate(1),
                           ),
                           const SizedBox(width: 10),
                           _QuickAction(
-                            icon: Icons.analytics_rounded,
+                            imagePath: 'assets/images/utilities/total.png',
                             label: 'Report',
                             color: AppTheme.warning,
                             onTap: () {},
@@ -407,11 +417,11 @@ class AdminDashboard extends StatelessWidget {
 // ─── Widgets ──────────────────────────────────────────────────────────────────
 
 class _AdminStatCard extends StatelessWidget {
-  final IconData icon;
+  final String imagePath;
   final String label, value, sub;
   final Color color;
   const _AdminStatCard({
-    required this.icon,
+    required this.imagePath,
     required this.label,
     required this.value,
     required this.sub,
@@ -432,14 +442,13 @@ class _AdminStatCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              Container(
-                width: 32,
-                height: 32,
-                decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Center(child: Icon(icon, color: color, size: 20)),
+              Image.asset(
+                imagePath,
+                width: 35,
+                height: 35,
+                fit: BoxFit.contain,
+                errorBuilder: (context, error, stack) =>
+                    Icon(Icons.broken_image_rounded, color: color, size: 28),
               ),
               const SizedBox(width: 8),
               Expanded(
@@ -544,15 +553,15 @@ class _BusStatusRow extends StatelessWidget {
         ),
         child: Row(
           children: [
-            Container(
-              width: 38,
-              height: 38,
-              decoration: BoxDecoration(
-                color: statusColor.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: const Center(
-                child: Text('🚌', style: TextStyle(fontSize: 18)),
+            Image.asset(
+              'assets/images/stats/active_buses.png',
+              width: 30,
+              height: 30,
+              fit: BoxFit.contain,
+              errorBuilder: (context, error, stack) => Icon(
+                Icons.directions_bus_rounded,
+                color: statusColor,
+                size: 28,
               ),
             ),
             const SizedBox(width: 12),
@@ -598,12 +607,12 @@ class _BusStatusRow extends StatelessWidget {
 
 class _ApprovalRow extends StatelessWidget {
   final String name, type;
-  final IconData icon;
+  final String imagePath;
   final Color color;
   const _ApprovalRow({
     required this.name,
     required this.type,
-    required this.icon,
+    required this.imagePath,
     required this.color,
   });
 
@@ -620,14 +629,16 @@ class _ApprovalRow extends StatelessWidget {
         ),
         child: Row(
           children: [
-            Container(
-              width: 38,
-              height: 38,
-              decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(12),
+            Image.asset(
+              imagePath,
+              width: 30,
+              height: 30,
+              fit: BoxFit.contain,
+              errorBuilder: (context, error, stack) => Icon(
+                Icons.image_not_supported_rounded,
+                color: color,
+                size: 28,
               ),
-              child: Center(child: Icon(icon, color: color, size: 22)),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -763,12 +774,12 @@ class _MaintenanceRow extends StatelessWidget {
 }
 
 class _QuickAction extends StatelessWidget {
-  final IconData icon;
+  final String imagePath;
   final String label;
   final Color color;
   final VoidCallback onTap;
   const _QuickAction({
-    required this.icon,
+    required this.imagePath,
     required this.label,
     required this.color,
     required this.onTap,
@@ -788,7 +799,14 @@ class _QuickAction extends StatelessWidget {
           ),
           child: Column(
             children: [
-              Icon(icon, color: color, size: 26),
+              Image.asset(
+                imagePath,
+                width: 32,
+                height: 32,
+                fit: BoxFit.contain,
+                errorBuilder: (context, error, stack) =>
+                    Icon(Icons.broken_image_rounded, color: color, size: 32),
+              ),
               const SizedBox(height: 4),
               Text(
                 label,
