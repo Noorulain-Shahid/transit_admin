@@ -51,7 +51,7 @@ class _AdminFeesState extends State<AdminFees> {
                               ),
                               const SizedBox(height: 4),
                               Text(
-                                '₹4,20,000',
+                                '₨4,20,000',
                                 style: TextStyle(
                                   color: context.textPrimary,
                                   fontSize: 28,
@@ -96,19 +96,19 @@ class _AdminFeesState extends State<AdminFees> {
                         children: [
                           _FeeStatPill(
                             label: 'Collected',
-                            value: '₹3.82L',
+                            value: '₨3.82L',
                             color: AppTheme.success,
                           ),
                           const SizedBox(width: 8),
                           _FeeStatPill(
                             label: 'Pending',
-                            value: '₹28K',
+                            value: '₨28K',
                             color: AppTheme.warning,
                           ),
                           const SizedBox(width: 8),
                           _FeeStatPill(
                             label: 'Overdue',
-                            value: '₹10K',
+                            value: '₨10K',
                             color: AppTheme.error,
                           ),
                         ],
@@ -209,17 +209,17 @@ class _AdminFeesState extends State<AdminFees> {
                       const SizedBox(height: 12),
                       _ReminderRow(
                         name: 'Ahmed Khan',
-                        amount: '₹3,500',
+                        amount: '₨3,500',
                         daysOverdue: 15,
                       ),
                       _ReminderRow(
                         name: 'Sara Ali',
-                        amount: '₹3,500',
+                        amount: '₨3,500',
                         daysOverdue: 8,
                       ),
                       _ReminderRow(
                         name: 'Ravi Sharma',
-                        amount: '₹3,500',
+                        amount: '₨3,500',
                         daysOverdue: 3,
                       ),
                     ],
@@ -253,7 +253,7 @@ final _fees = [
   _FeeData(
     'Noorulain Shahid',
     'STU-1001',
-    '₹3,500',
+    '₨3,500',
     'Paid',
     AppTheme.success,
     'Feb 2026',
@@ -261,7 +261,7 @@ final _fees = [
   _FeeData(
     'Emma Watson',
     'STU-1002',
-    '₹3,500',
+    '₨3,500',
     'Paid',
     AppTheme.success,
     'Feb 2026',
@@ -269,7 +269,7 @@ final _fees = [
   _FeeData(
     'Ali Hassan',
     'STU-1003',
-    '₹3,500',
+    '₨3,500',
     'Pending',
     AppTheme.warning,
     'Feb 2026',
@@ -277,7 +277,7 @@ final _fees = [
   _FeeData(
     'Ahmed Khan',
     'STU-1004',
-    '₹3,500',
+    '₨3,500',
     'Overdue',
     AppTheme.error,
     'Jan 2026',
@@ -285,7 +285,7 @@ final _fees = [
   _FeeData(
     'Zara Fatima',
     'STU-1005',
-    '₹3,500',
+    '₨3,500',
     'Paid',
     AppTheme.success,
     'Feb 2026',
@@ -293,7 +293,7 @@ final _fees = [
   _FeeData(
     'Sara Ali',
     'STU-1006',
-    '₹3,500',
+    '₨3,500',
     'Overdue',
     AppTheme.error,
     'Jan 2026',
@@ -301,9 +301,9 @@ final _fees = [
 ];
 
 final _invoices = [
-  _Invoice('INV-2026-042', 'Noorulain Shahid', '₹3,500', 'Feb 15, 2026'),
-  _Invoice('INV-2026-041', 'Emma Watson', '₹3,500', 'Feb 14, 2026'),
-  _Invoice('INV-2026-040', 'Zara Fatima', '₹3,500', 'Feb 12, 2026'),
+  _Invoice('INV-2026-042', 'Noorulain Shahid', '₨3,500', 'Feb 15, 2026'),
+  _Invoice('INV-2026-041', 'Emma Watson', '₨3,500', 'Feb 14, 2026'),
+  _Invoice('INV-2026-040', 'Zara Fatima', '₨3,500', 'Feb 12, 2026'),
 ];
 
 class _FeeData {

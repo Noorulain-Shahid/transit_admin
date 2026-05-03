@@ -103,31 +103,32 @@ class AdminDashboard extends StatelessWidget {
                   childAspectRatio: 1.6,
                   children: [
                     _AdminStatCard(
-                      imagePath: 'assets/images/stats/active_buses.png',
+                      imagePath:
+                          'assets/images/control_center/active_buses.png',
                       label: 'Active Buses',
                       value: '12',
                       sub: '2 delayed',
                       color: AppTheme.adminEmerald,
                     ),
                     _AdminStatCard(
-                      imagePath: 'assets/images/navbar/student.png',
+                      imagePath: 'assets/images/control_center/student.png',
                       label: 'Students',
                       value: '486',
                       sub: '14 pending',
                       color: AppTheme.info,
                     ),
                     _AdminStatCard(
-                      imagePath: 'assets/images/navbar/track_transparent.png',
+                      imagePath: 'assets/images/control_center/routes.png',
                       label: 'Routes',
                       value: '18',
                       sub: '3 optimized today',
                       color: AppTheme.purple,
                     ),
                     _AdminStatCard(
-                      imagePath: 'assets/images/navbar/fees.png',
+                      imagePath: 'assets/images/control_center/revenues.png',
                       label: 'Revenue',
-                      value: '₹4.2L',
-                      sub: '₹38K pending',
+                      value: '₨4.2L',
+                      sub: '₨38K pending',
                       color: AppTheme.warning,
                     ),
                   ],
@@ -296,19 +297,22 @@ class AdminDashboard extends StatelessWidget {
                       _ApprovalRow(
                         name: 'Ali Hassan',
                         type: 'Student Registration',
-                        imagePath: 'assets/images/navbar/student.png',
+                        imagePath:
+                            'assets/images/pending_approvals/student_registration.png',
                         color: AppTheme.studentAmber,
                       ),
                       _ApprovalRow(
                         name: 'Fatima Khan',
                         type: 'Parent Registration',
-                        imagePath: 'assets/images/navbar/user_transparent.png',
+                        imagePath:
+                            'assets/images/pending_approvals/parent_registration.png',
                         color: AppTheme.parentPurple,
                       ),
                       _ApprovalRow(
                         name: 'Route C Extension',
                         type: 'Route Change Request',
-                        imagePath: 'assets/images/navbar/track_transparent.png',
+                        imagePath:
+                            'assets/images/pending_approvals/route_change_request.png',
                         color: AppTheme.info,
                       ),
                     ],
@@ -373,7 +377,7 @@ class AdminDashboard extends StatelessWidget {
                         children: [
                           _QuickAction(
                             imagePath:
-                                'assets/images/navbar/track_transparent.png',
+                                'assets/images/quick_actions/add_route.png',
                             label: 'Add Route',
                             color: AppTheme.info,
                             onTap: () => onNavigate(2),
@@ -381,21 +385,22 @@ class AdminDashboard extends StatelessWidget {
                           const SizedBox(width: 10),
                           _QuickAction(
                             imagePath:
-                                'assets/images/navbar/user_transparent.png',
+                                'assets/images/quick_actions/add_user.png',
                             label: 'Add User',
                             color: AppTheme.purple,
                             onTap: () => onNavigate(3),
                           ),
                           const SizedBox(width: 10),
                           _QuickAction(
-                            imagePath: 'assets/images/stats/active_buses.png',
+                            imagePath:
+                                'assets/images/quick_actions/add_bus.png',
                             label: 'Add Bus',
                             color: AppTheme.adminEmerald,
                             onTap: () => onNavigate(1),
                           ),
                           const SizedBox(width: 10),
                           _QuickAction(
-                            imagePath: 'assets/images/utilities/total.png',
+                            imagePath: 'assets/images/quick_actions/report.png',
                             label: 'Report',
                             color: AppTheme.warning,
                             onTap: () {},

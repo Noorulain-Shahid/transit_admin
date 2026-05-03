@@ -42,5 +42,8 @@ flutter:
     - assets/images/splash_screen/bus_splash_icon.png
     - assets/images/stats/
     - assets/images/utilities/
+    - assets/images/control_center/
+    - assets/images/pending_approvals/
+    - assets/images/quick_actions/
     - assets/images/
     - assets/images/notification_bell.gif
