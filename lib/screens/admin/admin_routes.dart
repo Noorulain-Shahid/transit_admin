@@ -426,13 +426,23 @@ class _RouteDetail extends StatelessWidget {
     return Expanded(
       child: Column(
         children: [
-          Text(
-            '$icon $value',
-            style: TextStyle(
-              color: context.textPrimary,
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-            ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, size: 14, color: context.textPrimary),
+              const SizedBox(width: 4),
+              Flexible(
+                child: Text(
+                  value,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: context.textPrimary,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 2),
           Text(
