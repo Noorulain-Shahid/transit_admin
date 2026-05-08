@@ -3,12 +3,25 @@ import 'package:flutter/services.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 import 'app/router.dart';
+import 'app/auth_service.dart';
 import 'theme/app_theme.dart';
 import 'theme/theme_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  
+  // Initialize Firebase with graceful fallback for front-end-only mode
+  try {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+  } catch (e) {
+    debugPrint('Firebase initialization skipped (front-end mode): $e');
+  }
+  
+  // Preload auth and theme settings
+  await AuthService.instance.preload();
+  
   SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
   runApp(const TransitAdminApp());
 }

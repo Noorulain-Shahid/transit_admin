@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../theme/app_theme.dart';
 import '../widgets/glass_card.dart';
+import '../app/auth_service.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -32,12 +33,41 @@ class _LoginScreenState extends State<LoginScreen> {
       _error = '';
       _loading = true;
     });
-    Future.delayed(const Duration(milliseconds: 1500), () {
+    Future.delayed(const Duration(milliseconds: 1500), () async {
       if (mounted) {
         setState(() => _loading = false);
-        context.go('/admin');
+        await AuthService.instance.saveRole('admin');
+        if (mounted) context.go('/admin');
       }
     });
+  }
+
+  Future<void> _signInWithGoogle() async {
+    setState(() {
+      _error = '';
+      _loading = true;
+    });
+    try {
+      final success = await AuthService.instance.signInWithGoogle();
+      if (mounted) {
+        if (success) {
+          await AuthService.instance.saveRole('admin');
+          if (mounted) context.go('/admin');
+        } else {
+          setState(() {
+            _loading = false;
+            _error = 'Google sign-in was cancelled.';
+          });
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _error = 'Google sign-in failed: ${e.toString()}';
+        });
+      }
+    }
   }
 
   @override
@@ -280,6 +310,83 @@ class _LoginScreenState extends State<LoginScreen> {
                             glowColor: AppTheme.adminEmerald,
                             isLoading: _loading,
                             onTap: _login,
+                          ),
+                          const SizedBox(height: 16),
+
+                          // Divider
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Container(
+                                  height: 1,
+                                  color: Colors.white.withValues(alpha: 0.1),
+                                ),
+                              ),
+                              Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 12),
+                                child: Text(
+                                  'OR',
+                                  style: TextStyle(
+                                    color: Colors.white.withValues(alpha: 0.4),
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                              Expanded(
+                                child: Container(
+                                  height: 1,
+                                  color: Colors.white.withValues(alpha: 0.1),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 16),
+
+                          // Google Sign-In button
+                          GestureDetector(
+                            onTap: _loading ? null : _signInWithGoogle,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.08),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: Colors.white.withValues(alpha: 0.15),
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  if (!_loading)
+                                    Text(
+                                      '🔐',
+                                      style: TextStyle(fontSize: 18),
+                                    ),
+                                  if (!_loading) const SizedBox(width: 8),
+                                  if (_loading)
+                                    SizedBox(
+                                      width: 18,
+                                      height: 18,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        valueColor: AlwaysStoppedAnimation(
+                                          context.textPrimary,
+                                        ),
+                                      ),
+                                    ),
+                                  if (_loading) const SizedBox(width: 8),
+                                  Text(
+                                    _loading ? 'Signing in...' : 'Sign In with Google',
+                                    style: TextStyle(
+                                      color: context.textPrimary,
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
                           ),
                         ],
                       ),

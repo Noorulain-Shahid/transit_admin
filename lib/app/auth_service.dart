@@ -34,26 +34,32 @@ class AuthService {
     }
   }
 
-  Future<UserCredential?> signInWithGoogle() async {
+  /// Returns true if sign-in succeeded (Firebase or front-end mode).
+  /// Returns false if the user cancelled.
+  /// Throws on other errors.
+  Future<bool> signInWithGoogle() async {
     try {
       final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
-      if (googleUser == null) return null; // The user canceled the sign-in
+      if (googleUser == null) return false; // The user canceled the sign-in
 
       final GoogleSignInAuthentication googleAuth =
           await googleUser.authentication;
 
-      final AuthCredential credential = GoogleAuthProvider.credential(
-        accessToken: googleAuth.accessToken,
-        idToken: googleAuth.idToken,
-      );
-
-      final UserCredential userCredential = await _firebaseAuth
-          .signInWithCredential(credential);
-
-      return userCredential;
+      // Try Firebase auth, but fall back gracefully if Firebase isn't initialized
+      try {
+        final AuthCredential credential = GoogleAuthProvider.credential(
+          accessToken: googleAuth.accessToken,
+          idToken: googleAuth.idToken,
+        );
+        await _firebaseAuth.signInWithCredential(credential);
+      } catch (e) {
+        // Firebase not available, but Google Sign-In succeeded - front-end mode
+        debugPrint('Firebase unavailable (front-end mode), proceeding with local auth: $e');
+      }
+      return true; // Success in any case (Firebase or front-end mode)
     } catch (e) {
       debugPrint('Error signing in with Google: $e');
-      return null;
+      rethrow;
     }
   }
 
