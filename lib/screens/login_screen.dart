@@ -83,7 +83,34 @@ class _LoginScreenState extends State<LoginScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const SizedBox(height: 44),
+                    const SizedBox(height: 16),
+                    // Back button for non-nav screens
+                    if (Navigator.of(context).canPop()) ...[
+                      GestureDetector(
+                        onTap: () => context.pop(),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 9,
+                          ),
+                          decoration: BoxDecoration(
+                            color: context.cardBgElevated,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: context.inputBorder),
+                          ),
+                          child: Text(
+                            '← Back',
+                            style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.7),
+                              fontSize: 14,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 28),
+                    ] else ...[
+                      const SizedBox(height: 44),
+                    ],
 
                     // Role icon
                     Center(

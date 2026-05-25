@@ -3,8 +3,8 @@ import '../../theme/app_theme.dart';
 import '../../widgets/glass_card.dart';
 
 class AdminFees extends StatefulWidget {
-  final VoidCallback onBack;
-  const AdminFees({super.key, required this.onBack});
+  final VoidCallback? onBack;
+  const AdminFees({super.key, this.onBack});
 
   @override
   State<AdminFees> createState() => _AdminFeesState();
@@ -328,32 +328,33 @@ class _Invoice {
 
 class _Header extends StatelessWidget {
   final String title;
-  final VoidCallback onBack;
-  const _Header({required this.title, required this.onBack});
+  final VoidCallback? onBack;
+  const _Header({required this.title, this.onBack});
   @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
       child: Row(
         children: [
-          GestureDetector(
-            onTap: onBack,
-            child: Container(
-              width: 38,
-              height: 38,
-              decoration: BoxDecoration(
-                color: context.cardBgElevated,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: context.inputBorder),
-              ),
-              child: Center(
-                child: Text(
-                  '←',
-                  style: TextStyle(color: context.textPrimary, fontSize: 18),
+          if (onBack != null)
+            GestureDetector(
+              onTap: onBack,
+              child: Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: context.cardBgElevated,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: context.inputBorder),
+                ),
+                child: Center(
+                  child: Text(
+                    '←',
+                    style: TextStyle(color: context.textPrimary, fontSize: 18),
+                  ),
                 ),
               ),
             ),
-          ),
           const SizedBox(width: 14),
           Text(
             title,

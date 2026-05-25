@@ -472,7 +472,7 @@ class _AdminStatCard extends StatelessWidget {
           Text(
             label,
             style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.6),
+              color: context.textSecondary,
               fontSize: 12,
               fontWeight: FontWeight.w600,
             ),
@@ -596,10 +596,7 @@ class _BusStatusRow extends StatelessWidget {
                 const SizedBox(height: 4),
                 Text(
                   '$students students',
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.35),
-                    fontSize: 11,
-                  ),
+                  style: TextStyle(color: context.textTertiary, fontSize: 11),
                 ),
               ],
             ),
@@ -816,7 +813,7 @@ class _QuickAction extends StatelessWidget {
               Text(
                 label,
                 style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.7),
+                  color: context.textPrimary,
                   fontSize: 11,
                   fontWeight: FontWeight.w600,
                 ),

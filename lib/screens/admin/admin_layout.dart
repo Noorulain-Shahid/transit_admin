@@ -34,14 +34,8 @@ class _AdminLayoutState extends State<AdminLayout> {
       iconPath: 'assets/images/navbar/track_transparent.png',
       label: 'Routes',
     ),
-    _NavItem(
-      iconPath: 'assets/images/navbar/student.png',
-      label: 'Users',
-    ),
-    _NavItem(
-      iconPath: 'assets/images/navbar/fees.png',
-      label: 'Fees',
-    ),
+    _NavItem(iconPath: 'assets/images/navbar/student.png', label: 'Users'),
+    _NavItem(iconPath: 'assets/images/navbar/fees.png', label: 'Fees'),
     _NavItem(
       iconPath: 'assets/images/navbar/user_transparent.png',
       label: 'Profile',
@@ -59,10 +53,10 @@ class _AdminLayoutState extends State<AdminLayout> {
             index: _tab,
             children: [
               AdminDashboard(onNavigate: _goToTab),
-              AdminVehicles(onBack: () => _goToTab(0)),
-              AdminRoutes(onBack: () => _goToTab(0)),
-              AdminStudents(onBack: () => _goToTab(0)),
-              AdminFees(onBack: () => _goToTab(0)),
+              AdminVehicles(),
+              AdminRoutes(),
+              AdminStudents(),
+              AdminFees(),
               AdminProfile(
                 onNavigate: _goToTab,
                 onLogout: () => context.go('/login'),
