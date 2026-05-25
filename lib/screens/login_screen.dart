@@ -42,34 +42,6 @@ class _LoginScreenState extends State<LoginScreen> {
     });
   }
 
-  Future<void> _signInWithGoogle() async {
-    setState(() {
-      _error = '';
-      _loading = true;
-    });
-    try {
-      final success = await AuthService.instance.signInWithGoogle();
-      if (mounted) {
-        if (success) {
-          await AuthService.instance.saveRole('admin');
-          if (mounted) context.go('/admin');
-        } else {
-          setState(() {
-            _loading = false;
-            _error = 'Google sign-in was cancelled.';
-          });
-        }
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _loading = false;
-          _error = 'Google sign-in failed: ${e.toString()}';
-        });
-      }
-    }
-  }
-
   @override
   void dispose() {
     _emailCtrl.dispose();
@@ -178,10 +150,14 @@ class _LoginScreenState extends State<LoginScreen> {
                                 vertical: 12,
                               ),
                               decoration: BoxDecoration(
-                                color: AppTheme.adminEmerald.withValues(alpha: 0.12),
+                                color: AppTheme.adminEmerald.withValues(
+                                  alpha: 0.12,
+                                ),
                                 borderRadius: BorderRadius.circular(12),
                                 border: Border.all(
-                                  color: AppTheme.adminEmerald.withValues(alpha: 0.3),
+                                  color: AppTheme.adminEmerald.withValues(
+                                    alpha: 0.3,
+                                  ),
                                 ),
                               ),
                               child: Column(
@@ -313,81 +289,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                           const SizedBox(height: 16),
 
-                          // Divider
-                          Row(
-                            children: [
-                              Expanded(
-                                child: Container(
-                                  height: 1,
-                                  color: Colors.white.withValues(alpha: 0.1),
-                                ),
-                              ),
-                              Padding(
-                                padding: const EdgeInsets.symmetric(horizontal: 12),
-                                child: Text(
-                                  'OR',
-                                  style: TextStyle(
-                                    color: Colors.white.withValues(alpha: 0.4),
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ),
-                              Expanded(
-                                child: Container(
-                                  height: 1,
-                                  color: Colors.white.withValues(alpha: 0.1),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 16),
-
-                          // Google Sign-In button
-                          GestureDetector(
-                            onTap: _loading ? null : _signInWithGoogle,
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(vertical: 14),
-                              decoration: BoxDecoration(
-                                color: Colors.white.withValues(alpha: 0.08),
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(
-                                  color: Colors.white.withValues(alpha: 0.15),
-                                ),
-                              ),
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  if (!_loading)
-                                    Text(
-                                      '🔐',
-                                      style: TextStyle(fontSize: 18),
-                                    ),
-                                  if (!_loading) const SizedBox(width: 8),
-                                  if (_loading)
-                                    SizedBox(
-                                      width: 18,
-                                      height: 18,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                        valueColor: AlwaysStoppedAnimation(
-                                          context.textPrimary,
-                                        ),
-                                      ),
-                                    ),
-                                  if (_loading) const SizedBox(width: 8),
-                                  Text(
-                                    _loading ? 'Signing in...' : 'Sign In with Google',
-                                    style: TextStyle(
-                                      color: context.textPrimary,
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
+                          // (Google sign-in removed)
                         ],
                       ),
                     ),
@@ -395,10 +297,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     Center(
                       child: Text(
                         '🔒  256-bit encrypted · GDPR compliant',
-                        style: TextStyle(
-                          color: context.textHint,
-                          fontSize: 12,
-                        ),
+                        style: TextStyle(color: context.textHint, fontSize: 12),
                       ),
                     ),
                     const SizedBox(height: 24),
