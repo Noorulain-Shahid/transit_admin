@@ -159,42 +159,6 @@ class AdminNotifications extends StatelessWidget {
                           ),
                         ],
                       ),
-                      const SizedBox(height: 12),
-                      GlassCard(
-                        padding: const EdgeInsets.all(18),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Workflow',
-                              style: TextStyle(
-                                color: context.textPrimary,
-                                fontSize: 15,
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                            const SizedBox(height: 10),
-                            const _StepRow(
-                              number: '1',
-                              title: 'User creates an account',
-                              subtitle:
-                                  'Driver, student, or parent submits registration details.',
-                            ),
-                            const _StepRow(
-                              number: '2',
-                              title: 'Driver uploads documents',
-                              subtitle:
-                                  'License and vehicle details are collected for verification.',
-                            ),
-                            const _StepRow(
-                              number: '3',
-                              title: 'Admin reviews the request',
-                              subtitle:
-                                  'If the data is valid, the driver is allowed to start driving in the app.',
-                            ),
-                          ],
-                        ),
-                      ),
                     ],
                   ),
                 ),
@@ -340,69 +304,6 @@ class _NotificationItem extends StatelessWidget {
             ],
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _StepRow extends StatelessWidget {
-  final String number;
-  final String title;
-  final String subtitle;
-
-  const _StepRow({
-    required this.number,
-    required this.title,
-    required this.subtitle,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 28,
-            height: 28,
-            decoration: BoxDecoration(
-              gradient: AppTheme.adminGradient,
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Center(
-              child: Text(
-                number,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: TextStyle(
-                    color: context.textPrimary,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  subtitle,
-                  style: TextStyle(color: context.textSecondary, fontSize: 12),
-                ),
-              ],
-            ),
-          ),
-        ],
       ),
     );
   }
