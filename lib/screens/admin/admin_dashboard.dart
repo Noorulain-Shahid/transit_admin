@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/glass_card.dart';
 
@@ -50,19 +51,22 @@ class AdminDashboard extends StatelessWidget {
                     ],
                   ),
                 ),
-                Container(
-                  width: 42,
-                  height: 42,
-                  decoration: BoxDecoration(
-                    color: context.cardBgElevated,
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: context.inputBorder),
-                  ),
-                  child: Center(
-                    child: Image.asset(
-                      'assets/images/notification_bell_off.png',
-                      width: 24,
-                      height: 24,
+                GestureDetector(
+                  onTap: () => context.push('/admin/notifications'),
+                  child: Container(
+                    width: 42,
+                    height: 42,
+                    decoration: BoxDecoration(
+                      color: context.cardBgElevated,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: context.inputBorder),
+                    ),
+                    child: Center(
+                      child: Image.asset(
+                        'assets/images/notification_bell_off.png',
+                        width: 24,
+                        height: 24,
+                      ),
                     ),
                   ),
                 ),
@@ -127,13 +131,13 @@ class AdminDashboard extends StatelessWidget {
                     _AdminStatCard(
                       imagePath: 'assets/images/control_center/revenues.png',
                       label: 'Revenue',
-                      value: '₨4.2L',
+                      value: '₨ 4.2L',
                       sub: '₨38K pending',
                       color: AppTheme.warning,
                     ),
                   ],
                 ),
-                // const SizedBox(height: 0),
+                const SizedBox(height: 1),
 
                 // ── Fleet health overview ──────────────────────────
                 GlassCard(
@@ -307,13 +311,6 @@ class AdminDashboard extends StatelessWidget {
                         imagePath:
                             'assets/images/pending_approvals/parent_registration.png',
                         color: AppTheme.parentPurple,
-                      ),
-                      _ApprovalRow(
-                        name: 'Route C Extension',
-                        type: 'Route Change Request',
-                        imagePath:
-                            'assets/images/pending_approvals/route_change_request.png',
-                        color: AppTheme.info,
                       ),
                     ],
                   ),
@@ -620,6 +617,12 @@ class _ApprovalRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    void showAction(String action) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('$action: $name')));
+    }
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: Container(
@@ -664,9 +667,17 @@ class _ApprovalRow extends StatelessWidget {
             ),
             Row(
               children: [
-                _SmallBtn(label: '✓', color: AppTheme.success),
+                _SmallBtn(
+                  label: '✓',
+                  color: AppTheme.success,
+                  onTap: () => showAction('Approved'),
+                ),
                 const SizedBox(width: 6),
-                _SmallBtn(label: '✕', color: AppTheme.error),
+                _SmallBtn(
+                  label: '✕',
+                  color: AppTheme.error,
+                  onTap: () => showAction('Rejected'),
+                ),
               ],
             ),
           ],
@@ -679,24 +690,32 @@ class _ApprovalRow extends StatelessWidget {
 class _SmallBtn extends StatelessWidget {
   final String label;
   final Color color;
-  const _SmallBtn({required this.label, required this.color});
+  final VoidCallback? onTap;
+  const _SmallBtn({required this.label, required this.color, this.onTap});
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: 32,
-      height: 32,
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.15),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: color.withValues(alpha: 0.3)),
-      ),
-      child: Center(
-        child: Text(
-          label,
-          style: TextStyle(
-            color: color,
-            fontSize: 14,
-            fontWeight: FontWeight.w700,
+        child: Container(
+          width: 32,
+          height: 32,
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.15),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: color.withValues(alpha: 0.3)),
+          ),
+          child: Center(
+            child: Text(
+              label,
+              style: TextStyle(
+                color: color,
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
           ),
         ),
       ),

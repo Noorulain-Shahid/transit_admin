@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/theme_provider.dart';
 import '../../widgets/glass_card.dart';
@@ -142,7 +143,7 @@ class AdminProfile extends StatelessWidget {
                       _OptionRow(
                         icon: Icons.notifications_rounded,
                         label: 'Notification Settings',
-                        onTap: () {},
+                        onTap: () => context.push('/admin/notifications'),
                       ),
                       _OptionRow(
                         icon: Icons.lock_rounded,

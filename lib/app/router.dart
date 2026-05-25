@@ -3,6 +3,7 @@ import '../screens/welcome_screen.dart';
 import '../screens/login_screen.dart';
 import '../screens/forgot_password_screen.dart';
 import '../screens/admin/admin_layout.dart';
+import '../screens/admin/admin_notifications.dart';
 
 final appRouter = GoRouter(
   initialLocation: '/',
@@ -14,5 +15,9 @@ final appRouter = GoRouter(
       builder: (context, state) => const ForgotPasswordScreen(),
     ),
     GoRoute(path: '/admin', builder: (context, state) => const AdminLayout()),
+    GoRoute(
+      path: '/admin/notifications',
+      builder: (context, state) => const AdminNotifications(),
+    ),
   ],
 );
