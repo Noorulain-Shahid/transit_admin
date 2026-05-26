@@ -1,17 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/glass_card.dart';
+import 'admin_user_models.dart';
 
-class AdminStudents extends StatefulWidget {
+class AdminStudents extends StatelessWidget {
   final VoidCallback? onBack;
   const AdminStudents({super.key, this.onBack});
-
-  @override
-  State<AdminStudents> createState() => _AdminStudentsState();
-}
-
-class _AdminStudentsState extends State<AdminStudents> {
-  int _filter = 0; // 0=All, 1=Students, 2=Parents, 3=Drivers, 4=Pending
 
   @override
   Widget build(BuildContext context) {
@@ -19,161 +14,82 @@ class _AdminStudentsState extends State<AdminStudents> {
       padding: const EdgeInsets.only(bottom: 100),
       child: Column(
         children: [
-          _Header(title: 'User Management', onBack: widget.onBack),
+          _Header(title: 'User Management', onBack: onBack),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Column(
               children: [
-                // ── Stats ──────────────────────────────
                 Row(
                   children: [
                     _MiniStat(
-                      icon: Icons.people_alt_rounded,
-                      label: 'Total',
-                      value: '562',
-                      color: AppTheme.adminEmerald,
-                    ),
-                    const SizedBox(width: 10),
-                    _MiniStat(
                       icon: Icons.school_rounded,
                       label: 'Students',
-                      value: '486',
+                      value: _students.length.toString(),
                       color: AppTheme.studentAmber,
                     ),
                     const SizedBox(width: 10),
                     _MiniStat(
-                      icon: Icons.hourglass_empty_rounded,
-                      label: 'Pending',
-                      value: '14',
-                      color: AppTheme.warning,
+                      icon: Icons.drive_eta_rounded,
+                      label: 'Drivers',
+                      value: _drivers.length.toString(),
+                      color: AppTheme.driverCyan,
+                    ),
+                    const SizedBox(width: 10),
+                    _MiniStat(
+                      icon: Icons.family_restroom_rounded,
+                      label: 'Parents',
+                      value: _parents.length.toString(),
+                      color: AppTheme.parentPurple,
                     ),
                   ],
                 ),
                 const SizedBox(height: 14),
-
-                // ── Filter chips ──────────────────────
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
+                _RoleSection(
+                  title: 'Students',
+                  subtitle: 'Tap a student to view and edit their details.',
+                  color: AppTheme.studentAmber,
+                  users: _students,
+                ),
+                const SizedBox(height: 12),
+                _RoleSection(
+                  title: 'Drivers',
+                  subtitle:
+                      'Tap a driver to update documents, route assignment, or active status.',
+                  color: AppTheme.driverCyan,
+                  users: _drivers,
+                ),
+                const SizedBox(height: 12),
+                _RoleSection(
+                  title: 'Parents',
+                  subtitle:
+                      'Tap a parent to update linked children, contact info, or account state.',
+                  color: AppTheme.parentPurple,
+                  users: _parents,
+                ),
+                const SizedBox(height: 12),
+                GlassCard(
+                  padding: const EdgeInsets.all(18),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _FilterChip(
-                        label: 'All',
-                        active: _filter == 0,
-                        onTap: () => setState(() => _filter = 0),
+                      Text(
+                        'Pending Registrations',
+                        style: TextStyle(
+                          color: context.textPrimary,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
-                      _FilterChip(
-                        label: 'Students',
-                        active: _filter == 1,
-                        onTap: () => setState(() => _filter = 1),
-                      ),
-                      _FilterChip(
-                        label: 'Parents',
-                        active: _filter == 2,
-                        onTap: () => setState(() => _filter = 2),
-                      ),
-                      _FilterChip(
-                        label: 'Drivers',
-                        active: _filter == 3,
-                        onTap: () => setState(() => _filter = 3),
-                      ),
-                      _FilterChip(
-                        label: 'Pending',
-                        active: _filter == 4,
-                        onTap: () => setState(() => _filter = 4),
+                      const SizedBox(height: 12),
+                      ..._pendingUsers.map(
+                        (u) => Padding(
+                          padding: const EdgeInsets.only(bottom: 10),
+                          child: _PendingUserRow(user: u),
+                        ),
                       ),
                     ],
                   ),
                 ),
-                const SizedBox(height: 14),
-
-                // ── Pending approvals section ──────────
-                if (_filter == 0 || _filter == 4) ...[
-                  GlassCard(
-                    padding: const EdgeInsets.all(16),
-                    gradient: LinearGradient(
-                      colors: [
-                        AppTheme.warning.withValues(alpha: 0.1),
-                        Colors.transparent,
-                      ],
-                    ),
-                    borderColor: AppTheme.warning.withValues(alpha: 0.2),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Text('⏳', style: TextStyle(fontSize: 18)),
-                            const SizedBox(width: 8),
-                            Text(
-                              'Pending Registrations',
-                              style: TextStyle(
-                                color: context.textPrimary,
-                                fontSize: 14,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                            const Spacer(),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 3,
-                              ),
-                              decoration: BoxDecoration(
-                                color: AppTheme.warning.withValues(alpha: 0.2),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: const Text(
-                                '14 new',
-                                style: TextStyle(
-                                  color: AppTheme.warning,
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                        ..._pendingUsers.map((u) => _PendingUserRow(user: u)),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                ],
-
-                // ── User list ─────────────────────────
-                ..._getFilteredUsers().map(
-                  (u) => Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: _UserCard(user: u),
-                  ),
-                ),
-
-                // ── Vacancy section ───────────────────
-                if (_filter == 0 || _filter == 1) ...[
-                  const SizedBox(height: 12),
-                  GlassCard(
-                    padding: const EdgeInsets.all(18),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Seat Availability',
-                          style: TextStyle(
-                            color: context.textPrimary,
-                            fontSize: 15,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        _SeatRow(route: 'Route A', total: 40, filled: 36),
-                        _SeatRow(route: 'Route B', total: 35, filled: 28),
-                        _SeatRow(route: 'Route C', total: 40, filled: 40),
-                        _SeatRow(route: 'Route D', total: 38, filled: 22),
-                      ],
-                    ),
-                  ),
-                ],
               ],
             ),
           ),
@@ -181,159 +97,258 @@ class _AdminStudentsState extends State<AdminStudents> {
       ),
     );
   }
-
-  List<_UserData> _getFilteredUsers() {
-    switch (_filter) {
-      case 1:
-        return _allUsers.where((u) => u.role == 'Student').toList();
-      case 2:
-        return _allUsers.where((u) => u.role == 'Parent').toList();
-      case 3:
-        return _allUsers.where((u) => u.role == 'Driver').toList();
-      default:
-        return _allUsers;
-    }
-  }
 }
 
-// ── Data models ───────────────────────────────────────────────────────────
+final _students = [
+  AdminUserRecord(
+    id: 'stu_1',
+    name: 'Noorulain Shahid',
+    role: 'Student',
+    icon: '🎓',
+    detail: 'Grade 5 · Bus #42',
+    color: AppTheme.studentAmber,
+    active: true,
+    contact: '0300-1111111',
+    address: 'Lincoln Elementary',
+    extra: 'Pickup: 07:10 AM',
+  ),
+  AdminUserRecord(
+    id: 'stu_2',
+    name: 'Emma Watson',
+    role: 'Student',
+    icon: '🎓',
+    detail: 'Grade 7 · Bus #43',
+    color: AppTheme.studentAmber,
+    active: true,
+    contact: '0300-2222222',
+    address: 'Maple School',
+    extra: 'Pickup: 07:25 AM',
+  ),
+];
+
+final _drivers = [
+  AdminUserRecord(
+    id: 'drv_1',
+    name: 'Mike Johnson',
+    role: 'Driver',
+    icon: '🚌',
+    detail: 'Route A · Bus #42',
+    color: AppTheme.driverCyan,
+    active: true,
+    contact: '0311-4444444',
+    address: 'Vehicle: Bus #42',
+    extra: 'License: DL-2026-0042',
+  ),
+  AdminUserRecord(
+    id: 'drv_2',
+    name: 'Ahmed Ali',
+    role: 'Driver',
+    icon: '🚌',
+    detail: 'Route B · Bus #43',
+    color: AppTheme.driverCyan,
+    active: true,
+    contact: '0312-5555555',
+    address: 'Vehicle: Bus #43',
+    extra: 'License: DL-2026-0043',
+  ),
+];
+
+final _parents = [
+  AdminUserRecord(
+    id: 'par_1',
+    name: 'Shahid Ali',
+    role: 'Parent',
+    icon: '👨‍👩‍👧',
+    detail: '2 children enrolled',
+    color: AppTheme.parentPurple,
+    active: true,
+    contact: '0321-6666666',
+    address: 'North Colony',
+    extra: 'Children: Noor, Haya',
+  ),
+  AdminUserRecord(
+    id: 'par_2',
+    name: 'Sarah Ahmed',
+    role: 'Parent',
+    icon: '👨‍👩‍👧',
+    detail: '1 child enrolled',
+    color: AppTheme.parentPurple,
+    active: true,
+    contact: '0333-7777777',
+    address: 'Civic Center',
+    extra: 'Child: Ali',
+  ),
+];
 
 final _pendingUsers = [
-  _PendingUser(
-    'Ali Hassan',
-    'Student',
-    '🎓',
-    'Grade 8 · Lincoln Elem',
-    AppTheme.studentAmber,
+  AdminUserRecord(
+    id: 'pen_1',
+    name: 'Ali Hassan',
+    role: 'Student',
+    icon: '🎓',
+    detail: 'Grade 8 · Lincoln Elem',
+    color: AppTheme.studentAmber,
+    active: false,
+    contact: '0340-8888888',
+    address: 'Lincoln Elementary',
+    extra: 'Pending approval',
   ),
-  _PendingUser(
-    'Fatima Khan',
-    'Parent',
-    '👨‍👩‍👧',
-    'Child: Zara (Grade 5)',
-    AppTheme.parentPurple,
+  AdminUserRecord(
+    id: 'pen_2',
+    name: 'Fatima Khan',
+    role: 'Parent',
+    icon: '👨‍👩‍👧',
+    detail: 'Child: Zara (Grade 5)',
+    color: AppTheme.parentPurple,
+    active: false,
+    contact: '0345-9999999',
+    address: 'West Town',
+    extra: 'Pending approval',
   ),
-  _PendingUser(
-    'Ravi Kumar',
-    'Driver',
-    '🚌',
-    'License: DL-2026-1234',
-    AppTheme.driverCyan,
-  ),
-];
-
-final _allUsers = [
-  _UserData(
-    'Noorulain Shahid',
-    'Student',
-    '🎓',
-    'Grade 5 · Bus #42',
-    AppTheme.studentAmber,
-    true,
-  ),
-  _UserData(
-    'Emma Watson',
-    'Student',
-    '🎓',
-    'Grade 7 · Bus #43',
-    AppTheme.studentAmber,
-    true,
-  ),
-  _UserData(
-    'Shahid Ali',
-    'Parent',
-    '👨‍👩‍👧',
-    '2 children enrolled',
-    AppTheme.parentPurple,
-    true,
-  ),
-  _UserData(
-    'Mike Johnson',
-    'Driver',
-    '🚌',
-    'Route A · Bus #42',
-    AppTheme.driverCyan,
-    true,
-  ),
-  _UserData(
-    'Sarah Ahmed',
-    'Parent',
-    '👨‍👩‍👧',
-    '1 child enrolled',
-    AppTheme.parentPurple,
-    true,
-  ),
-  _UserData(
-    'Ahmed Ali',
-    'Driver',
-    '🚌',
-    'Route B · Bus #43',
-    AppTheme.driverCyan,
-    true,
+  AdminUserRecord(
+    id: 'pen_3',
+    name: 'Ravi Kumar',
+    role: 'Driver',
+    icon: '🚌',
+    detail: 'License: DL-2026-1234',
+    color: AppTheme.driverCyan,
+    active: false,
+    contact: '0309-0000000',
+    address: 'Vehicle documents uploaded',
+    extra: 'Pending approval',
   ),
 ];
 
-class _PendingUser {
-  final String name, role, icon, detail;
-  final Color color;
-  const _PendingUser(this.name, this.role, this.icon, this.detail, this.color);
-}
-
-class _UserData {
-  final String name, role, icon, detail;
-  final Color color;
-  final bool active;
-  const _UserData(
-    this.name,
-    this.role,
-    this.icon,
-    this.detail,
-    this.color,
-    this.active,
-  );
-}
-
-// ── Widgets ───────────────────────────────────────────────────────────────
-
-class _Header extends StatelessWidget {
+class _RoleSection extends StatelessWidget {
   final String title;
-  final VoidCallback? onBack;
-  const _Header({required this.title, this.onBack});
+  final String subtitle;
+  final Color color;
+  final List<AdminUserRecord> users;
+
+  const _RoleSection({
+    required this.title,
+    required this.subtitle,
+    required this.color,
+    required this.users,
+  });
+
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
-      child: Row(
+    return GlassCard(
+      padding: const EdgeInsets.all(18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (onBack != null)
-            GestureDetector(
-              onTap: onBack,
-              child: Container(
-                width: 38,
-                height: 38,
+          Row(
+            children: [
+              Container(
+                width: 12,
+                height: 12,
                 decoration: BoxDecoration(
-                  color: context.cardBgElevated,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: context.inputBorder),
-                ),
-                child: Center(
-                  child: Text(
-                    '←',
-                    style: TextStyle(color: context.textPrimary, fontSize: 18),
-                  ),
+                  color: color,
+                  borderRadius: BorderRadius.circular(4),
                 ),
               ),
-            ),
-          const SizedBox(width: 14),
+              const SizedBox(width: 8),
+              Text(
+                title,
+                style: TextStyle(
+                  color: context.textPrimary,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
           Text(
-            title,
-            style: TextStyle(
-              color: context.textPrimary,
-              fontSize: 20,
-              fontWeight: FontWeight.w800,
+            subtitle,
+            style: TextStyle(color: context.textSecondary, fontSize: 12),
+          ),
+          const SizedBox(height: 12),
+          ...users.map(
+            (user) => Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: _UserCard(
+                user: user,
+                onTap: () => context.push('/admin/user-detail', extra: user),
+              ),
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _UserCard extends StatelessWidget {
+  final AdminUserRecord user;
+  final VoidCallback onTap;
+
+  const _UserCard({required this.user, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: user.color.withValues(alpha: 0.06),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: user.color.withValues(alpha: 0.14)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 42,
+              height: 42,
+              decoration: BoxDecoration(
+                color: user.color.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: user.color.withValues(alpha: 0.25)),
+              ),
+              child: Center(
+                child: Text(user.icon, style: const TextStyle(fontSize: 20)),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          user.name,
+                          style: TextStyle(
+                            color: context.textPrimary,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                      StatusBadge(label: user.role, color: user.color),
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    user.detail,
+                    style: TextStyle(color: context.textSecondary, fontSize: 12),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Tap to view and edit details',
+                    style: TextStyle(color: context.textTertiary, fontSize: 11),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            Icon(Icons.chevron_right_rounded, color: context.textTertiary),
+          ],
+        ),
       ),
     );
   }
@@ -384,107 +399,62 @@ class _MiniStat extends StatelessWidget {
   }
 }
 
-class _FilterChip extends StatelessWidget {
-  final String label;
-  final bool active;
-  final VoidCallback onTap;
-  const _FilterChip({
-    required this.label,
-    required this.active,
-    required this.onTap,
-  });
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(right: 8),
-      child: GestureDetector(
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-          decoration: BoxDecoration(
-            color: active
-                ? AppTheme.adminEmerald.withValues(alpha: 0.2)
-                : context.cardBg,
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(
-              color: active
-                  ? AppTheme.adminAccent.withValues(alpha: 0.5)
-                  : Colors.white.withValues(alpha: 0.1),
-            ),
-          ),
-          child: Text(
-            label,
-            style: TextStyle(
-              color: active ? AppTheme.adminAccent : context.textSecondary,
-              fontSize: 13,
-              fontWeight: active ? FontWeight.w600 : FontWeight.w500,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class _PendingUserRow extends StatelessWidget {
-  final _PendingUser user;
+  final AdminUserRecord user;
   const _PendingUserRow({required this.user});
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.04),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: context.cardBg),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: user.color.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Center(
-                child: Text(user.icon, style: const TextStyle(fontSize: 18)),
-              ),
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.04),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: context.cardBg),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: user.color.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(12),
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Text(
-                        user.name,
-                        style: TextStyle(
-                          color: context.textPrimary,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                        ),
+            child: Center(
+              child: Text(user.icon, style: const TextStyle(fontSize: 18)),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Text(
+                      user.name,
+                      style: TextStyle(
+                        color: context.textPrimary,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
                       ),
-                      const SizedBox(width: 6),
-                      StatusBadge(label: user.role, color: user.color),
-                    ],
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    user.detail,
-                    style: TextStyle(color: context.textTertiary, fontSize: 11),
-                  ),
-                ],
-              ),
+                    ),
+                    const SizedBox(width: 6),
+                    StatusBadge(label: user.role, color: user.color),
+                  ],
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  user.detail,
+                  style: TextStyle(color: context.textTertiary, fontSize: 11),
+                ),
+              ],
             ),
-            _ActionBtn(label: '✓', color: AppTheme.success),
-            const SizedBox(width: 6),
-            _ActionBtn(label: '✕', color: AppTheme.error),
-          ],
-        ),
+          ),
+          _ActionBtn(label: '✓', color: AppTheme.success),
+          const SizedBox(width: 6),
+          _ActionBtn(label: '✕', color: AppTheme.error),
+        ],
       ),
     );
   }
@@ -518,114 +488,42 @@ class _ActionBtn extends StatelessWidget {
   }
 }
 
-class _UserCard extends StatelessWidget {
-  final _UserData user;
-  const _UserCard({required this.user});
+class _Header extends StatelessWidget {
+  final String title;
+  final VoidCallback? onBack;
+  const _Header({required this.title, this.onBack});
   @override
   Widget build(BuildContext context) {
-    return GlassCard(
-      padding: const EdgeInsets.all(14),
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
       child: Row(
         children: [
-          Container(
-            width: 42,
-            height: 42,
-            decoration: BoxDecoration(
-              color: user.color.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: user.color.withValues(alpha: 0.3)),
-            ),
-            child: Center(
-              child: Text(user.icon, style: const TextStyle(fontSize: 20)),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Text(
-                      user.name,
-                      style: TextStyle(
-                        color: context.textPrimary,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    StatusBadge(label: user.role, color: user.color),
-                  ],
+          if (onBack != null)
+            GestureDetector(
+              onTap: onBack,
+              child: Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: context.cardBgElevated,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: context.inputBorder),
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  user.detail,
-                  style: TextStyle(color: context.textTertiary, fontSize: 12),
+                child: Center(
+                  child: Text(
+                    '←',
+                    style: TextStyle(color: context.textPrimary, fontSize: 18),
+                  ),
                 ),
-              ],
-            ),
-          ),
-          Container(
-            width: 8,
-            height: 8,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: user.active ? AppTheme.success : AppTheme.error,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _SeatRow extends StatelessWidget {
-  final String route;
-  final int total, filled;
-  const _SeatRow({
-    required this.route,
-    required this.total,
-    required this.filled,
-  });
-  @override
-  Widget build(BuildContext context) {
-    final available = total - filled;
-    final isFull = available == 0;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 65,
-            child: Text(
-              route,
-              style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.6),
-                fontSize: 12,
               ),
             ),
-          ),
-          Expanded(
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(4),
-              child: LinearProgressIndicator(
-                value: filled / total,
-                backgroundColor: context.cardBgElevated,
-                valueColor: AlwaysStoppedAnimation(
-                  isFull ? AppTheme.error : AppTheme.success,
-                ),
-                minHeight: 8,
-              ),
-            ),
-          ),
-          const SizedBox(width: 10),
+          const SizedBox(width: 14),
           Text(
-            isFull ? 'Full' : '$available seats',
+            title,
             style: TextStyle(
-              color: isFull ? AppTheme.error : AppTheme.success,
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
+              color: context.textPrimary,
+              fontSize: 20,
+              fontWeight: FontWeight.w800,
             ),
           ),
         ],

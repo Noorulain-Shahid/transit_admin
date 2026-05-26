@@ -3,10 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../theme/app_theme.dart';
 import 'admin_dashboard.dart';
-import 'admin_vehicles.dart';
-import 'admin_routes.dart';
-import 'admin_students.dart';
-import 'admin_fees.dart';
+import 'admin_student_management.dart';
+import 'admin_parent_management.dart';
+import 'admin_driver_management.dart';
 import 'admin_profile.dart';
 
 class AdminLayout extends StatefulWidget {
@@ -21,25 +20,20 @@ class _AdminLayoutState extends State<AdminLayout> {
 
   void _goToTab(int index) => setState(() => _tab = index);
 
-  List<_NavItem> get _navItems => const [
-    _NavItem(
-      iconPath: 'assets/images/navbar/home_transparent.png',
-      label: 'Dashboard',
-    ),
-    _NavItem(
-      iconPath: 'assets/images/splash_screen/bus_splash_icon.png',
-      label: 'Fleet',
-    ),
-    _NavItem(
-      iconPath: 'assets/images/navbar/track_transparent.png',
-      label: 'Routes',
-    ),
-    _NavItem(iconPath: 'assets/images/navbar/student.png', label: 'Users'),
-    _NavItem(iconPath: 'assets/images/navbar/fees.png', label: 'Fees'),
-    _NavItem(
-      iconPath: 'assets/images/navbar/user_transparent.png',
-      label: 'Profile',
-    ),
+  static const _navItems = [
+    _NavItem(icon: Icons.dashboard_rounded, label: 'Dashboard'),
+    _NavItem(icon: Icons.school_rounded, label: 'Student'),
+    _NavItem(icon: Icons.family_restroom_rounded, label: 'Parent'),
+    _NavItem(icon: Icons.directions_bus_rounded, label: 'Driver'),
+    _NavItem(icon: Icons.person_rounded, label: 'Profile'),
+  ];
+
+  static const _navColors = [
+    AppTheme.adminEmerald,
+    AppTheme.studentAmber,
+    AppTheme.parentPurple,
+    AppTheme.driverCyan,
+    AppTheme.adminAccent,
   ];
 
   @override
@@ -53,10 +47,9 @@ class _AdminLayoutState extends State<AdminLayout> {
             index: _tab,
             children: [
               AdminDashboard(onNavigate: _goToTab),
-              AdminVehicles(),
-              AdminRoutes(),
-              AdminStudents(),
-              AdminFees(),
+              const AdminStudentManagement(),
+              const AdminParentManagement(),
+              const AdminDriverManagement(),
               AdminProfile(
                 onNavigate: _goToTab,
                 onLogout: () => context.go('/login'),
@@ -73,84 +66,70 @@ class _AdminLayoutState extends State<AdminLayout> {
   Widget _buildNav() {
     return SafeArea(
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(10, 0, 10, 12),
+        padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(40),
+          borderRadius: BorderRadius.circular(28),
           child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+            filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
             child: Container(
               decoration: BoxDecoration(
                 color: context.isDark
-                    ? Colors.white.withValues(alpha: 0.10)
-                    : Colors.white.withValues(alpha: 0.55),
-                borderRadius: BorderRadius.circular(40),
+                    ? Colors.white.withValues(alpha: 0.08)
+                    : Colors.white.withValues(alpha: 0.65),
+                borderRadius: BorderRadius.circular(28),
                 border: Border.all(
                   color: context.isDark
-                      ? Colors.white.withValues(alpha: 0.18)
-                      : Colors.white.withValues(alpha: 0.80),
+                      ? Colors.white.withValues(alpha: 0.12)
+                      : Colors.white.withValues(alpha: 0.85),
                   width: 1.5,
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.18),
-                    blurRadius: 28,
+                    color: Colors.black.withValues(alpha: 0.15),
+                    blurRadius: 24,
                     offset: const Offset(0, 8),
                   ),
                 ],
               ),
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
               child: Row(
                 children: List.generate(_navItems.length, (i) {
                   final isActive = _tab == i;
+                  final activeColor = _navColors[i];
                   return Expanded(
                     child: GestureDetector(
                       onTap: () => _goToTab(i),
                       behavior: HitTestBehavior.opaque,
                       child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 250),
+                        duration: const Duration(milliseconds: 280),
                         curve: Curves.easeInOut,
-                        padding: const EdgeInsets.symmetric(
-                          vertical: 6,
-                          horizontal: 4,
-                        ),
+                        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
                         decoration: isActive
                             ? BoxDecoration(
                                 color: context.isDark
-                                    ? Colors.white.withValues(alpha: 0.20)
-                                    : Colors.white.withValues(alpha: 0.72),
-                                borderRadius: BorderRadius.circular(30),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withValues(alpha: 0.10),
-                                    blurRadius: 10,
-                                    offset: const Offset(0, 3),
-                                  ),
-                                ],
+                                    ? activeColor.withValues(alpha: 0.18)
+                                    : activeColor.withValues(alpha: 0.10),
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(
+                                  color: activeColor.withValues(alpha: 0.25),
+                                ),
                               )
                             : null,
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Image.asset(
-                              _navItems[i].iconPath,
-                              width: isActive ? 26 : 22,
-                              height: isActive ? 26 : 22,
-                              cacheWidth: 64,
-                              cacheHeight: 64,
-                              fit: BoxFit.contain,
-                              filterQuality: FilterQuality.medium,
+                            Icon(
+                              _navItems[i].icon,
+                              size: isActive ? 24 : 22,
+                              color: isActive ? activeColor : context.textTertiary,
                             ),
                             const SizedBox(height: 2),
                             Text(
                               _navItems[i].label,
                               style: TextStyle(
-                                color: isActive
-                                    ? AppTheme.adminAccent
-                                    : context.textTertiary,
+                                color: isActive ? activeColor : context.textTertiary,
                                 fontSize: isActive ? 10 : 9,
-                                fontWeight: isActive
-                                    ? FontWeight.w700
-                                    : FontWeight.w400,
+                                fontWeight: isActive ? FontWeight.w700 : FontWeight.w400,
                               ),
                               overflow: TextOverflow.ellipsis,
                               maxLines: 1,
@@ -171,7 +150,7 @@ class _AdminLayoutState extends State<AdminLayout> {
 }
 
 class _NavItem {
-  final String iconPath;
+  final IconData icon;
   final String label;
-  const _NavItem({required this.iconPath, required this.label});
+  const _NavItem({required this.icon, required this.label});
 }
