@@ -4,17 +4,17 @@ class RouteModel {
   final String id;
   final String routeName;
   final List<String> stopIds;
-  
+
   // Realtime Operations
   final TripState currentState;
   final String? activeVehicleId;
   final String? activeDriverId;
-  
+
   // Analytics & Intelligence
   final int averageDurationMinutes;
   final double routeEfficiencyScore; // A-F grade or 0-100 logic
   final double estimatedFuelUsageLiters;
-  
+
   // Concurrency & overlap
   final List<String> overlappingRouteIds;
 

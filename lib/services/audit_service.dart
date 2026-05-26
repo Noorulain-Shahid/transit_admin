@@ -42,10 +42,12 @@ class AuditService {
     );
 
     _localLogs.add(entry);
-    
+
     // TODO: Sync to backend (e.g., Firebase Firestore 'audit_logs' collection)
     if (kDebugMode) {
-      print('[AUDIT] ${entry.timestamp} | ${entry.adminId} | ${entry.actionType.name} | ${entry.description}');
+      print(
+        '[AUDIT] ${entry.timestamp} | ${entry.adminId} | ${entry.actionType.name} | ${entry.description}',
+      );
     }
   }
 

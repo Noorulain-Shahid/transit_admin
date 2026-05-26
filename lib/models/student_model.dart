@@ -47,7 +47,8 @@ class StudentModel {
     this.missedBusHistory = const [],
   });
 
-  bool get canBoardBus => 
-      !isTransportSuspended && 
-      (subscriptionStatus == SubscriptionStatus.active || subscriptionStatus == SubscriptionStatus.gracePeriod);
+  bool get canBoardBus =>
+      !isTransportSuspended &&
+      (subscriptionStatus == SubscriptionStatus.active ||
+          subscriptionStatus == SubscriptionStatus.gracePeriod);
 }

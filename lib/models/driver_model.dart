@@ -14,7 +14,8 @@ class ComplianceDocument {
   });
 
   bool get isExpired => DateTime.now().isAfter(expiryDate);
-  bool get expiresSoon => DateTime.now().add(const Duration(days: 30)).isAfter(expiryDate);
+  bool get expiresSoon =>
+      DateTime.now().add(const Duration(days: 30)).isAfter(expiryDate);
 }
 
 class DriverModel {
@@ -22,15 +23,15 @@ class DriverModel {
   final String name;
   final String contactNumber;
   final DriverStatus status;
-  
+
   // Scorecard constraints
   final double reliabilityScore; // 0.0 to 100.0
   final int harshBrakingEvents;
   final int overSpeedEvents;
-  
+
   // Compliance
   final List<ComplianceDocument> documents;
-  
+
   // Incident & Penalty History
   final List<String> incidentIds;
   final List<String> warnings;
@@ -47,6 +48,6 @@ class DriverModel {
     this.incidentIds = const [],
     this.warnings = const [],
   });
-  
+
   bool get hasExpiredDocuments => documents.any((doc) => doc.isExpired);
 }

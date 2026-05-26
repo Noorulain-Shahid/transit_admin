@@ -10,7 +10,7 @@ enum TripState {
   delayed,
   emergencyActive,
   completed,
-  cancelled
+  cancelled,
 }
 
 enum DriverStatus {
@@ -20,14 +20,14 @@ enum DriverStatus {
   activeEnRoute,
   offDuty,
   suspended,
-  onLeave
+  onLeave,
 }
 
 enum IncidentSeverity {
-  low,       // e.g., minor delay
-  medium,    // e.g., vehicle maintenance required
-  high,      // e.g., vehicle breakdown
-  critical,  // e.g., accident, medical emergency, student missing
+  low, // e.g., minor delay
+  medium, // e.g., vehicle maintenance required
+  high, // e.g., vehicle breakdown
+  critical, // e.g., accident, medical emergency, student missing
 }
 
 enum SubscriptionStatus {
@@ -36,7 +36,7 @@ enum SubscriptionStatus {
   overdue,
   suspended,
   cancelled,
-  gracePeriod
+  gracePeriod,
 }
 
 enum VehicleStatus {
@@ -45,7 +45,7 @@ enum VehicleStatus {
   idle,
   scheduledForMaintenance,
   inShop,
-  decommissioned
+  decommissioned,
 }
 
 enum AuditActionType {
@@ -55,5 +55,5 @@ enum AuditActionType {
   override,
   statusChange,
   broadcast,
-  emergencyTrigger
+  emergencyTrigger,
 }

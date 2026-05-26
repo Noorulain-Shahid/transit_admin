@@ -23,17 +23,23 @@ class SmartAlert {
 
 /// Service that analyzes realtime streams and yields system intelligence insights.
 class SmartAlertService {
-  final StreamController<SmartAlert> _alertStreamController = StreamController.broadcast();
+  final StreamController<SmartAlert> _alertStreamController =
+      StreamController.broadcast();
 
   Stream<SmartAlert> get alertStream => _alertStreamController.stream;
 
   /// Checks if a route assignment is valid. Emits an alert if capacity is exceeded.
-  void checkRouteCapacity(RouteModel route, VehicleModel vehicle, int assignedStudentsCount) {
+  void checkRouteCapacity(
+    RouteModel route,
+    VehicleModel vehicle,
+    int assignedStudentsCount,
+  ) {
     if (assignedStudentsCount > vehicle.capacity) {
       _emitAlert(
         severity: IncidentSeverity.medium,
         title: 'Capacity Overload Detected',
-        message: 'Route ${route.routeName} has $assignedStudentsCount students, but Vehicle ${vehicle.licensePlate} holds only ${vehicle.capacity}.',
+        message:
+            'Route ${route.routeName} has $assignedStudentsCount students, but Vehicle ${vehicle.licensePlate} holds only ${vehicle.capacity}.',
       );
     }
   }
@@ -44,7 +50,8 @@ class SmartAlertService {
       _emitAlert(
         severity: IncidentSeverity.high,
         title: 'Maintenance Overdue',
-        message: 'Vehicle ${vehicle.licensePlate} has missed its scheduled maintenance.',
+        message:
+            'Vehicle ${vehicle.licensePlate} has missed its scheduled maintenance.',
       );
     }
 
@@ -52,18 +59,24 @@ class SmartAlertService {
       _emitAlert(
         severity: IncidentSeverity.critical,
         title: 'Compliance Violation',
-        message: 'Vehicle ${vehicle.licensePlate} has expired insurance. Do not dispatch.',
+        message:
+            'Vehicle ${vehicle.licensePlate} has expired insurance. Do not dispatch.',
       );
     }
   }
 
   /// Detects driver behavioral anomalies and telemetry triggers.
-  void analyzeDriverTelemetry(String driverId, int overSpeedEvents, int harshBrakes) {
+  void analyzeDriverTelemetry(
+    String driverId,
+    int overSpeedEvents,
+    int harshBrakes,
+  ) {
     if (overSpeedEvents > 3) {
       _emitAlert(
         severity: IncidentSeverity.high,
         title: 'Safety Warning',
-        message: 'Driver $driverId exceeded speed limit $overSpeedEvents times. Action required.',
+        message:
+            'Driver $driverId exceeded speed limit $overSpeedEvents times. Action required.',
       );
     }
   }

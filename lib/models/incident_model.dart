@@ -9,7 +9,7 @@ class IncidentModel {
   final String? reportedByDriverId;
   final String? associatedRouteId;
   final String? associatedVehicleId;
-  
+
   // Resolution workflow
   bool isResolved;
   String? resolvedByAdminId;

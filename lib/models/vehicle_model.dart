@@ -5,12 +5,12 @@ class VehicleModel {
   final String licensePlate;
   final VehicleStatus status;
   final int capacity;
-  
+
   // Maintenance & Fleet compliance
   final DateTime nextMaintenanceDate;
   final DateTime insuranceExpiryDate;
-  
-  // Telemetry 
+
+  // Telemetry
   final double currentMileage;
   final bool isEngineIdle;
 
