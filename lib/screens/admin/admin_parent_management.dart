@@ -291,7 +291,11 @@ class _ParentCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      '${parent.childrenCount} children • ${parent.contact}',
+                      parent.children.isNotEmpty
+                          ? parent.children
+                                .map((c) => '${c.level}: ${c.name}')
+                                .join(' • ')
+                          : '${parent.childrenCount} children • ${parent.contact}',
                       style: TextStyle(
                         color: context.textSecondary,
                         fontSize: 12,
@@ -475,12 +479,31 @@ final mockParents = [
     name: 'Shahid Ali',
     childrenCount: 2,
     childrenNames: ['Noorulain', 'Haya'],
+    children: [
+      ParentChildRecord(
+        name: 'Noorulain',
+        level: 'School',
+        institution: 'Lincoln Elementary',
+        classOrSemester: 'Grade 5',
+        route: 'Route A',
+        status: 'Active',
+      ),
+      ParentChildRecord(
+        name: 'Haya',
+        level: 'College',
+        institution: 'City College',
+        classOrSemester: 'Semester 3',
+        route: 'Route B',
+        status: 'Active',
+      ),
+    ],
     contact: '0321-6666666',
     email: 'shahid@email.com',
     plan: ParentPlan.standard,
     status: SubscriptionStatus.active,
     nextBillingDate: 'Jun 15',
     amountDue: 700,
+    overdueDays: 3,
     address: 'North Colony',
   ),
   const ParentRecord(
@@ -488,12 +511,23 @@ final mockParents = [
     name: 'Sarah Ahmed',
     childrenCount: 1,
     childrenNames: ['Emma'],
+    children: [
+      ParentChildRecord(
+        name: 'Emma',
+        level: 'School',
+        institution: 'Maple School',
+        classOrSemester: 'Grade 7',
+        route: 'Route B',
+        status: 'Active',
+      ),
+    ],
     contact: '0333-7777777',
     email: 'sarah@email.com',
     plan: ParentPlan.basic,
     status: SubscriptionStatus.active,
     nextBillingDate: 'Jun 20',
     amountDue: 300,
+    overdueDays: 0,
     address: 'Civic Center',
   ),
   const ParentRecord(
@@ -501,12 +535,23 @@ final mockParents = [
     name: 'Fatima Khan',
     childrenCount: 1,
     childrenNames: ['Zara'],
+    children: [
+      ParentChildRecord(
+        name: 'Zara',
+        level: 'College',
+        institution: 'National Institute of Technology',
+        classOrSemester: 'Semester 5',
+        route: 'Route C',
+        status: 'Expired',
+      ),
+    ],
     contact: '0345-9999999',
     email: 'fatima@email.com',
     plan: ParentPlan.basic,
     status: SubscriptionStatus.expired,
     nextBillingDate: 'Expired',
     amountDue: 300,
+    overdueDays: 11,
     address: 'West Town',
   ),
   const ParentRecord(
@@ -514,12 +559,23 @@ final mockParents = [
     name: 'Hassan Raza',
     childrenCount: 1,
     childrenNames: ['Ali'],
+    children: [
+      ParentChildRecord(
+        name: 'Ali',
+        level: 'School',
+        institution: 'Lincoln Elementary',
+        classOrSemester: 'Grade 8',
+        route: 'Route A',
+        status: 'Active',
+      ),
+    ],
     contact: '0300-1234567',
     email: 'hassan@email.com',
     plan: ParentPlan.premium,
     status: SubscriptionStatus.active,
     nextBillingDate: 'Jul 01',
     amountDue: 1200,
+    overdueDays: 0,
     address: 'East Wing',
   ),
   const ParentRecord(
@@ -527,12 +583,23 @@ final mockParents = [
     name: 'Farooq Ahmed',
     childrenCount: 1,
     childrenNames: ['Omar'],
+    children: [
+      ParentChildRecord(
+        name: 'Omar',
+        level: 'College',
+        institution: 'City University',
+        classOrSemester: 'BSCS - Year 2',
+        route: 'Route D',
+        status: 'Trial',
+      ),
+    ],
     contact: '0312-5551234',
     email: 'farooq@email.com',
     plan: ParentPlan.basic,
     status: SubscriptionStatus.trial,
     nextBillingDate: 'Jun 05',
     amountDue: 0,
+    overdueDays: 7,
     address: 'Model Town',
   ),
 ];

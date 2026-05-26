@@ -49,6 +49,13 @@ class StudentRecord {
   final String dropTime;
   final String pickupLocation;
   final String dropLocation;
+  final String? university;
+  final String? department;
+  final String? studentId;
+  final String? program;
+  final String? year;
+  final int overdueDays;
+  final SubscriptionPlan? subscriptionPlan;
 
   const StudentRecord({
     required this.id,
@@ -63,6 +70,13 @@ class StudentRecord {
     required this.dropTime,
     this.pickupLocation = '',
     this.dropLocation = '',
+    this.university,
+    this.department,
+    this.studentId,
+    this.program,
+    this.year,
+    this.overdueDays = 0,
+    this.subscriptionPlan,
   });
 
   String get statusLabel {
@@ -116,6 +130,15 @@ class StudentRecord {
         return const Color(0xFFEF4444);
     }
   }
+
+  String get planLabel {
+    if (subscriptionPlan == null) return 'Free';
+    return subscriptionPlanConfigs[subscriptionPlan!]!.name;
+  }
+
+  SubscriptionPlanConfig get planConfig => subscriptionPlan == null
+      ? subscriptionPlanConfigs[SubscriptionPlan.free]!
+      : subscriptionPlanConfigs[subscriptionPlan!]!;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -128,12 +151,14 @@ class ParentRecord {
   final String name;
   final int childrenCount;
   final List<String> childrenNames;
+  final List<ParentChildRecord> children;
   final String contact;
   final String email;
   final ParentPlan plan;
   final SubscriptionStatus status;
   final String nextBillingDate;
   final double amountDue;
+  final int overdueDays;
   final String address;
 
   const ParentRecord({
@@ -141,12 +166,14 @@ class ParentRecord {
     required this.name,
     required this.childrenCount,
     required this.childrenNames,
+    this.children = const [],
     required this.contact,
     required this.email,
     required this.plan,
     required this.status,
     required this.nextBillingDate,
     required this.amountDue,
+    this.overdueDays = 0,
     this.address = '',
   });
 
@@ -203,6 +230,24 @@ class ParentRecord {
   }
 }
 
+class ParentChildRecord {
+  final String name;
+  final String level;
+  final String institution;
+  final String classOrSemester;
+  final String route;
+  final String status;
+
+  const ParentChildRecord({
+    required this.name,
+    required this.level,
+    required this.institution,
+    required this.classOrSemester,
+    required this.route,
+    required this.status,
+  });
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 //  Driver
 // ─────────────────────────────────────────────────────────────────────────────
@@ -218,9 +263,11 @@ class DriverRecord {
   final int activeTrips;
   final String licenseNo;
   final String contact;
+  final SubscriptionPlan? subscriptionPlan;
   final String photoUrl;
   final bool approved;
   final int totalTrips;
+  final SubscriptionStatus? subscriptionStatus;
 
   const DriverRecord({
     required this.id,
@@ -235,6 +282,8 @@ class DriverRecord {
     this.photoUrl = '',
     this.approved = true,
     this.totalTrips = 0,
+    this.subscriptionStatus,
+    this.subscriptionPlan,
   });
 
   String get statusLabel {
@@ -258,6 +307,47 @@ class DriverRecord {
         return const Color(0xFF3B82F6);
     }
   }
+
+  String get subscriptionLabel {
+    if (subscriptionStatus == null) return 'None';
+    switch (subscriptionStatus!) {
+      case SubscriptionStatus.active:
+        return 'Active';
+      case SubscriptionStatus.expired:
+        return 'Expired';
+      case SubscriptionStatus.trial:
+        return 'Trial';
+      case SubscriptionStatus.suspended:
+        return 'Suspended';
+      case SubscriptionStatus.blocked:
+        return 'Blocked';
+    }
+  }
+
+  Color get subscriptionColor {
+    if (subscriptionStatus == null) return const Color(0xFF94A3B8);
+    switch (subscriptionStatus!) {
+      case SubscriptionStatus.active:
+        return const Color(0xFF10B981);
+      case SubscriptionStatus.expired:
+        return const Color(0xFFEF4444);
+      case SubscriptionStatus.trial:
+        return const Color(0xFF3B82F6);
+      case SubscriptionStatus.suspended:
+        return const Color(0xFFF59E0B);
+      case SubscriptionStatus.blocked:
+        return const Color(0xFFEF4444);
+    }
+  }
+
+  String get planLabel {
+    if (subscriptionPlan == null) return 'Free';
+    return subscriptionPlanConfigs[subscriptionPlan!]!.name;
+  }
+
+  SubscriptionPlanConfig get planConfig => subscriptionPlan == null
+      ? subscriptionPlanConfigs[SubscriptionPlan.free]!
+      : subscriptionPlanConfigs[subscriptionPlan!]!;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -265,7 +355,13 @@ class DriverRecord {
 // ─────────────────────────────────────────────────────────────────────────────
 enum AlertSeverity { critical, warning, info }
 
-enum AlertType { sos, missedBus, lateDriver, paymentFailure, subscriptionExpiry }
+enum AlertType {
+  sos,
+  missedBus,
+  lateDriver,
+  paymentFailure,
+  subscriptionExpiry,
+}
 
 class AlertItem {
   final String id;
@@ -329,3 +425,38 @@ class SubscriptionPlanConfig {
     required this.color,
   });
 }
+
+// Simple plan enumeration used in student/driver subscriptions
+enum SubscriptionPlan { free, premium, family }
+
+const Map<SubscriptionPlan, SubscriptionPlanConfig> subscriptionPlanConfigs = {
+  SubscriptionPlan.free: SubscriptionPlanConfig(
+    name: 'Free',
+    price: 0,
+    childLimit: 1,
+    features: ['Basic tracking', 'Standard notifications'],
+    color: Color(0xFF94A3B8),
+  ),
+  SubscriptionPlan.premium: SubscriptionPlanConfig(
+    name: 'Premium',
+    price: 700,
+    childLimit: -1,
+    features: [
+      'Real-time tracking',
+      'Priority notifications',
+      'Advanced reports',
+    ],
+    color: Color(0xFF8B5CF6),
+  ),
+  SubscriptionPlan.family: SubscriptionPlanConfig(
+    name: 'Family Pack',
+    price: 1200,
+    childLimit: -1,
+    features: [
+      'Unlimited children',
+      'Shared family dashboard',
+      'Priority support',
+    ],
+    color: Color(0xFF3B82F6),
+  ),
+};

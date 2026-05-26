@@ -163,7 +163,9 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                               borderRadius: BorderRadius.circular(32),
                               boxShadow: [
                                 BoxShadow(
-                                  color: AppTheme.adminEmerald.withValues(alpha: 0.5),
+                                  color: AppTheme.adminEmerald.withValues(
+                                    alpha: 0.5,
+                                  ),
                                   blurRadius: 40,
                                   offset: const Offset(0, 20),
                                 ),
@@ -198,54 +200,6 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                             letterSpacing: -1,
                           ),
                         ),
-                      ),
-                      const SizedBox(height: 10),
-                      Text(
-                        'Fleet Management · Operations · Control Center',
-                        style: TextStyle(
-                          color: context.textSecondary,
-                          fontSize: 14,
-                          letterSpacing: 0.3,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 24),
-
-                      // Feature pills
-                      Wrap(
-                        spacing: 10,
-                        runSpacing: 10,
-                        alignment: WrapAlignment.center,
-                        children:
-                            [
-                                  '🚌 Fleet Control',
-                                  '📊 Analytics',
-                                  '🛡️ Admin Panel',
-                                ]
-                                .map(
-                                  (f) => Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 14,
-                                      vertical: 7,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: context.cardBg,
-                                      borderRadius: BorderRadius.circular(20),
-                                      border: Border.all(
-                                        color: context.inputBorder,
-                                      ),
-                                    ),
-                                    child: Text(
-                                      f,
-                                      style: TextStyle(
-                                        color: Colors.white.withValues(alpha: 0.8),
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                  ),
-                                )
-                                .toList(),
                       ),
                       const SizedBox(height: 36),
                       const SizedBox(height: 14),
