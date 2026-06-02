@@ -3,8 +3,8 @@ import '../../theme/app_theme.dart';
 import '../../widgets/glass_card.dart';
 
 class AdminVehicles extends StatelessWidget {
-  final VoidCallback onBack;
-  const AdminVehicles({super.key, required this.onBack});
+  final VoidCallback? onBack;
+  const AdminVehicles({super.key, this.onBack});
 
   @override
   Widget build(BuildContext context) {
@@ -22,21 +22,21 @@ class AdminVehicles extends StatelessWidget {
                 Row(
                   children: [
                     _MiniStat(
-                      icon: '🚌',
+                      icon: Icons.directions_bus_rounded,
                       label: 'Total',
                       value: '12',
                       color: AppTheme.adminEmerald,
                     ),
                     const SizedBox(width: 10),
                     _MiniStat(
-                      icon: '✅',
+                      icon: Icons.check_circle_rounded,
                       label: 'Active',
                       value: '10',
                       color: AppTheme.success,
                     ),
                     const SizedBox(width: 10),
                     _MiniStat(
-                      icon: '🔧',
+                      icon: Icons.build_circle_rounded,
                       label: 'Service',
                       value: '2',
                       color: AppTheme.warning,
@@ -53,11 +53,11 @@ class AdminVehicles extends StatelessWidget {
                       padding: const EdgeInsets.all(16),
                       gradient: LinearGradient(
                         colors: [
-                          v.healthColor.withOpacity(0.08),
+                          v.healthColor.withValues(alpha: 0.08),
                           Colors.transparent,
                         ],
                       ),
-                      borderColor: v.healthColor.withOpacity(0.15),
+                      borderColor: v.healthColor.withValues(alpha: 0.15),
                       child: Column(
                         children: [
                           Row(
@@ -66,10 +66,10 @@ class AdminVehicles extends StatelessWidget {
                                 width: 48,
                                 height: 48,
                                 decoration: BoxDecoration(
-                                  color: v.healthColor.withOpacity(0.15),
+                                  color: v.healthColor.withValues(alpha: 0.15),
                                   borderRadius: BorderRadius.circular(14),
                                   border: Border.all(
-                                    color: v.healthColor.withOpacity(0.3),
+                                    color: v.healthColor.withValues(alpha: 0.3),
                                   ),
                                 ),
                                 child: const Center(
@@ -118,17 +118,17 @@ class AdminVehicles extends StatelessWidget {
                           Row(
                             children: [
                               _VehicleInfo(
-                                icon: '📅',
+                                icon: Icons.calendar_today_rounded,
                                 label: 'Last Service',
                                 value: v.lastService,
                               ),
                               _VehicleInfo(
-                                icon: '🛣️',
+                                icon: Icons.star_rounded,
                                 label: 'Mileage',
                                 value: v.mileage,
                               ),
                               _VehicleInfo(
-                                icon: '💺',
+                                icon: Icons.airline_seat_recline_normal_rounded,
                                 label: 'Capacity',
                                 value: v.capacity,
                               ),
@@ -160,19 +160,19 @@ class AdminVehicles extends StatelessWidget {
                         bus: 'Bus #42',
                         task: 'Oil Change',
                         date: 'Feb 15',
-                        cost: '₹2,500',
+                        cost: '₨2,500',
                       ),
                       _MaintRow(
                         bus: 'Bus #43',
                         task: 'Brake Pads Replaced',
                         date: 'Feb 10',
-                        cost: '₹4,800',
+                        cost: '₨4,800',
                       ),
                       _MaintRow(
                         bus: 'Bus #44',
                         task: 'AC Repair',
                         date: 'Feb 05',
-                        cost: '₹3,200',
+                        cost: '₨3,200',
                       ),
                     ],
                   ),
@@ -246,8 +246,8 @@ class _Vehicle {
 
 class _Header extends StatelessWidget {
   final String title;
-  final VoidCallback onBack;
-  const _Header({required this.title, required this.onBack});
+  final VoidCallback? onBack;
+  const _Header({required this.title, this.onBack});
 
   @override
   Widget build(BuildContext context) {
@@ -255,24 +255,25 @@ class _Header extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
       child: Row(
         children: [
-          GestureDetector(
-            onTap: onBack,
-            child: Container(
-              width: 38,
-              height: 38,
-              decoration: BoxDecoration(
-                color: context.cardBgElevated,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: context.inputBorder),
-              ),
-              child: Center(
-                child: Text(
-                  '←',
-                  style: TextStyle(color: context.textPrimary, fontSize: 18),
+          if (onBack != null)
+            GestureDetector(
+              onTap: onBack,
+              child: Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: context.cardBgElevated,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: context.inputBorder),
+                ),
+                child: Center(
+                  child: Text(
+                    '←',
+                    style: TextStyle(color: context.textPrimary, fontSize: 18),
+                  ),
                 ),
               ),
             ),
-          ),
           const SizedBox(width: 14),
           Text(
             title,
@@ -289,7 +290,8 @@ class _Header extends StatelessWidget {
 }
 
 class _MiniStat extends StatelessWidget {
-  final String icon, label, value;
+  final IconData icon;
+  final String label, value;
   final Color color;
   const _MiniStat({
     required this.icon,
@@ -304,12 +306,15 @@ class _MiniStat extends StatelessWidget {
       child: GlassCard(
         padding: const EdgeInsets.all(12),
         gradient: LinearGradient(
-          colors: [color.withOpacity(0.12), color.withOpacity(0.04)],
+          colors: [
+            color.withValues(alpha: 0.12),
+            color.withValues(alpha: 0.04),
+          ],
         ),
-        borderColor: color.withOpacity(0.2),
+        borderColor: color.withValues(alpha: 0.2),
         child: Column(
           children: [
-            Text(icon, style: const TextStyle(fontSize: 20)),
+            Icon(icon, color: color, size: 24),
             const SizedBox(height: 4),
             Text(
               value,
@@ -331,7 +336,8 @@ class _MiniStat extends StatelessWidget {
 }
 
 class _VehicleInfo extends StatelessWidget {
-  final String icon, label, value;
+  final IconData icon;
+  final String label, value;
   const _VehicleInfo({
     required this.icon,
     required this.label,
@@ -343,19 +349,26 @@ class _VehicleInfo extends StatelessWidget {
     return Expanded(
       child: Column(
         children: [
-          Text(
-            '$icon $value',
-            style: TextStyle(
-              color: context.textPrimary,
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-            ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, size: 14, color: context.textPrimary),
+              const SizedBox(width: 6),
+              Text(
+                value,
+                style: TextStyle(
+                  color: context.textPrimary,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 2),
           Text(
             label,
             style: TextStyle(
-              color: Colors.white.withOpacity(0.35),
+              color: Colors.white.withValues(alpha: 0.35),
               fontSize: 10,
             ),
           ),
@@ -381,7 +394,7 @@ class _MaintRow extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.04),
+          color: Colors.white.withValues(alpha: 0.04),
           borderRadius: BorderRadius.circular(12),
         ),
         child: Row(
@@ -403,7 +416,7 @@ class _MaintRow extends StatelessWidget {
                   Text(
                     date,
                     style: TextStyle(
-                      color: Colors.white.withOpacity(0.35),
+                      color: Colors.white.withValues(alpha: 0.35),
                       fontSize: 11,
                     ),
                   ),

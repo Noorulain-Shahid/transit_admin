@@ -1,4 +1,4 @@
-﻿name: transit_admin
+name: transit_admin
 description: "TransitPro Admin Panel - Fleet & Operations Management"
 publish_to: 'none'
 version: 0.1.0
@@ -10,6 +10,19 @@ dependencies:
   flutter:
     sdk: flutter
   go_router: ^14.0.0
+  image_picker: ^1.1.2
+  url_launcher: ^6.3.0
+  google_maps_flutter: ^2.10.0
+  geolocator: ^13.0.0
+  permission_handler: ^11.0.0
+  flutter_local_notifications: ^18.0.0
+  flutter_polyline_points: ^2.1.0
+  http: ^1.2.0
+  shared_preferences: ^2.3.0
+  firebase_core: ^4.7.0
+  cloud_firestore: ^6.3.0
+  firebase_auth: ^6.4.0
+  google_sign_in: 6.2.1
 
 dev_dependencies:
   flutter_test:
@@ -18,3 +31,19 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/map_style.json
+    - assets/images/navbar/
+    - assets/images/profile/
+    - assets/images/profile_page/
+    - assets/images/role_selection/
+    - assets/images/schedule/
+    - assets/images/splash_screen/
+    - assets/images/splash_screen/bus_splash_icon.png
+    - assets/images/stats/
+    - assets/images/utilities/
+    - assets/images/control_center/
+    - assets/images/pending_approvals/
+    - assets/images/quick_actions/
+    - assets/images/
+    - assets/images/notification_bell.gif

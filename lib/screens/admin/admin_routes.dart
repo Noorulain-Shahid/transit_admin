@@ -3,8 +3,8 @@ import '../../theme/app_theme.dart';
 import '../../widgets/glass_card.dart';
 
 class AdminRoutes extends StatelessWidget {
-  final VoidCallback onBack;
-  const AdminRoutes({super.key, required this.onBack});
+  final VoidCallback? onBack;
+  const AdminRoutes({super.key, this.onBack});
 
   @override
   Widget build(BuildContext context) {
@@ -21,21 +21,21 @@ class AdminRoutes extends StatelessWidget {
                 Row(
                   children: [
                     _MiniStat(
-                      icon: '🗺️',
+                      icon: Icons.map_rounded,
                       label: 'Total Routes',
                       value: '18',
                       color: AppTheme.adminEmerald,
                     ),
                     const SizedBox(width: 10),
                     _MiniStat(
-                      icon: '🤖',
+                      icon: Icons.star_rounded,
                       label: 'AI Optimized',
                       value: '6',
                       color: AppTheme.purple,
                     ),
                     const SizedBox(width: 10),
                     _MiniStat(
-                      icon: '📍',
+                      icon: Icons.location_on_rounded,
                       label: 'Stops',
                       value: '84',
                       color: AppTheme.info,
@@ -48,11 +48,11 @@ class AdminRoutes extends StatelessWidget {
                 GlassCard(
                   gradient: LinearGradient(
                     colors: [
-                      AppTheme.purple.withOpacity(0.15),
-                      AppTheme.info.withOpacity(0.08),
+                      AppTheme.purple.withValues(alpha: 0.15),
+                      AppTheme.info.withValues(alpha: 0.08),
                     ],
                   ),
-                  borderColor: AppTheme.purple.withOpacity(0.25),
+                  borderColor: AppTheme.purple.withValues(alpha: 0.25),
                   padding: const EdgeInsets.all(18),
                   child: Row(
                     children: [
@@ -128,10 +128,10 @@ class AdminRoutes extends StatelessWidget {
                                 width: 44,
                                 height: 44,
                                 decoration: BoxDecoration(
-                                  color: r.color.withOpacity(0.15),
+                                  color: r.color.withValues(alpha: 0.15),
                                   borderRadius: BorderRadius.circular(14),
                                   border: Border.all(
-                                    color: r.color.withOpacity(0.3),
+                                    color: r.color.withValues(alpha: 0.3),
                                   ),
                                 ),
                                 child: Center(
@@ -176,22 +176,22 @@ class AdminRoutes extends StatelessWidget {
                           Row(
                             children: [
                               _RouteDetail(
-                                icon: '📍',
+                                icon: Icons.location_on_rounded,
                                 label: 'Stops',
                                 value: r.stops,
                               ),
                               _RouteDetail(
-                                icon: '🕐',
+                                icon: Icons.star_rounded,
                                 label: 'Duration',
                                 value: r.duration,
                               ),
                               _RouteDetail(
-                                icon: '📏',
+                                icon: Icons.star_rounded,
                                 label: 'Distance',
                                 value: r.distance,
                               ),
                               _RouteDetail(
-                                icon: '🚌',
+                                icon: Icons.directions_bus_rounded,
                                 label: 'Bus',
                                 value: r.bus,
                               ),
@@ -205,7 +205,7 @@ class AdminRoutes extends StatelessWidget {
                               vertical: 8,
                             ),
                             decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.04),
+                              color: Colors.white.withValues(alpha: 0.04),
                               borderRadius: BorderRadius.circular(10),
                             ),
                             child: Row(
@@ -327,32 +327,33 @@ class _Route {
 
 class _Header extends StatelessWidget {
   final String title;
-  final VoidCallback onBack;
-  const _Header({required this.title, required this.onBack});
+  final VoidCallback? onBack;
+  const _Header({required this.title, this.onBack});
   @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
       child: Row(
         children: [
-          GestureDetector(
-            onTap: onBack,
-            child: Container(
-              width: 38,
-              height: 38,
-              decoration: BoxDecoration(
-                color: context.cardBgElevated,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: context.inputBorder),
-              ),
-              child: Center(
-                child: Text(
-                  '←',
-                  style: TextStyle(color: context.textPrimary, fontSize: 18),
+          if (onBack != null)
+            GestureDetector(
+              onTap: onBack,
+              child: Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: context.cardBgElevated,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: context.inputBorder),
+                ),
+                child: Center(
+                  child: Text(
+                    '←',
+                    style: TextStyle(color: context.textPrimary, fontSize: 18),
+                  ),
                 ),
               ),
             ),
-          ),
           const SizedBox(width: 14),
           Text(
             title,
@@ -369,7 +370,8 @@ class _Header extends StatelessWidget {
 }
 
 class _MiniStat extends StatelessWidget {
-  final String icon, label, value;
+  final IconData icon;
+  final String label, value;
   final Color color;
   const _MiniStat({
     required this.icon,
@@ -383,12 +385,15 @@ class _MiniStat extends StatelessWidget {
       child: GlassCard(
         padding: const EdgeInsets.all(12),
         gradient: LinearGradient(
-          colors: [color.withOpacity(0.12), color.withOpacity(0.04)],
+          colors: [
+            color.withValues(alpha: 0.12),
+            color.withValues(alpha: 0.04),
+          ],
         ),
-        borderColor: color.withOpacity(0.2),
+        borderColor: color.withValues(alpha: 0.2),
         child: Column(
           children: [
-            Text(icon, style: const TextStyle(fontSize: 20)),
+            Icon(icon, color: color, size: 24),
             const SizedBox(height: 4),
             Text(
               value,
@@ -410,7 +415,8 @@ class _MiniStat extends StatelessWidget {
 }
 
 class _RouteDetail extends StatelessWidget {
-  final String icon, label, value;
+  final IconData icon;
+  final String label, value;
   const _RouteDetail({
     required this.icon,
     required this.label,
@@ -421,19 +427,29 @@ class _RouteDetail extends StatelessWidget {
     return Expanded(
       child: Column(
         children: [
-          Text(
-            '$icon $value',
-            style: TextStyle(
-              color: context.textPrimary,
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-            ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, size: 14, color: context.textPrimary),
+              const SizedBox(width: 4),
+              Flexible(
+                child: Text(
+                  value,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: context.textPrimary,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 2),
           Text(
             label,
             style: TextStyle(
-              color: Colors.white.withOpacity(0.35),
+              color: Colors.white.withValues(alpha: 0.35),
               fontSize: 10,
             ),
           ),

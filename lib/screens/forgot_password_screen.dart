@@ -53,7 +53,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                     shape: BoxShape.circle,
                     gradient: RadialGradient(
                       colors: [
-                        AppTheme.adminEmerald.withOpacity(0.35),
+                        AppTheme.adminEmerald.withValues(alpha: 0.35),
                         Colors.transparent,
                       ],
                     ),
@@ -85,7 +85,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                         child: Text(
                           '← Back',
                           style: TextStyle(
-                            color: Colors.white.withOpacity(0.7),
+                            color: Colors.white.withValues(alpha: 0.7),
                             fontSize: 14,
                           ),
                         ),
@@ -152,7 +152,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                             Text(
                               'EMAIL ADDRESS',
                               style: TextStyle(
-                                color: Colors.white.withOpacity(0.6),
+                                color: Colors.white.withValues(alpha: 0.6),
                                 fontSize: 11,
                                 fontWeight: FontWeight.w700,
                                 letterSpacing: 0.8,
@@ -185,11 +185,11 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                       GlassCard(
                         gradient: LinearGradient(
                           colors: [
-                            AppTheme.success.withOpacity(0.12),
-                            AppTheme.success.withOpacity(0.04),
+                            AppTheme.success.withValues(alpha: 0.12),
+                            AppTheme.success.withValues(alpha: 0.04),
                           ],
                         ),
-                        borderColor: AppTheme.success.withOpacity(0.25),
+                        borderColor: AppTheme.success.withValues(alpha: 0.25),
                         padding: const EdgeInsets.all(20),
                         child: Column(
                           children: [
@@ -199,7 +199,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                                   width: 40,
                                   height: 40,
                                   decoration: BoxDecoration(
-                                    color: AppTheme.success.withOpacity(0.2),
+                                    color: AppTheme.success.withValues(alpha: 0.2),
                                     borderRadius: BorderRadius.circular(12),
                                   ),
                                   child: const Center(
@@ -214,7 +214,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                                   child: Text(
                                     'Reset link sent successfully!\nPlease check your inbox.',
                                     style: TextStyle(
-                                      color: Colors.white.withOpacity(0.7),
+                                      color: Colors.white.withValues(alpha: 0.7),
                                       fontSize: 13,
                                       height: 1.4,
                                     ),

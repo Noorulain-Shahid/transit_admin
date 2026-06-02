@@ -3,8 +3,8 @@ import '../../theme/app_theme.dart';
 import '../../widgets/glass_card.dart';
 
 class AdminFees extends StatefulWidget {
-  final VoidCallback onBack;
-  const AdminFees({super.key, required this.onBack});
+  final VoidCallback? onBack;
+  const AdminFees({super.key, this.onBack});
 
   @override
   State<AdminFees> createState() => _AdminFeesState();
@@ -28,11 +28,11 @@ class _AdminFeesState extends State<AdminFees> {
                 GlassCard(
                   gradient: LinearGradient(
                     colors: [
-                      AppTheme.adminEmerald.withOpacity(0.15),
-                      AppTheme.adminEmerald.withOpacity(0.05),
+                      AppTheme.adminEmerald.withValues(alpha: 0.15),
+                      AppTheme.adminEmerald.withValues(alpha: 0.05),
                     ],
                   ),
-                  borderColor: AppTheme.adminEmerald.withOpacity(0.25),
+                  borderColor: AppTheme.adminEmerald.withValues(alpha: 0.25),
                   padding: const EdgeInsets.all(20),
                   child: Column(
                     children: [
@@ -51,7 +51,7 @@ class _AdminFeesState extends State<AdminFees> {
                               ),
                               const SizedBox(height: 4),
                               Text(
-                                '₹4,20,000',
+                                '₨4,20,000',
                                 style: TextStyle(
                                   color: context.textPrimary,
                                   fontSize: 28,
@@ -66,7 +66,7 @@ class _AdminFeesState extends State<AdminFees> {
                               vertical: 6,
                             ),
                             decoration: BoxDecoration(
-                              color: AppTheme.success.withOpacity(0.15),
+                              color: AppTheme.success.withValues(alpha: 0.15),
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: Row(
@@ -96,19 +96,19 @@ class _AdminFeesState extends State<AdminFees> {
                         children: [
                           _FeeStatPill(
                             label: 'Collected',
-                            value: '₹3.82L',
+                            value: '₨3.82L',
                             color: AppTheme.success,
                           ),
                           const SizedBox(width: 8),
                           _FeeStatPill(
                             label: 'Pending',
-                            value: '₹28K',
+                            value: '₨28K',
                             color: AppTheme.warning,
                           ),
                           const SizedBox(width: 8),
                           _FeeStatPill(
                             label: 'Overdue',
-                            value: '₹10K',
+                            value: '₨10K',
                             color: AppTheme.error,
                           ),
                         ],
@@ -184,11 +184,11 @@ class _AdminFeesState extends State<AdminFees> {
                   padding: const EdgeInsets.all(18),
                   gradient: LinearGradient(
                     colors: [
-                      AppTheme.warning.withOpacity(0.1),
+                      AppTheme.warning.withValues(alpha: 0.1),
                       Colors.transparent,
                     ],
                   ),
-                  borderColor: AppTheme.warning.withOpacity(0.2),
+                  borderColor: AppTheme.warning.withValues(alpha: 0.2),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -209,17 +209,17 @@ class _AdminFeesState extends State<AdminFees> {
                       const SizedBox(height: 12),
                       _ReminderRow(
                         name: 'Ahmed Khan',
-                        amount: '₹3,500',
+                        amount: '₨3,500',
                         daysOverdue: 15,
                       ),
                       _ReminderRow(
                         name: 'Sara Ali',
-                        amount: '₹3,500',
+                        amount: '₨3,500',
                         daysOverdue: 8,
                       ),
                       _ReminderRow(
                         name: 'Ravi Sharma',
-                        amount: '₹3,500',
+                        amount: '₨3,500',
                         daysOverdue: 3,
                       ),
                     ],
@@ -253,7 +253,7 @@ final _fees = [
   _FeeData(
     'Noorulain Shahid',
     'STU-1001',
-    '₹3,500',
+    '₨3,500',
     'Paid',
     AppTheme.success,
     'Feb 2026',
@@ -261,7 +261,7 @@ final _fees = [
   _FeeData(
     'Emma Watson',
     'STU-1002',
-    '₹3,500',
+    '₨3,500',
     'Paid',
     AppTheme.success,
     'Feb 2026',
@@ -269,7 +269,7 @@ final _fees = [
   _FeeData(
     'Ali Hassan',
     'STU-1003',
-    '₹3,500',
+    '₨3,500',
     'Pending',
     AppTheme.warning,
     'Feb 2026',
@@ -277,7 +277,7 @@ final _fees = [
   _FeeData(
     'Ahmed Khan',
     'STU-1004',
-    '₹3,500',
+    '₨3,500',
     'Overdue',
     AppTheme.error,
     'Jan 2026',
@@ -285,7 +285,7 @@ final _fees = [
   _FeeData(
     'Zara Fatima',
     'STU-1005',
-    '₹3,500',
+    '₨3,500',
     'Paid',
     AppTheme.success,
     'Feb 2026',
@@ -293,7 +293,7 @@ final _fees = [
   _FeeData(
     'Sara Ali',
     'STU-1006',
-    '₹3,500',
+    '₨3,500',
     'Overdue',
     AppTheme.error,
     'Jan 2026',
@@ -301,9 +301,9 @@ final _fees = [
 ];
 
 final _invoices = [
-  _Invoice('INV-2026-042', 'Noorulain Shahid', '₹3,500', 'Feb 15, 2026'),
-  _Invoice('INV-2026-041', 'Emma Watson', '₹3,500', 'Feb 14, 2026'),
-  _Invoice('INV-2026-040', 'Zara Fatima', '₹3,500', 'Feb 12, 2026'),
+  _Invoice('INV-2026-042', 'Noorulain Shahid', '₨3,500', 'Feb 15, 2026'),
+  _Invoice('INV-2026-041', 'Emma Watson', '₨3,500', 'Feb 14, 2026'),
+  _Invoice('INV-2026-040', 'Zara Fatima', '₨3,500', 'Feb 12, 2026'),
 ];
 
 class _FeeData {
@@ -328,32 +328,33 @@ class _Invoice {
 
 class _Header extends StatelessWidget {
   final String title;
-  final VoidCallback onBack;
-  const _Header({required this.title, required this.onBack});
+  final VoidCallback? onBack;
+  const _Header({required this.title, this.onBack});
   @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
       child: Row(
         children: [
-          GestureDetector(
-            onTap: onBack,
-            child: Container(
-              width: 38,
-              height: 38,
-              decoration: BoxDecoration(
-                color: context.cardBgElevated,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: context.inputBorder),
-              ),
-              child: Center(
-                child: Text(
-                  '←',
-                  style: TextStyle(color: context.textPrimary, fontSize: 18),
+          if (onBack != null)
+            GestureDetector(
+              onTap: onBack,
+              child: Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: context.cardBgElevated,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: context.inputBorder),
+                ),
+                child: Center(
+                  child: Text(
+                    '←',
+                    style: TextStyle(color: context.textPrimary, fontSize: 18),
+                  ),
                 ),
               ),
             ),
-          ),
           const SizedBox(width: 14),
           Text(
             title,
@@ -383,9 +384,9 @@ class _FeeStatPill extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 10),
         decoration: BoxDecoration(
-          color: color.withOpacity(0.12),
+          color: color.withValues(alpha: 0.12),
           borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: color.withOpacity(0.2)),
+          border: Border.all(color: color.withValues(alpha: 0.2)),
         ),
         child: Column(
           children: [
@@ -428,13 +429,13 @@ class _FilterChip extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
           decoration: BoxDecoration(
             color: active
-                ? AppTheme.adminEmerald.withOpacity(0.2)
+                ? AppTheme.adminEmerald.withValues(alpha: 0.2)
                 : context.cardBg,
             borderRadius: BorderRadius.circular(10),
             border: Border.all(
               color: active
-                  ? AppTheme.adminAccent.withOpacity(0.5)
-                  : Colors.white.withOpacity(0.1),
+                  ? AppTheme.adminAccent.withValues(alpha: 0.5)
+                  : Colors.white.withValues(alpha: 0.1),
             ),
           ),
           child: Text(
@@ -464,7 +465,7 @@ class _FeeCard extends StatelessWidget {
             width: 42,
             height: 42,
             decoration: BoxDecoration(
-              color: fee.statusColor.withOpacity(0.12),
+              color: fee.statusColor.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(14),
             ),
             child: const Center(
@@ -530,7 +531,7 @@ class _InvoiceRow extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.04),
+          color: Colors.white.withValues(alpha: 0.04),
           borderRadius: BorderRadius.circular(12),
         ),
         child: Row(
@@ -568,7 +569,7 @@ class _InvoiceRow extends StatelessWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
-                color: AppTheme.info.withOpacity(0.15),
+                color: AppTheme.info.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(6),
               ),
               child: const Text(
@@ -598,7 +599,7 @@ class _ReminderRow extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.04),
+          color: Colors.white.withValues(alpha: 0.04),
           borderRadius: BorderRadius.circular(12),
         ),
         child: Row(
@@ -618,7 +619,7 @@ class _ReminderRow extends StatelessWidget {
                   Text(
                     '$amount · $daysOverdue days overdue',
                     style: TextStyle(
-                      color: AppTheme.error.withOpacity(0.7),
+                      color: AppTheme.error.withValues(alpha: 0.7),
                       fontSize: 11,
                     ),
                   ),
@@ -628,9 +629,11 @@ class _ReminderRow extends StatelessWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               decoration: BoxDecoration(
-                color: AppTheme.warning.withOpacity(0.15),
+                color: AppTheme.warning.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: AppTheme.warning.withOpacity(0.3)),
+                border: Border.all(
+                  color: AppTheme.warning.withValues(alpha: 0.3),
+                ),
               ),
               child: const Text(
                 'Send Reminder',
