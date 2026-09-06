@@ -1,9 +1,9 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:transit_core/transit_core.dart';
 import '../../data/admin_repository.dart';
 import '../../theme/app_theme.dart';
-import '../../widgets/glass_card.dart';
 
 class AdminVehicles extends StatefulWidget {
   final VoidCallback? onBack;
@@ -84,164 +84,185 @@ class _AdminVehiclesState extends State<AdminVehicles> {
         ? 0
         : buses.where((b) => b.status == VehicleStatus.maintenance).length;
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.only(bottom: 100),
-      child: Column(
-        children: [
-          // ── Header ──────────────────────────────────────────
-          _Header(title: 'Fleet Management', onBack: widget.onBack),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
+    return Scaffold(
+      body: Container(
+        decoration: context.scaffoldBg,
+        child: SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.only(bottom: 100),
             child: Column(
               children: [
-                // ── Summary cards ─────────────────────────────
-                Row(
-                  children: [
-                    _MiniStat(
-                      icon: Icons.directions_bus_rounded,
-                      label: 'Total',
-                      value: loading ? '…' : '${buses.length}',
-                      color: AppTheme.adminEmerald,
-                    ),
-                    const SizedBox(width: 10),
-                    _MiniStat(
-                      icon: Icons.check_circle_rounded,
-                      label: 'Active',
-                      value: loading ? '…' : '$activeCount',
-                      color: AppTheme.success,
-                    ),
-                    const SizedBox(width: 10),
-                    _MiniStat(
-                      icon: Icons.build_circle_rounded,
-                      label: 'Service',
-                      value: loading ? '…' : '$serviceCount',
-                      color: AppTheme.warning,
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
+                // ── Header ──────────────────────────────────────
+                _Header(title: 'Fleet Management', onBack: widget.onBack),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Column(
+                    children: [
+                      // ── Summary cards (neumorphic) ─────────────
+                      Row(
+                        children: [
+                          _MiniStat(
+                            icon: Icons.directions_bus_rounded,
+                            label: 'Total',
+                            value: loading ? '…' : '${buses.length}',
+                            color: AppTheme.adminEmerald,
+                          ),
+                          const SizedBox(width: 10),
+                          _MiniStat(
+                            icon: Icons.check_circle_rounded,
+                            label: 'Active',
+                            value: loading ? '…' : '$activeCount',
+                            color: AppTheme.success,
+                          ),
+                          const SizedBox(width: 10),
+                          _MiniStat(
+                            icon: Icons.build_circle_rounded,
+                            label: 'Service',
+                            value: loading ? '…' : '$serviceCount',
+                            color: AppTheme.warning,
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
 
-                // ── Vehicle list ──────────────────────────────
-                if (loading)
-                  const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 24),
-                    child: Center(child: CircularProgressIndicator()),
-                  )
-                else if (buses.isEmpty)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 24),
-                    child: Text(
-                      'No vehicles have been registered yet.',
-                      style: TextStyle(color: context.textSecondary),
-                    ),
-                  )
-                else
-                  ...buses.map((bus) {
-                    final (health, healthColor) = _healthOf(bus);
-                    final nextService = bus.nextMaintenanceDate;
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 10),
-                      child: GlassCard(
-                        padding: const EdgeInsets.all(16),
-                        gradient: LinearGradient(
-                          colors: [
-                            healthColor.withValues(alpha: 0.08),
-                            Colors.transparent,
-                          ],
-                        ),
-                        borderColor: healthColor.withValues(alpha: 0.15),
-                        child: Column(
-                          children: [
-                            Row(
-                              children: [
-                                Container(
-                                  width: 48,
-                                  height: 48,
-                                  decoration: BoxDecoration(
-                                    color: healthColor.withValues(alpha: 0.15),
-                                    borderRadius: BorderRadius.circular(14),
-                                    border: Border.all(
-                                      color: healthColor.withValues(
-                                        alpha: 0.3,
-                                      ),
-                                    ),
-                                  ),
-                                  child: const Center(
-                                    child: Text(
-                                      '🚌',
-                                      style: TextStyle(fontSize: 24),
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 14),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
+                      // ── Vehicle list ────────────────────────────
+                      if (loading)
+                        const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 24),
+                          child: Center(child: CircularProgressIndicator()),
+                        )
+                      else if (buses.isEmpty)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 24),
+                          child: Text(
+                            'No vehicles have been registered yet.',
+                            style: TextStyle(color: context.textSecondary),
+                          ),
+                        )
+                      else
+                        ...buses.map((bus) {
+                          final (health, healthColor) = _healthOf(bus);
+                          final nextService = bus.nextMaintenanceDate;
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 10),
+                            child: _NeumorphicCard(
+                              padding: const EdgeInsets.all(16),
+                              child: Column(
+                                children: [
+                                  Row(
                                     children: [
-                                      Row(
-                                        children: [
-                                          Text(
-                                            bus.busNumber,
-                                            style: TextStyle(
-                                              color: context.textPrimary,
-                                              fontSize: 15,
-                                              fontWeight: FontWeight.w700,
+                                      Container(
+                                        width: 48,
+                                        height: 48,
+                                        decoration: BoxDecoration(
+                                          color: healthColor.withValues(
+                                            alpha: 0.15,
+                                          ),
+                                          borderRadius: BorderRadius.circular(
+                                            14,
+                                          ),
+                                          border: Border.all(
+                                            color: healthColor.withValues(
+                                              alpha: 0.3,
                                             ),
                                           ),
-                                          const SizedBox(width: 8),
-                                          StatusBadge(
-                                            label: health,
-                                            color: healthColor,
-                                          ),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 3),
-                                      Text(
-                                        '${_routeNameFor(bus.routeId)} · Driver: ${_driverNameFor(bus.driverId)}',
-                                        style: TextStyle(
-                                          color: context.textSecondary,
-                                          fontSize: 12,
                                         ),
-                                        overflow: TextOverflow.ellipsis,
+                                        child: const Center(
+                                          child: Text(
+                                            '🚌',
+                                            style: TextStyle(fontSize: 24),
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 14),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Row(
+                                              children: [
+                                                Flexible(
+                                                  child: Text(
+                                                    bus.busNumber,
+                                                    style: TextStyle(
+                                                      color:
+                                                          context.textPrimary,
+                                                      fontSize: 15,
+                                                      fontWeight:
+                                                          FontWeight.w700,
+                                                    ),
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 8),
+                                                _HealthChip(
+                                                  label: health,
+                                                  color: healthColor,
+                                                ),
+                                              ],
+                                            ),
+                                            const SizedBox(height: 3),
+                                            Text(
+                                              _routeNameFor(bus.routeId),
+                                              style: TextStyle(
+                                                color: context.textSecondary,
+                                                fontSize: 12,
+                                              ),
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                            Text(
+                                              'Driver: ${_driverNameFor(bus.driverId)}',
+                                              style: TextStyle(
+                                                color: context.textTertiary,
+                                                fontSize: 11,
+                                              ),
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ],
+                                        ),
                                       ),
                                     ],
                                   ),
-                                ),
-                              ],
+                                  const SizedBox(height: 14),
+                                  Row(
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      _VehicleInfo(
+                                        icon: Icons.calendar_today_rounded,
+                                        label: 'Next Service',
+                                        value: nextService == null
+                                            ? 'Not scheduled'
+                                            : '${nextService.day}/${nextService.month}/${nextService.year}',
+                                      ),
+                                      _VehicleInfo(
+                                        icon: Icons.speed_rounded,
+                                        label: 'Mileage',
+                                        value:
+                                            '${bus.currentMileage.toStringAsFixed(0)} km',
+                                      ),
+                                      _VehicleInfo(
+                                        icon: Icons
+                                            .airline_seat_recline_normal_rounded,
+                                        label: 'Capacity',
+                                        value: '${bus.capacity}',
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
                             ),
-                            const SizedBox(height: 12),
-                            Row(
-                              children: [
-                                _VehicleInfo(
-                                  icon: Icons.calendar_today_rounded,
-                                  label: 'Next Service',
-                                  value: nextService == null
-                                      ? 'Not scheduled'
-                                      : '${nextService.day}/${nextService.month}/${nextService.year}',
-                                ),
-                                _VehicleInfo(
-                                  icon: Icons.speed_rounded,
-                                  label: 'Mileage',
-                                  value:
-                                      '${bus.currentMileage.toStringAsFixed(0)} km',
-                                ),
-                                _VehicleInfo(
-                                  icon: Icons.airline_seat_recline_normal_rounded,
-                                  label: 'Capacity',
-                                  value: '${bus.capacity}',
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  }),
+                          );
+                        }),
+                    ],
+                  ),
+                ),
               ],
             ),
           ),
-        ],
+        ),
       ),
     );
   }
@@ -257,27 +278,20 @@ class _Header extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          if (onBack != null)
-            GestureDetector(
-              onTap: onBack,
-              child: Container(
-                width: 38,
-                height: 38,
-                decoration: BoxDecoration(
-                  color: context.cardBgElevated,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: context.inputBorder),
-                ),
-                child: Center(
-                  child: Text(
-                    '←',
-                    style: TextStyle(color: context.textPrimary, fontSize: 18),
-                  ),
-                ),
+          IconButton(
+            onPressed: onBack ?? () => context.pop(),
+            style: IconButton.styleFrom(
+              backgroundColor: context.cardBgElevated,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+                side: BorderSide(color: context.inputBorder),
               ),
             ),
-          const SizedBox(width: 14),
+            icon: Icon(Icons.arrow_back, color: context.textPrimary, size: 18),
+          ),
+          const SizedBox(width: 10),
           Text(
             title,
             style: TextStyle(
@@ -288,6 +302,45 @@ class _Header extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Neumorphic shell (two opposing shadows, `context.isDark`-aware) shared by
+/// the stat cards and the vehicle list card — same recipe already used
+/// elsewhere in this app (Fee Management/Route Management summary cards,
+/// the student/driver detail empty states).
+class _NeumorphicCard extends StatelessWidget {
+  final EdgeInsetsGeometry padding;
+  final Widget child;
+  const _NeumorphicCard({required this.padding, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = context.isDark;
+    return Container(
+      padding: padding,
+      decoration: BoxDecoration(
+        color: context.cardBg,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: isDark
+                ? Colors.black.withValues(alpha: 0.45)
+                : const Color(0xFFB8BEC8).withValues(alpha: 0.6),
+            offset: const Offset(5, 5),
+            blurRadius: 12,
+          ),
+          BoxShadow(
+            color: isDark
+                ? Colors.white.withValues(alpha: 0.04)
+                : Colors.white.withValues(alpha: 0.9),
+            offset: const Offset(-5, -5),
+            blurRadius: 12,
+          ),
+        ],
+      ),
+      child: child,
     );
   }
 }
@@ -306,15 +359,8 @@ class _MiniStat extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Expanded(
-      child: GlassCard(
+      child: _NeumorphicCard(
         padding: const EdgeInsets.all(12),
-        gradient: LinearGradient(
-          colors: [
-            color.withValues(alpha: 0.12),
-            color.withValues(alpha: 0.04),
-          ],
-        ),
-        borderColor: color.withValues(alpha: 0.2),
         child: Column(
           children: [
             Icon(icon, color: color, size: 24),
@@ -338,6 +384,35 @@ class _MiniStat extends StatelessWidget {
   }
 }
 
+/// Solid, high-contrast status chip for the vehicle card — deliberately not
+/// the shared `StatusBadge` (a translucent-tint style used app-wide, e.g. on
+/// Fee Management/Route Management), since this task specifically asked for
+/// a solid-fill chip (colored background, white text) for vehicle health.
+class _HealthChip extends StatelessWidget {
+  final String label;
+  final Color color;
+  const _HealthChip({required this.label, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+}
+
 class _VehicleInfo extends StatelessWidget {
   final IconData icon;
   final String label, value;
@@ -349,7 +424,7 @@ class _VehicleInfo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Expanded(
+    return Flexible(
       child: Column(
         children: [
           Row(
@@ -373,10 +448,7 @@ class _VehicleInfo extends StatelessWidget {
           const SizedBox(height: 2),
           Text(
             label,
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.35),
-              fontSize: 10,
-            ),
+            style: TextStyle(color: context.textTertiary, fontSize: 10),
           ),
         ],
       ),

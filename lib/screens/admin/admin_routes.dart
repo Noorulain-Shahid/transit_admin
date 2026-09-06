@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:transit_core/transit_core.dart';
 import '../../data/admin_repository.dart';
 import '../../theme/app_theme.dart';
@@ -67,57 +68,63 @@ class _AdminRoutesState extends State<AdminRoutes> {
         ? 0
         : routes.where((r) => r.isActive).length;
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.only(bottom: 100),
-      child: Column(
-        children: [
-          _Header(title: 'Route Management', onBack: widget.onBack),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
+    return Scaffold(
+      body: Container(
+        decoration: context.scaffoldBg,
+        child: SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.only(bottom: 100),
             child: Column(
               children: [
-                // ── Route stats ────────────────────────────────
-                Row(
-                  children: [
-                    _MiniStat(
-                      icon: Icons.map_rounded,
-                      label: 'Total Routes',
-                      value: loading ? '…' : '${routes.length}',
-                      color: AppTheme.adminEmerald,
-                    ),
-                    const SizedBox(width: 10),
-                    _MiniStat(
-                      icon: Icons.check_circle_rounded,
-                      label: 'Active',
-                      value: loading ? '…' : '$activeCount',
-                      color: AppTheme.success,
-                    ),
-                    const SizedBox(width: 10),
-                    _MiniStat(
-                      icon: Icons.location_on_rounded,
-                      label: 'Stops',
-                      value: loading ? '…' : '$totalStops',
-                      color: AppTheme.info,
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
+                _Header(title: 'Route Management', onBack: widget.onBack),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Column(
+                    children: [
+                      // ── Route stats (neumorphic) ───────────────
+                      Row(
+                        children: [
+                          _MiniStat(
+                            icon: Icons.map_rounded,
+                            label: 'Total Routes',
+                            value: loading ? '…' : '${routes.length}',
+                            color: AppTheme.adminEmerald,
+                          ),
+                          const SizedBox(width: 10),
+                          _MiniStat(
+                            icon: Icons.check_circle_rounded,
+                            label: 'Active',
+                            value: loading ? '…' : '$activeCount',
+                            color: AppTheme.success,
+                          ),
+                          const SizedBox(width: 10),
+                          _MiniStat(
+                            icon: Icons.location_on_rounded,
+                            label: 'Stops',
+                            value: loading ? '…' : '$totalStops',
+                            color: AppTheme.info,
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
 
-                // ── Route list ────────────────────────────────
-                if (loading)
-                  const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 24),
-                    child: Center(child: CircularProgressIndicator()),
-                  )
-                else if (routes.isEmpty)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 24),
-                    child: Text(
-                      'No routes have been created yet.',
-                      style: TextStyle(color: context.textSecondary),
-                    ),
-                  )
-                else
+                      // ── Route list ──────────────────────────────
+                      if (loading)
+                        const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 24),
+                          child: Center(child: CircularProgressIndicator()),
+                        )
+                      else if (routes.isEmpty)
+                        _EmptyState(
+                          onCreateRoute: () => ScaffoldMessenger.of(
+                            context,
+                          ).showSnackBar(
+                            const SnackBar(
+                              content: Text('Route creation — coming soon'),
+                            ),
+                          ),
+                        )
+                      else
                   ...routes.asMap().entries.map((entry) {
                     final i = entry.key;
                     final r = entry.value;
@@ -253,11 +260,14 @@ class _AdminRoutesState extends State<AdminRoutes> {
                         ),
                       ),
                     );
-                  }),
+                          }),
+                    ],
+                  ),
+                ),
               ],
             ),
           ),
-        ],
+        ),
       ),
     );
   }
@@ -274,27 +284,20 @@ class _Header extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          if (onBack != null)
-            GestureDetector(
-              onTap: onBack,
-              child: Container(
-                width: 38,
-                height: 38,
-                decoration: BoxDecoration(
-                  color: context.cardBgElevated,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: context.inputBorder),
-                ),
-                child: Center(
-                  child: Text(
-                    '←',
-                    style: TextStyle(color: context.textPrimary, fontSize: 18),
-                  ),
-                ),
+          IconButton(
+            onPressed: onBack ?? () => context.pop(),
+            style: IconButton.styleFrom(
+              backgroundColor: context.cardBgElevated,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+                side: BorderSide(color: context.inputBorder),
               ),
             ),
-          const SizedBox(width: 14),
+            icon: Icon(Icons.arrow_back, color: context.textPrimary, size: 18),
+          ),
+          const SizedBox(width: 10),
           Text(
             title,
             style: TextStyle(
@@ -305,6 +308,45 @@ class _Header extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Neumorphic shell shared by the stat cards and the "Create Route" CTA —
+/// two opposing shadows, `context.isDark`-aware, matching the recipe already
+/// used elsewhere in this app (student/driver detail empty states, the Fee
+/// Management summary card).
+class _NeumorphicCard extends StatelessWidget {
+  final EdgeInsetsGeometry padding;
+  final Widget child;
+  const _NeumorphicCard({required this.padding, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = context.isDark;
+    return Container(
+      padding: padding,
+      decoration: BoxDecoration(
+        color: context.cardBg,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: isDark
+                ? Colors.black.withValues(alpha: 0.45)
+                : const Color(0xFFB8BEC8).withValues(alpha: 0.6),
+            offset: const Offset(5, 5),
+            blurRadius: 12,
+          ),
+          BoxShadow(
+            color: isDark
+                ? Colors.white.withValues(alpha: 0.04)
+                : Colors.white.withValues(alpha: 0.9),
+            offset: const Offset(-5, -5),
+            blurRadius: 12,
+          ),
+        ],
+      ),
+      child: child,
     );
   }
 }
@@ -322,15 +364,8 @@ class _MiniStat extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Expanded(
-      child: GlassCard(
+      child: _NeumorphicCard(
         padding: const EdgeInsets.all(12),
-        gradient: LinearGradient(
-          colors: [
-            color.withValues(alpha: 0.12),
-            color.withValues(alpha: 0.04),
-          ],
-        ),
-        borderColor: color.withValues(alpha: 0.2),
         child: Column(
           children: [
             Icon(icon, color: color, size: 24),
@@ -349,6 +384,67 @@ class _MiniStat extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Professional empty state — a subtle route-path icon over properly sized,
+/// muted text, plus a neumorphic "Create Route" CTA so the admin has
+/// something to do next rather than a dead end. Uses the theme's own muted
+/// color token rather than a fixed `Colors.grey` so it still reads correctly
+/// in dark mode.
+class _EmptyState extends StatelessWidget {
+  final VoidCallback onCreateRoute;
+  const _EmptyState({required this.onCreateRoute});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 40),
+      child: Column(
+        children: [
+          Icon(
+            Icons.signpost_outlined,
+            size: 48,
+            color: context.textTertiary,
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'No routes have been created yet.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: context.textTertiary, fontSize: 16),
+          ),
+          const SizedBox(height: 20),
+          GestureDetector(
+            onTap: onCreateRoute,
+            child: _NeumorphicCard(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 20,
+                vertical: 12,
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.add_circle_outline,
+                    color: AppTheme.adminAccent,
+                    size: 18,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Create Route',
+                    style: TextStyle(
+                      color: AppTheme.adminAccent,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

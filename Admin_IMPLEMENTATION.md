@@ -7,7 +7,7 @@
 > - [`README.md`](README.md) — architecture, schema, screen docs (mobile app)
 > - [`../../transit_admin/README.md`](../../transit_admin/README.md) — admin app
 >
-> **Last updated:** 2026-09-06 (fees redesign)
+> **Last updated:** 2026-09-06 (fleet redesign)
 
 ---
 
@@ -725,6 +725,139 @@ its note above — pick a real id whenever you're ready and it can be redone.
 ---
 
 ## 📝 Changelog
+
+### 2026-09-06 (fleet redesign) — fixed missing-Material root cause + visual redesign of the Fleet/Vehicle Management screen (transit_admin)
+
+Same category of issue as fees and routes just before it, this time against
+`admin_vehicles.dart`, plus a vehicle-card layout cleanup.
+
+**Root cause, same as fees/routes.** `router.dart`'s `/admin/vehicles` route
+builds `const AdminVehicles()` directly with no `Scaffold` of its own — the
+yellow underlines — and `_Header`'s back button was gated behind
+`if (onBack != null)`, which the router never supplies.
+
+**Fix — Material context + header.** Same shape as the routes fix:
+`Scaffold(body: Container(decoration: context.scaffoldBg, child: SafeArea(...)))`,
+and `_Header` now always shows a real `IconButton` (`Icons.arrow_back`)
+styled via `IconButton.styleFrom` to match the boxed look every other
+screen's back button uses, wired to `onBack ?? () => context.pop()`.
+
+**Summary cards → neumorphic.** New shared `_NeumorphicCard` (same
+two-opposing-`BoxShadow` recipe as the routes/fees passes) replaces the
+`GlassCard` wrapper inside `_MiniStat`. Icon colors unchanged — emerald for
+Total, green (`AppTheme.success`) for Active, orange/yellow
+(`AppTheme.warning`) for Service, matching the task's spec exactly. The
+three cards were already `Expanded`, so equal width was not actually broken.
+
+**Vehicle card overhaul.** The list item now sits in the same
+`_NeumorphicCard` (replacing its previous `GlassCard` gradient wrapper),
+`EdgeInsets.all(16)` unchanged. The "Good"/"Warning"/"Critical"/"Out of
+Service" health badge is now a new `_HealthChip` — a solid colored
+background with white text, per the task's explicit "green background with
+white text" spec — deliberately **not** a change to the shared `StatusBadge`
+widget, which is a translucent-tint style used across many other screens
+(Fee Management, Route Management, driver documents); changing it globally
+would have restyled every other screen's badges as an unintended side
+effect. The combined "route · Driver: name" line (the actual source of the
+poor "Not schedul…"/"noor sah…" truncation reported) was split into two
+separate `Text` lines — route name and driver name — each with its own
+`TextOverflow.ellipsis`, so a long value on either field truncates on its
+own line instead of the whole combined string competing for one line's
+width. The bus number `Text` also gained `Flexible` + `ellipsis` (previously
+unbounded, which could push the health chip off narrow screens). The bottom
+stats row (`Next Service`/`Mileage`/`Capacity`) now uses
+`MainAxisAlignment.spaceBetween` with each `_VehicleInfo` changed from
+`Expanded` to `Flexible` (an `Expanded` inside a `spaceBetween` row forces
+equal widths and defeats the spacing mode entirely — `Flexible` lets each
+stat size to its own content while `spaceBetween` distributes the leftover
+space).
+
+`flutter analyze lib/screens/admin/admin_vehicles.dart` (transit_admin):
+**No issues found!**
+
+### 2026-09-06 (routes redesign) — fixed missing-Material root cause + visual redesign of the Route Management screen (transit_admin)
+
+Same three symptoms and same underlying causes as the Fee Management pass
+(see the 2026-09-06 (fees redesign) entry below) — reported against
+`admin_routes.dart` this time.
+
+**Root cause, same as fees.** `router.dart`'s `/admin/routes` route builds
+`const AdminRoutes()` directly; `AdminRoutes.build()` had no `Scaffold` of
+its own (every other admin screen reached via router wraps its own), which
+is what produces Flutter's debug-mode yellow-underline warning on every
+piece of text. Also same as fees: `_Header`'s back button was gated behind
+`if (onBack != null)`, and the router never supplies `onBack`, so no button
+ever rendered in practice either.
+
+**Fix — Material context + header.** `build()` now returns
+`Scaffold(body: Container(decoration: context.scaffoldBg, child: SafeArea(child: <existing content>)))`,
+same structure as every other admin screen. `_Header` now always renders a
+real `IconButton` (`Icons.arrow_back`, per this task's explicit ask — the
+Fee Management fix a moment earlier used a plain `GestureDetector`, so this
+uses `IconButton.styleFrom` to give the button the same boxed look and
+`context.cardBgElevated`/border as every other screen's back button,
+keeping the visual convention while still using the actual `IconButton`
+widget as asked), wired to `onBack ?? () => context.pop()` — go_router's
+equivalent of `Navigator.pop(context)`, matching the fees fix.
+
+**Summary cards → neumorphic.** New shared `_NeumorphicCard` (two opposing
+`BoxShadow`s, `context.isDark`-aware) replaces the `GlassCard` gradient
+wrapper inside `_MiniStat`. The three cards were already `Expanded` (equal
+width was not actually broken), so this pass is purely the shadow/background
+swap; icon colors are unchanged — emerald for Total Routes, green
+(`AppTheme.success`) for Active, blue (`AppTheme.info`) for Stops, matching
+the task's own "green for routes/active, blue for stops" spec exactly.
+
+**Empty state → professional, with a CTA.** Replaced the single unstyled
+`Text('No routes have been created yet.')` with a new `_EmptyState`: a
+muted `Icons.signpost_outlined` icon, `fontSize: 16` text using
+`context.textTertiary` (theme-aware, not a fixed `Colors.grey`, same
+reasoning as the fees empty state), and a neumorphic "Create Route" button
+below it built on the same `_NeumorphicCard`. **No route-creation flow
+exists anywhere in this codebase** (no screen, no repository method) — the
+button currently shows a "Route creation — coming soon" `SnackBar` rather
+than silently doing nothing or faking a create action, following this
+project's established honesty pattern for dead-end actions (see the
+2026-09-01 (later) changelog entry's `AdminParentDetail` billing-panel
+removal and the general "convert to a clearly-labeled disabled/coming-soon
+state instead of a fake-success SnackBar" rule). Building the real
+create-route screen is unstarted future work.
+
+`flutter analyze lib/screens/admin/admin_routes.dart` (transit_admin):
+**No issues found!**
+
+### 2026-09-06 (fees back button) — fixed the missing back-navigation on the Fee Management header (transit_admin)
+
+Reported: no back arrow next to the "Fee Management" heading, so there's no
+way back to the previous screen. Root cause, found by reading `_Header` and
+its caller: the back button already existed in `_Header`, but was gated
+behind `if (onBack != null)` — and `router.dart`'s `/admin/fees` route
+builds `const AdminFees()` with no `onBack` argument at all, so the button
+never rendered for anyone reaching this screen through actual navigation.
+`AdminFees.onBack` exists only for a hypothetical caller that embeds this
+screen inline (e.g. as a tab body) rather than routing to it — nothing in
+the app currently does that.
+
+**Fix.** `_Header` now always renders the button (dropped the `if`), with
+`onTap: onBack ?? () => context.pop()` — `context.pop()` is this app's
+go_router equivalent of `Navigator.pop(context)` (the mechanism the task
+asked for); every other admin detail screen's own back button already calls
+`context.pop()` the same way, so this keeps one convention across the app
+rather than introducing raw `Navigator.pop` as a second, inconsistent
+pattern. Swapped the button's plain `'←'` `Text` glyph for
+`Icon(Icons.arrow_back_rounded)`, matching the exact icon/size every other
+screen's back button already uses. Left the button's boxed-container visual
+style untouched (rather than switching to a bare `IconButton` as the task's
+literal example showed) since that box is this app's one consistent
+back-button look, used on every other detail screen — introducing a second,
+differently-styled back button here would have broken that consistency
+without fixing anything the task actually asked for. `Row`'s
+`crossAxisAlignment: CrossAxisAlignment.center` and an 8px gap between
+button and heading (`SizedBox(width: 8)`, tightened from the previous 14px)
+are both already how the row is built.
+
+`flutter analyze lib/screens/admin/admin_fees.dart` (transit_admin):
+**No issues found!**
 
 ### 2026-09-06 (fees redesign) — fixed missing-Material root cause + visual redesign of the Fee Management screen (transit_admin)
 

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:transit_core/transit_core.dart';
 import '../../data/admin_repository.dart';
 import '../../theme/app_theme.dart';
@@ -280,27 +281,33 @@ class _Header extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          if (onBack != null)
-            GestureDetector(
-              onTap: onBack,
-              child: Container(
-                width: 38,
-                height: 38,
-                decoration: BoxDecoration(
-                  color: context.cardBgElevated,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: context.inputBorder),
-                ),
-                child: Center(
-                  child: Text(
-                    '←',
-                    style: TextStyle(color: context.textPrimary, fontSize: 18),
-                  ),
+          GestureDetector(
+            // `onBack` is only ever supplied by a caller that embeds this
+            // screen inline (e.g. a tab body); reached via
+            // `/admin/fees` in router.dart, nothing passes it, so this
+            // fell back to no button at all before — `context.pop()` is
+            // this app's go_router equivalent of `Navigator.pop(context)`.
+            onTap: onBack ?? () => context.pop(),
+            child: Container(
+              width: 38,
+              height: 38,
+              decoration: BoxDecoration(
+                color: context.cardBgElevated,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: context.inputBorder),
+              ),
+              child: Center(
+                child: Icon(
+                  Icons.arrow_back_rounded,
+                  color: context.textPrimary,
+                  size: 18,
                 ),
               ),
             ),
-          const SizedBox(width: 14),
+          ),
+          const SizedBox(width: 8),
           Text(
             title,
             style: TextStyle(
