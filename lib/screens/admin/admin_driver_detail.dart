@@ -586,9 +586,9 @@ class _AdminDriverDetailState extends State<AdminDriverDetail>
                       controller: _tabCtrl,
                       children: [
                         _buildTrips(context, d),
-                        _buildAttendance(context),
-                        _buildSOS(context),
-                        _buildEarnings(context),
+                        _buildAttendance(context, d),
+                        _buildSOS(context, d),
+                        _buildEarnings(context, d),
                       ],
                     ),
                   ),
@@ -647,35 +647,84 @@ class _AdminDriverDetailState extends State<AdminDriverDetail>
     );
   }
 
-  Widget _buildAttendance(BuildContext context) {
-    final items = [
-      ('May 26', 'Present — On time', AppTheme.success),
-      ('May 25', 'Present — On time', AppTheme.success),
-      ('May 24', 'Present — Late 8 min', AppTheme.warning),
-      ('May 22', 'Absent', AppTheme.error),
-    ];
-    return ListView(
+  /// Same situation as `_buildTrips` above: no attendance/shift event has
+  /// ever been recorded for any driver in this schema yet, so
+  /// `driverAttendanceList` is honestly empty rather than hardcoded. The
+  /// on-time/late/absent color-coding is preserved on `_LogRow`, running
+  /// only over real entries once a real query fills the list.
+  Widget _buildAttendance(BuildContext context, Driver? d) {
+    if (d == null) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    final List<(String date, String status, Color color)> driverAttendanceList =
+        const [];
+
+    if (!d.isApproved || driverAttendanceList.isEmpty) {
+      return _DriverAttendanceEmptyState(isVerified: d.isApproved);
+    }
+
+    return ListView.builder(
       padding: const EdgeInsets.only(top: 12),
-      children: items
-          .map((e) => _LogRow(date: e.$1, status: e.$2, color: e.$3))
-          .toList(),
+      itemCount: driverAttendanceList.length,
+      itemBuilder: (context, i) {
+        final entry = driverAttendanceList[i];
+        return _LogRow(date: entry.$1, status: entry.$2, color: entry.$3);
+      },
     );
   }
 
-  Widget _buildSOS(BuildContext context) {
-    final items = [
-      ('May 20', 'Vehicle breakdown — Route A', AppTheme.error),
-      ('Apr 15', 'Medical emergency — student fainted', AppTheme.error),
-    ];
-    return ListView(
+  /// Same situation as the other tabs: no SOS/emergency event has ever been
+  /// recorded for any driver in this schema yet, so `sosHistoryList` is
+  /// honestly empty rather than hardcoded. Real SOS rows keep the current
+  /// high-visibility red styling on `_LogRow` unchanged once a real query
+  /// fills the list.
+  Widget _buildSOS(BuildContext context, Driver? d) {
+    if (d == null) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    final List<(String date, String status, Color color)> sosHistoryList =
+        const [];
+
+    if (!d.isApproved || sosHistoryList.isEmpty) {
+      return _DriverSOSEmptyState(isVerified: d.isApproved);
+    }
+
+    return ListView.builder(
       padding: const EdgeInsets.only(top: 12),
-      children: items
-          .map((e) => _LogRow(date: e.$1, status: e.$2, color: e.$3))
-          .toList(),
+      itemCount: sosHistoryList.length,
+      itemBuilder: (context, i) {
+        final entry = sosHistoryList[i];
+        return _LogRow(date: entry.$1, status: entry.$2, color: entry.$3);
+      },
     );
   }
 
-  Widget _buildEarnings(BuildContext context) {
+  /// No payroll/earnings source exists for drivers in this schema yet — the
+  /// `payments` collection covers parent/student fee payments, not driver
+  /// compensation — so `earningsData` is honestly `null` rather than a
+  /// hardcoded chart. Currency formatting (₨) and the base/bonus/deduction
+  /// color-coding are preserved on `_EarnRow` for once a real source exists.
+  Widget _buildEarnings(BuildContext context, Driver? d) {
+    if (d == null) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    final ({
+      int monthlyTotal,
+      List<double> chartValues,
+      List<String> chartLabels,
+      int baseSalary,
+      int tripBonus,
+      int deductions,
+    })?
+    earningsData = null;
+
+    if (!d.isApproved || earningsData == null) {
+      return _DriverEarningsEmptyState(isVerified: d.isApproved);
+    }
+
     return Padding(
       padding: const EdgeInsets.only(top: 12),
       child: Column(
@@ -689,7 +738,7 @@ class _AdminDriverDetailState extends State<AdminDriverDetail>
                 style: TextStyle(color: context.textSecondary, fontSize: 12),
               ),
               Text(
-                '₨45,000',
+                '₨${earningsData.monthlyTotal}',
                 style: TextStyle(
                   color: context.textPrimary,
                   fontSize: 16,
@@ -700,8 +749,8 @@ class _AdminDriverDetailState extends State<AdminDriverDetail>
           ),
           const SizedBox(height: 12),
           MiniBarChart(
-            values: const [35, 42, 38, 45, 40, 48],
-            labels: const ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'],
+            values: earningsData.chartValues,
+            labels: earningsData.chartLabels,
             barColor: AppTheme.driverCyan,
             barActiveColor: AppTheme.driverCyan,
             height: 70,
@@ -710,17 +759,17 @@ class _AdminDriverDetailState extends State<AdminDriverDetail>
           const SizedBox(height: 16),
           _EarnRow(
             label: 'Base Salary',
-            value: '₨30,000',
+            value: '₨${earningsData.baseSalary}',
             color: AppTheme.info,
           ),
           _EarnRow(
             label: 'Trip Bonus',
-            value: '₨10,000',
+            value: '₨${earningsData.tripBonus}',
             color: AppTheme.success,
           ),
           _EarnRow(
             label: 'Deductions',
-            value: '-₨2,000',
+            value: '-₨${earningsData.deductions}',
             color: AppTheme.error,
           ),
         ],
@@ -1042,6 +1091,56 @@ class _DriverTripsEmptyState extends StatelessWidget {
       title: isVerified
           ? 'No trips recorded for this driver yet.'
           : 'No trips available. Driver is pending verification.',
+    );
+  }
+}
+
+/// Attendance tab's empty state — same reasoning as Trip History's.
+class _DriverAttendanceEmptyState extends StatelessWidget {
+  final bool isVerified;
+  const _DriverAttendanceEmptyState({required this.isVerified});
+
+  @override
+  Widget build(BuildContext context) {
+    return _NeumorphicEmptyState(
+      icon: Icons.event_available_outlined,
+      title: isVerified
+          ? 'No attendance logged for this driver yet.'
+          : 'No attendance records. Driver is pending verification.',
+    );
+  }
+}
+
+/// SOS History tab's empty state — for a verified driver, an empty list is
+/// good news (a clean safety record), so the copy is reassuring rather than
+/// a dead-end message, unlike the other tabs' neutral "nothing yet" framing.
+class _DriverSOSEmptyState extends StatelessWidget {
+  final bool isVerified;
+  const _DriverSOSEmptyState({required this.isVerified});
+
+  @override
+  Widget build(BuildContext context) {
+    return _NeumorphicEmptyState(
+      icon: Icons.verified_user_outlined,
+      title: isVerified
+          ? 'Zero SOS alerts. This driver has a clean safety record.'
+          : 'No SOS alerts. Driver is pending verification.',
+    );
+  }
+}
+
+/// Earnings tab's empty state — same reasoning as the other tabs.
+class _DriverEarningsEmptyState extends StatelessWidget {
+  final bool isVerified;
+  const _DriverEarningsEmptyState({required this.isVerified});
+
+  @override
+  Widget build(BuildContext context) {
+    return _NeumorphicEmptyState(
+      icon: Icons.account_balance_wallet_outlined,
+      title: isVerified
+          ? 'No earnings recorded for this driver yet.'
+          : 'No financial data. Driver is pending verification.',
     );
   }
 }

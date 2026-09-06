@@ -7,7 +7,7 @@
 > - [`README.md`](README.md) — architecture, schema, screen docs (mobile app)
 > - [`../../transit_admin/README.md`](../../transit_admin/README.md) — admin app
 >
-> **Last updated:** 2026-09-06 (later)
+> **Last updated:** 2026-09-06 (fees redesign)
 
 ---
 
@@ -234,11 +234,12 @@ have been worse than no panel. A real payment view would read the `payments`
 collection instead; not built here. The history tabs on the driver/student
 detail screens (Trip/Attendance/SOS/Earnings/Missed/Access) were originally
 illustrative mock rows; **as of 2026-09-06**, all four tabs on the student
-detail screen (Attendance, Trip History, Missed Logs, Access) and the Trip
-History tab on the driver detail screen no longer show hardcoded rows — see
-the 2026-09-06 changelog entries. The remaining three driver-side tabs
-(Attendance/SOS/Earnings) are still mock — no trip/attendance data source is
-wired into either app's admin view yet regardless.
+detail screen (Attendance, Trip History, Missed Logs, Access) and all four
+tabs on the driver detail screen (Trip History, Attendance, SOS History,
+Earnings) now show an honest empty state instead of hardcoded content — see
+the 2026-09-06 changelog entries. No trip/attendance/payroll data source is
+actually wired into either app's admin view yet regardless — every one of
+these tabs is currently empty-state-only until a real data source exists.
 
 **Verified:** `flutter analyze` — zero errors in `transit_core`, `transit_pro`
 (4 pre-existing infos, unchanged), and `transit_admin`. **Not verified: real
@@ -724,6 +725,168 @@ its note above — pick a real id whenever you're ready and it can be redone.
 ---
 
 ## 📝 Changelog
+
+### 2026-09-06 (fees redesign) — fixed missing-Material root cause + visual redesign of the Fee Management screen (transit_admin)
+
+Reported as three symptoms: yellow underlines on all text, a "basic" summary
+card and filter row, and a giant unstyled empty-state line. The first
+symptom's root cause was real, not cosmetic: `router.dart`'s
+`/admin/fees` route builds `const AdminFees()` directly, and — unlike every
+other admin screen reached via router (student/parent/driver detail,
+subscription, notifications), which each wrap their own `build()` in a
+`Scaffold` — `AdminFees.build()` returned a bare `SingleChildScrollView` with
+no `Material`/`Scaffold` ancestor of its own. Flutter's debug mode paints
+text with no `Material` ancestor with a yellow underline specifically to
+flag this; it's a correctness gap, not a style choice.
+
+**Fix — Material context.** `build()` now returns
+`Scaffold(body: Container(decoration: context.scaffoldBg, child: SafeArea(child: <existing content>)))`,
+copying the exact structure every other admin detail screen already uses
+(`context.scaffoldBg` is the shared theme-aware, dark-mode-supporting
+gradient background extension already used everywhere else in the app) —
+this alone removes the yellow underlines.
+
+**Summary card → neumorphic.** Replaced the `GlassCard` gradient wrapper
+around "Total Collected" with a new `_NeumorphicCard` (two opposing
+`BoxShadow`s, `context.isDark`-aware, `context.cardBg` background) — the one
+neumorphic recipe already established elsewhere in this app (student/driver
+detail empty states). The `_FeeStatPill` sub-boxes inside it keep their
+existing green/orange/red (collected/pending/overdue) color-coding
+unchanged.
+
+**Filters → segmented control.** Replaced the horizontally-scrolling
+`_FilterChip` row (removed) with a new `_FilterSegmentedControl`: one
+bordered container holding all four labels as equal-width segments in a
+single `Row`, the active segment getting an emerald-tinted background + a
+200ms `AnimatedContainer` transition. Reads as one control, not four
+separate buttons, and no longer needs horizontal scrolling since all four
+now fit on screen at once.
+
+**Empty state → professional.** Replaced the single unstyled
+`Text('No payments in this category.')` with a new `_EmptyState`: a centered
+column with a muted `Icons.receipt_long_outlined` icon above properly sized
+text ("No payments found in this category.", `fontSize: 16`). Used the
+theme's own muted color token (`context.textTertiary`) rather than a fixed
+`Colors.grey` as literally suggested — a hardcoded grey would read wrong
+against this app's dark theme, and every other muted label already used
+here (labels, timestamps, tertiary text) goes through this same
+dark-mode-aware getter, not a raw `Colors` value.
+
+`flutter analyze lib/screens/admin/admin_fees.dart` (transit_admin):
+**No issues found!**
+
+`admin_profile.dart`'s `_buildProfileInfo` showed a "Name" `_InfoRow` above
+Role/Email/Phone; asked to remove it entirely, no replacement.
+
+**Fix.** Since each `_InfoRow` carries its own `EdgeInsets.only(bottom: 10)`
+internally rather than relying on an external `SizedBox` between rows,
+deleting the "Name" block was exactly the one-line-call removal the task
+described — no separate spacer widget existed to also clean up, so there's
+no gap left at the top of the card; "Role" now sits directly under the
+"Profile Information" header's existing `SizedBox(height: 12)`. Also removed
+the now-unused local `name` variable (`_me?.name.isNotEmpty == true ? _me!.name
+: '—'`) that only that row had read.
+
+`flutter analyze lib/screens/admin/admin_profile.dart` (transit_admin):
+**No issues found!**
+
+### 2026-09-06 (final pass) — honest empty state for the Earnings tab on the driver detail screen (transit_admin)
+
+Last of the four driver detail tabs: `_buildEarnings` in
+`admin_driver_detail.dart` unconditionally rendered a hardcoded 6-month bar
+chart plus a base/bonus/deductions breakdown (₨45,000 monthly, ₨30,000 base,
+₨10,000 bonus, -₨2,000 deductions) for every driver, including unverified
+accounts that have never earned anything — misleading as accounting data,
+not just as a UI placeholder.
+
+**Fix.** `_buildEarnings` now takes the live `Driver?` and checks
+`!d.isApproved || earningsData == null`. `earningsData` is a nullable
+**anonymous record** (`({int monthlyTotal, List<double> chartValues,
+List<String> chartLabels, int baseSalary, int tripBonus, int deductions})?`,
+hardcoded to `null`) rather than a named class — a class with no constructor
+call anywhere in the file trips the `unused_element` lint, since nothing
+ever instantiates it; an anonymous record sidesteps that while still giving
+every field a name and a type. There is no payroll/earnings data source for
+drivers in this schema at all — `transit_core`'s `payments` collection
+covers parent/student fee payments, not driver compensation — so `null` is
+correct today, not a placeholder value. When `null` or the driver is
+unverified, the entire chart + breakdown is hidden and replaced by
+`_DriverEarningsEmptyState` (`Icons.account_balance_wallet_outlined`, on the
+shared `_NeumorphicEmptyState` shell): "No financial data. Driver is pending
+verification." vs. "No earnings recorded for this driver yet." When real
+data exists, the same `MiniBarChart` and `_EarnRow` widgets render it,
+preserving the ₨ currency formatting and the base (blue) / bonus (green) /
+deductions (red) color-coding unchanged.
+
+`flutter analyze lib/screens/admin/admin_driver_detail.dart` (transit_admin):
+**No issues found!**
+
+This completes the honest-empty-state pass across all eight tabs on the two
+detail screens (student: Attendance/Trip History/Missed Logs/Access; driver:
+Trip History/Attendance/SOS History/Earnings) — every one now reflects a
+verified driver/assigned-driver + real-data condition instead of showing
+fabricated rows, using one shared `_NeumorphicEmptyState` shell per file.
+Wiring any of them to a real data source (trips, attendance events, a
+driver-payroll record) is unstarted future work, tracked against Phase 2 and
+noted per-tab above — not a UI concern from here on.
+
+### 2026-09-06 (very latest) — honest empty state for the SOS History tab on the driver detail screen (transit_admin)
+
+Same pattern, the driver detail screen's third tab: `_buildSOS` in
+`admin_driver_detail.dart` unconditionally rendered two hardcoded emergency
+rows ("Vehicle breakdown — Route A", "Medical emergency — student fainted")
+for every driver — for a brand-new, unverified driver who has never
+triggered an alert, this is worse than the other tabs' mock data, since it
+falsely implies a safety incident on record.
+
+**Fix.** `_buildSOS` now takes the live `Driver?` and checks
+`!d.isApproved || sosHistoryList.isEmpty` (`sosHistoryList` hardcoded
+`const []` — no SOS/emergency event has ever been recorded for any driver in
+this schema yet) before rendering a new `_DriverSOSEmptyState`
+(`Icons.verified_user_outlined`, on the shared `_NeumorphicEmptyState`
+shell). Copy differs from the other three tabs' neutral "nothing yet"
+framing on purpose: for a **verified** driver, an empty SOS log is good news,
+not a dead end, so the message is deliberately reassuring — "Zero SOS
+alerts. This driver has a clean safety record." — while an **unverified**
+driver still gets the same "pending verification" framing as the other
+tabs. When real entries exist, a `ListView.builder` renders them via the
+existing `_LogRow`, preserving the current high-visibility red styling for
+actual SOS events unchanged.
+
+`flutter analyze lib/screens/admin/admin_driver_detail.dart` (transit_admin):
+**No issues found!**
+
+Not touched this pass: Earnings, the driver detail screen's remaining tab,
+still shows static/hardcoded content — out of scope for this request. All
+three tabs fixed today on this screen (Trip History, Attendance, SOS
+History) now share one `_NeumorphicEmptyState`/`Driver.isApproved` pattern.
+
+### 2026-09-06 (latest) — honest empty state for the Attendance tab on the driver detail screen (transit_admin)
+
+Same pattern again, the driver detail screen's second tab: `_buildAttendance`
+in `admin_driver_detail.dart` unconditionally rendered four hardcoded rows
+("Present — On time", "Present — Late 8 min", "Absent") for every driver,
+including unverified accounts that have never logged a shift.
+
+**Fix.** `_buildAttendance` now takes the live `Driver?` and checks
+`!d.isApproved || driverAttendanceList.isEmpty` (`driverAttendanceList`
+hardcoded `const []` — no attendance/shift event has ever been recorded for
+any driver in this schema yet, same situation as every other tab fixed
+today) before rendering a new `_DriverAttendanceEmptyState`
+(`Icons.event_available_outlined`, on the same `_NeumorphicEmptyState` shell
+introduced for the Trip History tab a moment earlier in this file), showing
+"No attendance records. Driver is pending verification." for an unverified
+driver or "No attendance logged for this driver yet." for a verified one.
+When real entries exist, a `ListView.builder` renders them via the existing
+`_LogRow`, preserving the on-time (green) / late (orange) / absent (red)
+color-coding unchanged.
+
+`flutter analyze lib/screens/admin/admin_driver_detail.dart` (transit_admin):
+**No issues found!**
+
+Not touched this pass: SOS History and Earnings, the driver detail screen's
+remaining two tabs, still show hardcoded/static content — out of scope for
+this request.
 
 ### 2026-09-06 (even later) — honest empty state for the Trip History tab on the driver detail screen (transit_admin)
 

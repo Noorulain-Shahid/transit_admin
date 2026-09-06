@@ -188,7 +188,6 @@ class _AdminProfileState extends State<AdminProfile> {
   }
 
   Widget _buildProfileInfo(BuildContext context) {
-    final name = _me?.name.isNotEmpty == true ? _me!.name : '—';
     final email = FirebaseAuth.instance.currentUser?.email ?? '—';
     final phone = _me?.phone.isNotEmpty == true ? _me!.phone : 'Not set';
     return GlassCard(
@@ -215,12 +214,6 @@ class _AdminProfileState extends State<AdminProfile> {
             ],
           ),
           const SizedBox(height: 12),
-          _InfoRow(
-            icon: Icons.badge_rounded,
-            label: 'Name',
-            value: name,
-            color: AppTheme.adminEmerald,
-          ),
           _InfoRow(
             icon: Icons.work_rounded,
             label: 'Role',

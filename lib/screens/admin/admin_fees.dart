@@ -112,181 +112,158 @@ class _AdminFeesState extends State<AdminFees> {
         ? const <Payment>[]
         : payments.where((p) => p.status == PaymentStatus.overdue).toList();
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.only(bottom: 100),
-      child: Column(
-        children: [
-          _Header(title: 'Fee Management', onBack: widget.onBack),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
+    return Scaffold(
+      body: Container(
+        decoration: context.scaffoldBg,
+        child: SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.only(bottom: 100),
             child: Column(
               children: [
-                // ── Revenue overview ──────────────────────────
-                GlassCard(
-                  gradient: LinearGradient(
-                    colors: [
-                      AppTheme.adminEmerald.withValues(alpha: 0.15),
-                      AppTheme.adminEmerald.withValues(alpha: 0.05),
-                    ],
-                  ),
-                  borderColor: AppTheme.adminEmerald.withValues(alpha: 0.25),
-                  padding: const EdgeInsets.all(20),
+                _Header(title: 'Fee Management', onBack: widget.onBack),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: Column(
                     children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Column(
+                      // ── Revenue overview (neumorphic) ─────────
+                      _NeumorphicCard(
+                        padding: const EdgeInsets.all(20),
+                        child: Column(
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Total Collected',
+                                      style: TextStyle(
+                                        color: context.textSecondary,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      loading ? '…' : _fmtPaisa(collected),
+                                      style: TextStyle(
+                                        color: context.textPrimary,
+                                        fontSize: 28,
+                                        fontWeight: FontWeight.w800,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 16),
+                            Row(
+                              children: [
+                                _FeeStatPill(
+                                  label: 'Collected',
+                                  value: loading ? '…' : _fmtPaisa(collected),
+                                  color: AppTheme.success,
+                                ),
+                                const SizedBox(width: 8),
+                                _FeeStatPill(
+                                  label: 'Pending',
+                                  value: loading ? '…' : _fmtPaisa(pending),
+                                  color: AppTheme.warning,
+                                ),
+                                const SizedBox(width: 8),
+                                _FeeStatPill(
+                                  label: 'Overdue',
+                                  value: loading ? '…' : _fmtPaisa(overdue),
+                                  color: AppTheme.error,
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+
+                      // ── Filters (segmented control) ───────────
+                      _FilterSegmentedControl(
+                        labels: const ['All', 'Paid', 'Pending', 'Overdue'],
+                        selected: _filter,
+                        onChanged: (i) => setState(() => _filter = i),
+                      ),
+                      const SizedBox(height: 14),
+
+                      // ── Payment records ───────────────────────
+                      if (loading)
+                        const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 24),
+                          child: Center(child: CircularProgressIndicator()),
+                        )
+                      else if (_getFiltered().isEmpty)
+                        const _EmptyState(
+                          message: 'No payments found in this category.',
+                        )
+                      else
+                        ..._getFiltered().map(
+                          (p) => Padding(
+                            padding: const EdgeInsets.only(bottom: 8),
+                            child: _FeeCard(
+                              payment: p,
+                              studentName: _studentName(p.studentId),
+                            ),
+                          ),
+                        ),
+
+                      const SizedBox(height: 12),
+
+                      // ── Payment reminders ─────────────────────
+                      if (overduePayments.isNotEmpty)
+                        GlassCard(
+                          padding: const EdgeInsets.all(18),
+                          gradient: LinearGradient(
+                            colors: [
+                              AppTheme.warning.withValues(alpha: 0.1),
+                              Colors.transparent,
+                            ],
+                          ),
+                          borderColor: AppTheme.warning.withValues(alpha: 0.2),
+                          child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(
-                                'Total Collected',
-                                style: TextStyle(
-                                  color: context.textSecondary,
-                                  fontSize: 12,
-                                ),
+                              Row(
+                                children: [
+                                  const Text(
+                                    '🔔',
+                                    style: TextStyle(fontSize: 18),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    'Payment Reminders',
+                                    style: TextStyle(
+                                      color: context.textPrimary,
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ],
                               ),
-                              const SizedBox(height: 4),
-                              Text(
-                                loading ? '…' : _fmtPaisa(collected),
-                                style: TextStyle(
-                                  color: context.textPrimary,
-                                  fontSize: 28,
-                                  fontWeight: FontWeight.w800,
+                              const SizedBox(height: 12),
+                              ...overduePayments.take(5).map(
+                                (p) => _ReminderRow(
+                                  name: _studentName(p.studentId),
+                                  amount: p.displayAmount,
+                                  dueDate: p.dueDate,
+                                  onSend: () => _sendReminder(p),
                                 ),
                               ),
                             ],
                           ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      Row(
-                        children: [
-                          _FeeStatPill(
-                            label: 'Collected',
-                            value: loading ? '…' : _fmtPaisa(collected),
-                            color: AppTheme.success,
-                          ),
-                          const SizedBox(width: 8),
-                          _FeeStatPill(
-                            label: 'Pending',
-                            value: loading ? '…' : _fmtPaisa(pending),
-                            color: AppTheme.warning,
-                          ),
-                          const SizedBox(width: 8),
-                          _FeeStatPill(
-                            label: 'Overdue',
-                            value: loading ? '…' : _fmtPaisa(overdue),
-                            color: AppTheme.error,
-                          ),
-                        ],
-                      ),
+                        ),
                     ],
                   ),
                 ),
-                const SizedBox(height: 14),
-
-                // ── Filters ───────────────────────────────────
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: [
-                      _FilterChip(
-                        label: 'All',
-                        active: _filter == 0,
-                        onTap: () => setState(() => _filter = 0),
-                      ),
-                      _FilterChip(
-                        label: 'Paid',
-                        active: _filter == 1,
-                        onTap: () => setState(() => _filter = 1),
-                      ),
-                      _FilterChip(
-                        label: 'Pending',
-                        active: _filter == 2,
-                        onTap: () => setState(() => _filter = 2),
-                      ),
-                      _FilterChip(
-                        label: 'Overdue',
-                        active: _filter == 3,
-                        onTap: () => setState(() => _filter = 3),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 14),
-
-                // ── Payment records ───────────────────────────
-                if (loading)
-                  const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 24),
-                    child: Center(child: CircularProgressIndicator()),
-                  )
-                else if (_getFiltered().isEmpty)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 24),
-                    child: Text(
-                      'No payments in this category.',
-                      style: TextStyle(color: context.textSecondary),
-                    ),
-                  )
-                else
-                  ..._getFiltered().map(
-                    (p) => Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: _FeeCard(
-                        payment: p,
-                        studentName: _studentName(p.studentId),
-                      ),
-                    ),
-                  ),
-
-                const SizedBox(height: 12),
-
-                // ── Payment reminders ─────────────────────────
-                if (overduePayments.isNotEmpty)
-                  GlassCard(
-                    padding: const EdgeInsets.all(18),
-                    gradient: LinearGradient(
-                      colors: [
-                        AppTheme.warning.withValues(alpha: 0.1),
-                        Colors.transparent,
-                      ],
-                    ),
-                    borderColor: AppTheme.warning.withValues(alpha: 0.2),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            const Text('🔔', style: TextStyle(fontSize: 18)),
-                            const SizedBox(width: 8),
-                            Text(
-                              'Payment Reminders',
-                              style: TextStyle(
-                                color: context.textPrimary,
-                                fontSize: 15,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                        ...overduePayments.take(5).map(
-                          (p) => _ReminderRow(
-                            name: _studentName(p.studentId),
-                            amount: p.displayAmount,
-                            dueDate: p.dueDate,
-                            onSend: () => _sendReminder(p),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
               ],
             ),
           ),
-        ],
+        ),
       ),
     );
   }
@@ -378,43 +355,132 @@ class _FeeStatPill extends StatelessWidget {
   }
 }
 
-class _FilterChip extends StatelessWidget {
-  final String label;
-  final bool active;
-  final VoidCallback onTap;
-  const _FilterChip({
-    required this.label,
-    required this.active,
-    required this.onTap,
+/// Soft, elevated card (two opposing shadows) used for the summary card —
+/// deliberately distinct from this screen's `GlassCard` sections, since the
+/// task asked specifically for a neumorphic treatment here.
+class _NeumorphicCard extends StatelessWidget {
+  final EdgeInsetsGeometry padding;
+  final Widget child;
+  const _NeumorphicCard({required this.padding, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = context.isDark;
+    return Container(
+      padding: padding,
+      decoration: BoxDecoration(
+        color: context.cardBg,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: isDark
+                ? Colors.black.withValues(alpha: 0.45)
+                : const Color(0xFFB8BEC8).withValues(alpha: 0.6),
+            offset: const Offset(6, 6),
+            blurRadius: 14,
+          ),
+          BoxShadow(
+            color: isDark
+                ? Colors.white.withValues(alpha: 0.04)
+                : Colors.white.withValues(alpha: 0.9),
+            offset: const Offset(-6, -6),
+            blurRadius: 14,
+          ),
+        ],
+      ),
+      child: child,
+    );
+  }
+}
+
+/// Sleek segmented control replacing the old horizontally-scrolling chip
+/// row — all four filters fit on screen at once, and the active segment
+/// gets an elevated pill so it reads as "one control", not four buttons.
+class _FilterSegmentedControl extends StatelessWidget {
+  final List<String> labels;
+  final int selected;
+  final ValueChanged<int> onChanged;
+  const _FilterSegmentedControl({
+    required this.labels,
+    required this.selected,
+    required this.onChanged,
   });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: context.cardBg,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: context.inputBorder),
+      ),
+      child: Row(
+        children: List.generate(labels.length, (i) {
+          final active = i == selected;
+          return Expanded(
+            child: GestureDetector(
+              onTap: () => onChanged(i),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                padding: const EdgeInsets.symmetric(vertical: 9),
+                decoration: BoxDecoration(
+                  color: active
+                      ? AppTheme.adminEmerald.withValues(alpha: 0.18)
+                      : Colors.transparent,
+                  borderRadius: BorderRadius.circular(10),
+                  border: active
+                      ? Border.all(
+                          color: AppTheme.adminAccent.withValues(alpha: 0.5),
+                        )
+                      : null,
+                ),
+                child: Text(
+                  labels[i],
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: active
+                        ? AppTheme.adminAccent
+                        : context.textSecondary,
+                    fontSize: 13,
+                    fontWeight: active ? FontWeight.w700 : FontWeight.w500,
+                  ),
+                ),
+              ),
+            ),
+          );
+        }),
+      ),
+    );
+  }
+}
+
+/// Professional empty state — a subtle icon over properly sized, muted
+/// text, replacing the old single unstyled `Text` line. Uses the theme's
+/// own muted color token rather than a fixed `Colors.grey`, so it still
+/// reads correctly in dark mode.
+class _EmptyState extends StatelessWidget {
+  final String message;
+  const _EmptyState({required this.message});
+
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(right: 8),
-      child: GestureDetector(
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-          decoration: BoxDecoration(
-            color: active
-                ? AppTheme.adminEmerald.withValues(alpha: 0.2)
-                : context.cardBg,
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(
-              color: active
-                  ? AppTheme.adminAccent.withValues(alpha: 0.5)
-                  : Colors.white.withValues(alpha: 0.1),
-            ),
+      padding: const EdgeInsets.symmetric(vertical: 40),
+      child: Column(
+        children: [
+          Icon(
+            Icons.receipt_long_outlined,
+            size: 48,
+            color: context.textTertiary,
           ),
-          child: Text(
-            label,
-            style: TextStyle(
-              color: active ? AppTheme.adminAccent : context.textSecondary,
-              fontSize: 13,
-              fontWeight: active ? FontWeight.w600 : FontWeight.w500,
-            ),
+          const SizedBox(height: 12),
+          Text(
+            message,
+            textAlign: TextAlign.center,
+            style: TextStyle(color: context.textTertiary, fontSize: 16),
           ),
-        ),
+        ],
       ),
     );
   }
