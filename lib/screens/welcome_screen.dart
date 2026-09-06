@@ -96,7 +96,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
               return Center(
                 child: AnimatedBuilder(
                   animation: _bounceController,
-                  builder: (_, __) {
+                  builder: (_, _) {
                     final scale = 0.95 + (_bounceController.value * 0.10);
                     return Transform.scale(
                       scale: scale,
@@ -106,8 +106,8 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
                           border: Border.all(
-                            color: Colors.white.withOpacity(
-                              max(0.0, 0.15 - i * 0.02),
+                            color: context.textPrimary.withValues(
+                              alpha: max(0.0, 0.15 - i * 0.02),
                             ),
                             width: 1,
                           ),
@@ -126,7 +126,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                 top: dot.top * size.height,
                 child: AnimatedBuilder(
                   animation: _bounceController,
-                  builder: (_, __) => Transform.translate(
+                  builder: (_, _) => Transform.translate(
                     offset: Offset(0, -_bounceController.value * 20),
                     child: Container(
                       width: dot.size,
@@ -153,7 +153,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                       // Shield icon with bounce
                       AnimatedBuilder(
                         animation: _bounceAnim,
-                        builder: (_, __) => Transform.translate(
+                        builder: (_, _) => Transform.translate(
                           offset: Offset(0, _bounceAnim.value),
                           child: Container(
                             width: 120,
@@ -171,10 +171,11 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                                 ),
                               ],
                             ),
-                            child: const Center(
-                              child: Text(
-                                '🛡️',
-                                style: TextStyle(fontSize: 60),
+                            child: Center(
+                              child: Image.asset(
+                                'assets/images/splash_screen/bus_splash_icon.png',
+                                width: 68,
+                                height: 68,
                               ),
                             ),
                           ),
@@ -215,11 +216,10 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                               height: 3,
                               child: AnimatedBuilder(
                                 animation: _progressController,
-                                builder: (_, __) => LinearProgressIndicator(
+                                builder: (_, _) => LinearProgressIndicator(
                                   value: _progressController.value,
-                                  backgroundColor: Colors.white.withOpacity(
-                                    0.15,
-                                  ),
+                                  backgroundColor: context.textPrimary
+                                      .withValues(alpha: 0.15),
                                   valueColor: const AlwaysStoppedAnimation(
                                     AppTheme.adminEmerald,
                                   ),

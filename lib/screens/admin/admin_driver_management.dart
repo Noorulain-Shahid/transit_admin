@@ -1,8 +1,43 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:transit_core/transit_core.dart';
+import '../../data/admin_repository.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/glass_card.dart';
-import 'admin_user_models.dart';
+
+const _statusFilters = [
+  'All',
+  'Pending',
+  'Online',
+  'Offline',
+  'On Trip',
+  'Suspended',
+];
+
+bool _matchesFilter(Driver d, String filter) => switch (filter) {
+  'Pending' => d.status == DriverStatus.pendingVerification,
+  'Online' => d.status == DriverStatus.online,
+  'Offline' => d.status == DriverStatus.offline,
+  'On Trip' => d.status == DriverStatus.onTrip,
+  'Suspended' => d.status == DriverStatus.suspended,
+  _ => true,
+};
+
+String driverStatusLabel(DriverStatus status) => switch (status) {
+  DriverStatus.online => 'Online',
+  DriverStatus.offline => 'Offline',
+  DriverStatus.onTrip => 'On Trip',
+  DriverStatus.suspended => 'Suspended',
+  DriverStatus.pendingVerification => 'Pending Verification',
+};
+
+Color driverStatusColor(DriverStatus status) => switch (status) {
+  DriverStatus.online => const Color(0xFF10B981),
+  DriverStatus.offline => const Color(0xFF94A3B8),
+  DriverStatus.onTrip => const Color(0xFF3B82F6),
+  DriverStatus.suspended => const Color(0xFFEF4444),
+  DriverStatus.pendingVerification => const Color(0xFFF59E0B),
+};
 
 class AdminDriverManagement extends StatefulWidget {
   const AdminDriverManagement({super.key});
@@ -14,51 +49,67 @@ class _AdminDriverManagementState extends State<AdminDriverManagement> {
   String _search = '';
   String _filterStatus = 'All';
 
-  List<DriverRecord> get _filtered => mockDrivers.where((d) {
+  List<Driver> _filtered(List<Driver> drivers) => drivers.where((d) {
     if (_search.isNotEmpty &&
-        !d.name.toLowerCase().contains(_search.toLowerCase()))
+        !d.name.toLowerCase().contains(_search.toLowerCase())) {
       return false;
-    if (_filterStatus != 'All' && d.statusLabel != _filterStatus) return false;
-    return true;
+    }
+    return _matchesFilter(d, _filterStatus);
   }).toList();
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.only(bottom: 120),
-      child: Column(
-        children: [
-          _buildHeader(context),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Column(
-              children: [
-                _buildSearch(context),
-                const SizedBox(height: 10),
-                _buildFilters(),
-                const SizedBox(height: 12),
-                _buildStats(context),
-                const SizedBox(height: 14),
-                ..._filtered.map(
-                  (d) => Padding(
-                    padding: const EdgeInsets.only(bottom: 10),
-                    child: _DriverCard(
-                      driver: d,
-                      onTap: () =>
-                          context.push('/admin/driver-detail', extra: d),
-                    ),
-                  ),
+    return StreamBuilder<List<Driver>>(
+      stream: AdminRepository.instance.watchDrivers(),
+      builder: (context, snap) {
+        final drivers = snap.data ?? const <Driver>[];
+        final filtered = _filtered(drivers);
+        return SingleChildScrollView(
+          padding: const EdgeInsets.only(bottom: 120),
+          child: Column(
+            children: [
+              _buildHeader(context, drivers.length),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Column(
+                  children: [
+                    _buildSearch(context),
+                    const SizedBox(height: 10),
+                    _buildFilters(),
+                    const SizedBox(height: 12),
+                    _buildStats(context, drivers),
+                    const SizedBox(height: 14),
+                    if (!snap.hasData)
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 40),
+                        child: Center(child: CircularProgressIndicator()),
+                      )
+                    else ...[
+                      ...filtered.map(
+                        (d) => Padding(
+                          padding: const EdgeInsets.only(bottom: 10),
+                          child: _DriverCard(
+                            driver: d,
+                            onTap: () => context.push(
+                              '/admin/driver-detail',
+                              extra: d.id,
+                            ),
+                          ),
+                        ),
+                      ),
+                      if (filtered.isEmpty) _buildEmpty(context),
+                    ],
+                  ],
                 ),
-                if (_filtered.isEmpty) _buildEmpty(context),
-              ],
-            ),
+              ),
+            ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 
-  Widget _buildHeader(BuildContext context) {
+  Widget _buildHeader(BuildContext context, int total) {
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
       decoration: BoxDecoration(
@@ -101,7 +152,7 @@ class _AdminDriverManagementState extends State<AdminDriverManagement> {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  '${mockDrivers.length} drivers registered',
+                  '$total drivers registered',
                   style: TextStyle(color: context.textSecondary, fontSize: 13),
                 ),
               ],
@@ -144,10 +195,10 @@ class _AdminDriverManagementState extends State<AdminDriverManagement> {
             icon: Icons.circle,
             color: AppTheme.driverCyan,
             onTap: () {
-              final s = ['All', 'Online', 'Offline', 'On Trip'];
               setState(
                 () => _filterStatus =
-                    s[(s.indexOf(_filterStatus) + 1) % s.length],
+                    _statusFilters[(_statusFilters.indexOf(_filterStatus) + 1) %
+                        _statusFilters.length],
               );
             },
           ),
@@ -156,30 +207,30 @@ class _AdminDriverManagementState extends State<AdminDriverManagement> {
     );
   }
 
-  Widget _buildStats(BuildContext context) {
+  Widget _buildStats(BuildContext context, List<Driver> drivers) {
     return Row(
       children: [
         _MiniStat(
           icon: Icons.people_rounded,
           label: 'Total',
-          value: '${mockDrivers.length}',
+          value: '${drivers.length}',
           color: AppTheme.driverCyan,
         ),
         const SizedBox(width: 8),
         _MiniStat(
-          icon: Icons.wifi_tethering_rounded,
-          label: 'Online',
+          icon: Icons.hourglass_top_rounded,
+          label: 'Pending',
           value:
-              '${mockDrivers.where((d) => d.status == DriverStatus.online || d.status == DriverStatus.onTrip).length}',
-          color: AppTheme.success,
+              '${drivers.where((d) => d.status == DriverStatus.pendingVerification).length}',
+          color: const Color(0xFFF59E0B),
         ),
         const SizedBox(width: 8),
         _MiniStat(
           icon: Icons.wifi_off_rounded,
-          label: 'Offline',
+          label: 'Suspended',
           value:
-              '${mockDrivers.where((d) => d.status == DriverStatus.offline).length}',
-          color: const Color(0xFF94A3B8),
+              '${drivers.where((d) => d.status == DriverStatus.suspended).length}',
+          color: const Color(0xFFEF4444),
         ),
       ],
     );
@@ -202,7 +253,7 @@ class _AdminDriverManagementState extends State<AdminDriverManagement> {
 
 // ─── Driver Card ─────────────────────────────────────────────────────────────
 class _DriverCard extends StatelessWidget {
-  final DriverRecord driver;
+  final Driver driver;
   final VoidCallback onTap;
   const _DriverCard({required this.driver, required this.onTap});
   @override
@@ -243,7 +294,9 @@ class _DriverCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      '${driver.vehicle} • ${driver.route}',
+                      driver.busId?.isNotEmpty == true
+                          ? 'Bus ${driver.busId}'
+                          : 'No bus assigned',
                       style: TextStyle(
                         color: context.textSecondary,
                         fontSize: 12,
@@ -275,7 +328,7 @@ class _DriverCard extends StatelessWidget {
               ),
               const SizedBox(width: 6),
               Text(
-                '${driver.rating}',
+                driver.rating.toStringAsFixed(1),
                 style: TextStyle(
                   color: context.textSecondary,
                   fontSize: 11,
@@ -283,22 +336,27 @@ class _DriverCard extends StatelessWidget {
                 ),
               ),
               const Spacer(),
-              StatusBadge(label: driver.statusLabel, color: driver.statusColor),
+              StatusBadge(
+                label: driverStatusLabel(driver.status),
+                color: driverStatusColor(driver.status),
+              ),
             ],
           ),
           const SizedBox(height: 6),
           Row(
             children: [
               _InfoPill(
-                icon: Icons.trip_origin_rounded,
-                label: '${driver.activeTrips} active trips',
-                color: AppTheme.info,
+                icon: Icons.badge_rounded,
+                label: driver.licenseNumber.isEmpty
+                    ? 'No license on file'
+                    : driver.licenseNumber,
+                color: AppTheme.adminEmerald,
               ),
               const Spacer(),
               _InfoPill(
-                icon: Icons.badge_rounded,
-                label: driver.licenseNo,
-                color: AppTheme.adminEmerald,
+                icon: Icons.phone_rounded,
+                label: driver.phone,
+                color: AppTheme.info,
               ),
             ],
           ),
@@ -437,68 +495,3 @@ class _FilterChip extends StatelessWidget {
     );
   }
 }
-
-// ─── Mock Data ──────────────────────────────────────────────────────────────
-final mockDrivers = [
-  const DriverRecord(
-    id: 'drv_1',
-    name: 'Mike Johnson',
-    vehicle: 'Bus #42',
-    route: 'Route A',
-    status: DriverStatus.onTrip,
-    rating: 4.8,
-    activeTrips: 1,
-    licenseNo: 'DL-2026-0042',
-    contact: '0311-4444444',
-    totalTrips: 342,
-  ),
-  const DriverRecord(
-    id: 'drv_2',
-    name: 'Ahmed Ali',
-    vehicle: 'Bus #43',
-    route: 'Route B',
-    status: DriverStatus.online,
-    rating: 4.5,
-    activeTrips: 0,
-    licenseNo: 'DL-2026-0043',
-    contact: '0312-5555555',
-    totalTrips: 287,
-  ),
-  const DriverRecord(
-    id: 'drv_3',
-    name: 'Ravi Kumar',
-    vehicle: 'Bus #44',
-    route: 'Route C',
-    status: DriverStatus.offline,
-    rating: 4.2,
-    activeTrips: 0,
-    licenseNo: 'DL-2026-1234',
-    contact: '0309-0000000',
-    approved: false,
-    totalTrips: 45,
-  ),
-  const DriverRecord(
-    id: 'drv_4',
-    name: 'Bilal Shah',
-    vehicle: 'Bus #45',
-    route: 'Route D',
-    status: DriverStatus.onTrip,
-    rating: 4.9,
-    activeTrips: 1,
-    licenseNo: 'DL-2026-0045',
-    contact: '0315-1111111',
-    totalTrips: 510,
-  ),
-  const DriverRecord(
-    id: 'drv_5',
-    name: 'Imran Khan',
-    vehicle: 'Bus #46',
-    route: 'Route A',
-    status: DriverStatus.online,
-    rating: 3.8,
-    activeTrips: 0,
-    licenseNo: 'DL-2026-0046',
-    contact: '0316-2222222',
-    totalTrips: 128,
-  ),
-];

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:transit_core/transit_core.dart';
+import '../../data/admin_repository.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/glass_card.dart';
 
@@ -77,88 +79,9 @@ class AdminNotifications extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(height: 12),
-                      _SectionCard(
-                        title: 'New Account Activity',
-                        subtitle:
-                            'Recent account creations from drivers, students, and parents.',
-                        children: const [
-                          _NotificationItem(
-                            title: 'Driver account created',
-                            subtitle:
-                                'Imran Khan submitted a new driver profile.',
-                            time: '2 min ago',
-                            icon: Icons.drive_eta_rounded,
-                            color: AppTheme.info,
-                          ),
-                          _NotificationItem(
-                            title: 'Driver account created',
-                            subtitle:
-                                'Sajid Ali added his driving profile and contact details.',
-                            time: '8 min ago',
-                            icon: Icons.drive_eta_rounded,
-                            color: AppTheme.adminEmerald,
-                          ),
-                          _NotificationItem(
-                            title: 'Driver account created',
-                            subtitle:
-                                'Hassan Raza submitted a new transport driver account.',
-                            time: '19 min ago',
-                            icon: Icons.drive_eta_rounded,
-                            color: AppTheme.purple,
-                          ),
-                          _NotificationItem(
-                            title: 'Student account created',
-                            subtitle:
-                                'Ayesha Malik registered a student account.',
-                            time: '12 min ago',
-                            icon: Icons.school_rounded,
-                            color: AppTheme.studentAmber,
-                          ),
-                          _NotificationItem(
-                            title: 'Parent account created',
-                            subtitle:
-                                'Bilal Ahmed registered as a parent user.',
-                            time: '28 min ago',
-                            icon: Icons.family_restroom_rounded,
-                            color: AppTheme.parentPurple,
-                          ),
-                        ],
-                      ),
+                      _RecentAccountsSection(),
                       const SizedBox(height: 12),
-                      _SectionCard(
-                        title: 'Driver Verification Queue',
-                        subtitle:
-                            'Review uploaded documents before allowing the driver to start driving in the app.',
-                        children: const [
-                          _NotificationItem(
-                            title: 'Driver documents uploaded',
-                            subtitle:
-                                'License, CNIC, and vehicle papers are ready for review.',
-                            time: 'Pending review',
-                            icon: Icons.description_rounded,
-                            color: AppTheme.adminEmerald,
-                            actionLabel: 'Review',
-                          ),
-                          _NotificationItem(
-                            title: 'New driver waiting for approval',
-                            subtitle:
-                                'Usman Tariq completed registration and is waiting for document verification.',
-                            time: 'Pending review',
-                            icon: Icons.verified_user_rounded,
-                            color: AppTheme.info,
-                            actionLabel: 'Open',
-                          ),
-                          _NotificationItem(
-                            title: 'Account approval required',
-                            subtitle:
-                                'Approve once identity and document checks are completed.',
-                            time: 'Blocked until approval',
-                            icon: Icons.verified_user_rounded,
-                            color: AppTheme.warning,
-                            actionLabel: 'Approve',
-                          ),
-                        ],
-                      ),
+                      _PendingDriversSection(),
                     ],
                   ),
                 ),
@@ -167,6 +90,108 @@ class AdminNotifications extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Real, live-Firestore replacement for the old hardcoded "Driver
+/// Verification Queue" list — pending drivers land here and "Review" opens
+/// the same [AdminDriverDetail] screen used for Approve/Reject elsewhere,
+/// instead of re-implementing approval logic in this list item.
+class _PendingDriversSection extends StatelessWidget {
+  const _PendingDriversSection();
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<List<Driver>>(
+      stream: AdminRepository.instance.watchDrivers(
+        status: DriverStatus.pendingVerification,
+      ),
+      builder: (context, snapshot) {
+        final drivers = snapshot.data ?? const <Driver>[];
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const SizedBox.shrink();
+        }
+        return _SectionCard(
+          title: 'Driver Verification Queue',
+          subtitle: drivers.isEmpty
+              ? 'No drivers are waiting for verification right now.'
+              : 'Review uploaded documents before allowing the driver to start driving in the app.',
+          children: drivers
+              .map(
+                (d) => _NotificationItem(
+                  title: '${d.name} — driver awaiting approval',
+                  subtitle: 'Registered, pending document verification.',
+                  time: 'Pending review',
+                  icon: Icons.verified_user_rounded,
+                  color: AppTheme.warning,
+                  actionLabel: 'Review',
+                  onAction: () =>
+                      context.push('/admin/driver-detail', extra: d.id),
+                ),
+              )
+              .toList(),
+        );
+      },
+    );
+  }
+}
+
+/// Real, live-Firestore replacement for the old hardcoded "New Account
+/// Activity" list — the 5 most recently created accounts across every role.
+class _RecentAccountsSection extends StatelessWidget {
+  const _RecentAccountsSection();
+
+  static const _roleIcons = {
+    UserRole.driver: Icons.drive_eta_rounded,
+    UserRole.student: Icons.school_rounded,
+    UserRole.parent: Icons.family_restroom_rounded,
+    UserRole.admin: Icons.admin_panel_settings_rounded,
+  };
+
+  static const _roleColors = {
+    UserRole.driver: AppTheme.info,
+    UserRole.student: AppTheme.studentAmber,
+    UserRole.parent: AppTheme.parentPurple,
+    UserRole.admin: AppTheme.adminEmerald,
+  };
+
+  String _timeAgo(DateTime? t) {
+    if (t == null) return '';
+    final diff = DateTime.now().difference(t);
+    if (diff.inMinutes < 1) return 'Just now';
+    if (diff.inMinutes < 60) return '${diff.inMinutes} min ago';
+    if (diff.inHours < 24) return '${diff.inHours}h ago';
+    return '${diff.inDays}d ago';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<List<AppUser>>(
+      stream: AdminRepository.instance.watchRecentUsers(),
+      builder: (context, snapshot) {
+        final users = snapshot.data ?? const <AppUser>[];
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const SizedBox.shrink();
+        }
+        return _SectionCard(
+          title: 'New Account Activity',
+          subtitle: users.isEmpty
+              ? 'No accounts have been created yet.'
+              : 'Recent account creations from drivers, students, and parents.',
+          children: users
+              .map(
+                (u) => _NotificationItem(
+                  title: '${u.role.name[0].toUpperCase()}${u.role.name.substring(1)} account created',
+                  subtitle: '${u.name} registered as a ${u.role.name}.',
+                  time: _timeAgo(u.createdAt),
+                  icon: _roleIcons[u.role] ?? Icons.person_rounded,
+                  color: _roleColors[u.role] ?? AppTheme.info,
+                ),
+              )
+              .toList(),
+        );
+      },
     );
   }
 }
@@ -217,6 +242,7 @@ class _NotificationItem extends StatelessWidget {
   final IconData icon;
   final Color color;
   final String? actionLabel;
+  final VoidCallback? onAction;
 
   const _NotificationItem({
     required this.title,
@@ -225,6 +251,7 @@ class _NotificationItem extends StatelessWidget {
     required this.icon,
     required this.color,
     this.actionLabel,
+    this.onAction,
   });
 
   @override
@@ -280,24 +307,27 @@ class _NotificationItem extends StatelessWidget {
             ),
             if (actionLabel != null) ...[
               const SizedBox(width: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: AppTheme.adminAccent.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                    color: AppTheme.adminAccent.withValues(alpha: 0.25),
+              GestureDetector(
+                onTap: onAction,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
                   ),
-                ),
-                child: Text(
-                  actionLabel!,
-                  style: TextStyle(
-                    color: AppTheme.adminAccent,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
+                  decoration: BoxDecoration(
+                    color: AppTheme.adminAccent.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: AppTheme.adminAccent.withValues(alpha: 0.25),
+                    ),
+                  ),
+                  child: Text(
+                    actionLabel!,
+                    style: TextStyle(
+                      color: AppTheme.adminAccent,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ),
               ),

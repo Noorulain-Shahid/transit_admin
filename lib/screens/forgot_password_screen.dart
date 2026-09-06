@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:go_router/go_router.dart';
 import '../theme/app_theme.dart';
 import '../widgets/glass_card.dart';
@@ -14,18 +15,35 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   final _emailCtrl = TextEditingController();
   bool _loading = false;
   bool _sent = false;
+  String _error = '';
 
-  void _sendReset() {
-    if (_emailCtrl.text.isEmpty) return;
-    setState(() => _loading = true);
-    Future.delayed(const Duration(milliseconds: 1500), () {
-      if (mounted) {
-        setState(() {
-          _loading = false;
-          _sent = true;
-        });
-      }
+  Future<void> _sendReset() async {
+    final email = _emailCtrl.text.trim();
+    if (email.isEmpty) return;
+    setState(() {
+      _loading = true;
+      _error = '';
     });
+    try {
+      await FirebaseAuth.instance.sendPasswordResetEmail(email: email);
+      if (mounted) setState(() => _sent = true);
+    } on FirebaseAuthException catch (e) {
+      // Deliberately show success even for 'user-not-found' — confirming
+      // whether an email is registered is an account-enumeration leak.
+      if (e.code == 'user-not-found') {
+        if (mounted) setState(() => _sent = true);
+      } else if (mounted) {
+        setState(
+          () => _error = e.code == 'invalid-email'
+              ? 'Please enter a valid email address.'
+              : 'Something went wrong. Please try again.',
+        );
+      }
+    } catch (_) {
+      if (mounted) setState(() => _error = 'Something went wrong. Please try again.');
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
   }
 
   @override
@@ -85,7 +103,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                         child: Text(
                           '← Back',
                           style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.7),
+                            color: context.textSecondary,
                             fontSize: 14,
                           ),
                         ),
@@ -103,8 +121,8 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                               borderRadius: BorderRadius.circular(22),
                               boxShadow: [
                                 BoxShadow(
-                                  color: AppTheme.adminEmerald.withOpacity(
-                                    0.45,
+                                  color: AppTheme.adminEmerald.withValues(
+                                    alpha: 0.45,
                                   ),
                                   blurRadius: 28,
                                   offset: const Offset(0, 12),
@@ -152,7 +170,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                             Text(
                               'EMAIL ADDRESS',
                               style: TextStyle(
-                                color: Colors.white.withValues(alpha: 0.6),
+                                color: context.textSecondary,
                                 fontSize: 11,
                                 fontWeight: FontWeight.w700,
                                 letterSpacing: 0.8,
@@ -170,6 +188,16 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                                 hintText: 'Enter your email',
                               ),
                             ),
+                            if (_error.isNotEmpty) ...[
+                              const SizedBox(height: 10),
+                              Text(
+                                _error,
+                                style: const TextStyle(
+                                  color: Color(0xFFFCA5A5),
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ],
                             const SizedBox(height: 20),
                             GradientButton(
                               label: 'Send Reset Link →',
@@ -214,7 +242,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                                   child: Text(
                                     'Reset link sent successfully!\nPlease check your inbox.',
                                     style: TextStyle(
-                                      color: Colors.white.withValues(alpha: 0.7),
+                                      color: context.textSecondary,
                                       fontSize: 13,
                                       height: 1.4,
                                     ),

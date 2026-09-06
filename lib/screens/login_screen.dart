@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:go_router/go_router.dart';
 import '../theme/app_theme.dart';
 import '../widgets/glass_card.dart';
@@ -18,13 +20,7 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _showPass = false;
   String _error = '';
 
-  void _fillDemo() {
-    _emailCtrl.text = 'admin@transit.com';
-    _passCtrl.text = 'admin123';
-    setState(() => _error = '');
-  }
-
-  void _login() {
+  Future<void> _login() async {
     if (_emailCtrl.text.isEmpty || _passCtrl.text.isEmpty) {
       setState(() => _error = 'Please fill in all fields.');
       return;
@@ -33,13 +29,103 @@ class _LoginScreenState extends State<LoginScreen> {
       _error = '';
       _loading = true;
     });
-    Future.delayed(const Duration(milliseconds: 1500), () async {
+    try {
+      await AuthService.instance.signInWithEmail(
+        _emailCtrl.text.trim(),
+        _passCtrl.text,
+      );
+      if (!mounted) return;
+      await AuthService.instance.saveRole('admin');
+      if (!mounted) return;
+      context.go('/admin');
+    } on NotAnAdminException {
       if (mounted) {
-        setState(() => _loading = false);
-        await AuthService.instance.saveRole('admin');
-        if (mounted) context.go('/admin');
+        setState(() => _error = 'This account is not an admin account.');
       }
-    });
+    } on FirebaseAuthException catch (e) {
+      if (mounted) {
+        setState(() => _error = _friendlyAuthError(e));
+      }
+    } catch (e) {
+      if (mounted) setState(() => _error = 'Sign-in failed: $e');
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  /// Translates raw Firebase Auth error codes into user-friendly messages.
+  String _friendlyAuthError(FirebaseAuthException e) {
+    switch (e.code) {
+      case 'invalid-credential':
+      case 'invalid-email':
+      case 'wrong-password':
+      case 'user-not-found':
+        return 'Incorrect email or password. Please try again.';
+      case 'user-disabled':
+        return 'This account has been disabled. Contact support.';
+      case 'too-many-requests':
+        return 'Too many attempts. Please wait a moment and try again.';
+      case 'network-request-failed':
+        return 'Network error. Check your connection and try again.';
+      default:
+        return 'Sign-in failed. Please check your details and try again.';
+    }
+  }
+
+  void _copyToClipboard(BuildContext context, String label, String value) {
+    Clipboard.setData(ClipboardData(text: value));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('$label copied to clipboard'),
+        duration: const Duration(seconds: 2),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  // Remove this panel once you no longer need it on screen — the admin
+  // account itself lives in Firebase, not in this code, so deleting this
+  // widget doesn't affect the account, only its visibility here.
+  Widget _buildAdminCredentials(BuildContext context) {
+    const email = 'admin@transitpro.com';
+    const password = 'TransitAdmin@2026';
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: context.isDark
+            ? AppTheme.driverCyan.withValues(alpha: 0.08)
+            : const Color(0xFFEFF6FF),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppTheme.driverCyan.withValues(alpha: 0.25)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '🔑 Your Admin Account',
+            style: TextStyle(
+              color: context.textPrimary,
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 10),
+          _CredentialRow(
+            label: 'Email',
+            value: email,
+            onCopy: () => _copyToClipboard(context, 'Email', email),
+          ),
+          const SizedBox(height: 6),
+          _CredentialRow(
+            label: 'Password',
+            value: password,
+            onCopy: () => _copyToClipboard(context, 'Password', password),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -101,7 +187,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           child: Text(
                             '← Back',
                             style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.7),
+                              color: context.textSecondary,
                               fontSize: 14,
                             ),
                           ),
@@ -124,18 +210,19 @@ class _LoginScreenState extends State<LoginScreen> {
                               borderRadius: BorderRadius.circular(22),
                               boxShadow: [
                                 BoxShadow(
-                                  color: AppTheme.adminEmerald.withOpacity(
-                                    0.45,
+                                  color: AppTheme.adminEmerald.withValues(
+                                    alpha: 0.45,
                                   ),
                                   blurRadius: 28,
                                   offset: const Offset(0, 12),
                                 ),
                               ],
                             ),
-                            child: const Center(
-                              child: Text(
-                                '🛡️',
-                                style: TextStyle(fontSize: 36),
+                            child: Center(
+                              child: Image.asset(
+                                'assets/images/splash_screen/bus_splash_icon.png',
+                                width: 40,
+                                height: 40,
                               ),
                             ),
                           ),
@@ -168,51 +255,6 @@ class _LoginScreenState extends State<LoginScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // Demo hint
-                          GestureDetector(
-                            onTap: _fillDemo,
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 12,
-                              ),
-                              decoration: BoxDecoration(
-                                color: AppTheme.adminEmerald.withValues(
-                                  alpha: 0.12,
-                                ),
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(
-                                  color: AppTheme.adminEmerald.withValues(
-                                    alpha: 0.3,
-                                  ),
-                                ),
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    '📋  USE DEMO ACCOUNT',
-                                    style: TextStyle(
-                                      color: AppTheme.adminAccent,
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w700,
-                                      letterSpacing: 0.5,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    'admin@transit.com  ·  admin123',
-                                    style: TextStyle(
-                                      color: context.textSecondary,
-                                      fontSize: 12,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 22),
-
                           // Email
                           _FieldLabel('EMAIL ADDRESS'),
                           const SizedBox(height: 8),
@@ -288,16 +330,19 @@ class _LoginScreenState extends State<LoginScreen> {
                                 ),
                               ),
                               child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   const Text(
                                     '⚠️  ',
                                     style: TextStyle(fontSize: 13),
                                   ),
-                                  Text(
-                                    _error,
-                                    style: const TextStyle(
-                                      color: Color(0xFFFCA5A5),
-                                      fontSize: 13,
+                                  Expanded(
+                                    child: Text(
+                                      _error,
+                                      style: const TextStyle(
+                                        color: Color(0xFFFCA5A5),
+                                        fontSize: 13,
+                                      ),
                                     ),
                                   ),
                                 ],
@@ -316,10 +361,35 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                           const SizedBox(height: 16),
 
-                          // (Google sign-in removed)
+                          // Sign up prompt
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                "Don't have an account? ",
+                                style: TextStyle(
+                                  color: context.textSecondary,
+                                  fontSize: 13,
+                                ),
+                              ),
+                              GestureDetector(
+                                onTap: () => context.push('/signup'),
+                                child: const Text(
+                                  'Sign up',
+                                  style: TextStyle(
+                                    color: AppTheme.adminEmerald,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
                         ],
                       ),
                     ),
+                    const SizedBox(height: 24),
+                    _buildAdminCredentials(context),
                     const SizedBox(height: 24),
                     Center(
                       child: Text(
@@ -339,6 +409,51 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 }
 
+class _CredentialRow extends StatelessWidget {
+  final String label;
+  final String value;
+  final VoidCallback onCopy;
+
+  const _CredentialRow({
+    required this.label,
+    required this.value,
+    required this.onCopy,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        SizedBox(
+          width: 68,
+          child: Text(
+            label,
+            style: TextStyle(color: context.textSecondary, fontSize: 12),
+          ),
+        ),
+        Expanded(
+          child: SelectableText(
+            value,
+            style: TextStyle(
+              color: context.textPrimary,
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+        IconButton(
+          icon: const Icon(Icons.copy_rounded, size: 16),
+          color: AppTheme.driverCyan,
+          tooltip: 'Copy $label',
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+          onPressed: onCopy,
+        ),
+      ],
+    );
+  }
+}
+
 class _FieldLabel extends StatelessWidget {
   final String text;
   const _FieldLabel(this.text);
@@ -348,7 +463,7 @@ class _FieldLabel extends StatelessWidget {
     return Text(
       text,
       style: TextStyle(
-        color: Colors.white.withValues(alpha: 0.6),
+        color: context.textSecondary,
         fontSize: 11,
         fontWeight: FontWeight.w700,
         letterSpacing: 0.8,

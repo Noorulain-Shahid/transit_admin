@@ -1,13 +1,129 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:transit_core/transit_core.dart';
+import '../../data/admin_repository.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/glass_card.dart';
 
-class AdminSubscription extends StatelessWidget {
+/// Manages each student's real `subscriptionStatus` and shows real collected/
+/// pending/overdue totals from `payments`. The screen used to model a flat
+/// per-role "admin collects a subscription fee from drivers/students/parents"
+/// business — that concept has no backing field anywhere in `transit_core`'s
+/// schema (fees are per-student, paid by a parent, not a platform fee on
+/// every account type), so it was replaced rather than wired to fake data.
+class AdminSubscription extends StatefulWidget {
   const AdminSubscription({super.key});
 
   @override
+  State<AdminSubscription> createState() => _AdminSubscriptionState();
+}
+
+class _AdminSubscriptionState extends State<AdminSubscription> {
+  final _repo = AdminRepository.instance;
+  List<Student>? _students;
+  List<Payment>? _payments;
+
+  StreamSubscription<List<Student>>? _studentsSub;
+  StreamSubscription<List<Payment>>? _paymentsSub;
+
+  @override
+  void initState() {
+    super.initState();
+    _studentsSub = _repo.watchStudents().listen(
+      (v) => setState(() => _students = v),
+      onError: (e) => debugPrint('[AdminSubscription] students error: $e'),
+    );
+    _paymentsSub = _repo.watchAllPayments().listen(
+      (v) => setState(() => _payments = v),
+      onError: (e) => debugPrint('[AdminSubscription] payments error: $e'),
+    );
+  }
+
+  @override
+  void dispose() {
+    _studentsSub?.cancel();
+    _paymentsSub?.cancel();
+    super.dispose();
+  }
+
+  static String _fmtPaisa(int paisa) {
+    final rupees = (paisa / 100).round().toString();
+    final buf = StringBuffer();
+    for (var i = 0; i < rupees.length; i++) {
+      if (i > 0 && (rupees.length - i) % 3 == 0) buf.write(',');
+      buf.write(rupees[i]);
+    }
+    return '₨$buf';
+  }
+
+  Color _statusColor(SubscriptionStatus s) {
+    switch (s) {
+      case SubscriptionStatus.active:
+        return AppTheme.success;
+      case SubscriptionStatus.trial:
+        return AppTheme.info;
+      case SubscriptionStatus.gracePeriod:
+        return AppTheme.warning;
+      case SubscriptionStatus.expired:
+      case SubscriptionStatus.suspended:
+      case SubscriptionStatus.cancelled:
+        return AppTheme.error;
+    }
+  }
+
+  String _statusLabel(SubscriptionStatus s) {
+    switch (s) {
+      case SubscriptionStatus.gracePeriod:
+        return 'Grace Period';
+      default:
+        final name = s.name;
+        return name[0].toUpperCase() + name.substring(1);
+    }
+  }
+
+  Future<void> _toggleSubscription(Student s) async {
+    final cancelling = s.subscriptionStatus != SubscriptionStatus.cancelled;
+    await _repo.updateStudent(s.id, {
+      'subscriptionStatus': cancelling
+          ? SubscriptionStatus.cancelled.name
+          : SubscriptionStatus.active.name,
+    });
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            cancelling
+                ? '${s.name}\'s subscription cancelled'
+                : '${s.name}\'s subscription reactivated',
+          ),
+        ),
+      );
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final students = _students;
+    final payments = _payments;
+    final loading = students == null || payments == null;
+
+    final collected = loading
+        ? 0
+        : payments
+              .where((p) => p.status == PaymentStatus.paid)
+              .fold<int>(0, (s, p) => s + p.amountPaisa);
+    final pending = loading
+        ? 0
+        : payments
+              .where((p) => p.status == PaymentStatus.pending)
+              .fold<int>(0, (s, p) => s + p.amountPaisa);
+    final overdue = loading
+        ? 0
+        : payments
+              .where((p) => p.status == PaymentStatus.overdue)
+              .fold<int>(0, (s, p) => s + p.amountPaisa);
+
     return Scaffold(
       body: Container(
         decoration: context.scaffoldBg,
@@ -60,7 +176,7 @@ class AdminSubscription extends StatelessWidget {
                                   ),
                                   const SizedBox(height: 4),
                                   Text(
-                                    'Admin owns the app and collects subscription amounts from drivers, students, and parents.',
+                                    "Each student's transport subscription status, and what's been collected in fees.",
                                     style: TextStyle(
                                       color: context.textSecondary,
                                       fontSize: 12,
@@ -79,100 +195,7 @@ class AdminSubscription extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'Revenue Collection',
-                              style: TextStyle(
-                                color: context.textPrimary,
-                                fontSize: 15,
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-                            _PlanTile(
-                              title: 'Owner Collection Plan',
-                              subtitle:
-                                  'All subscription income is routed to the admin account',
-                              badge: 'Collecting',
-                              badgeColor: AppTheme.success,
-                              icon: Icons.workspace_premium_rounded,
-                            ),
-                            const SizedBox(height: 12),
-                            const _FeatureRow(
-                              title: 'Student subscription amount',
-                              value: 'Rs 450 / month',
-                              icon: Icons.school_rounded,
-                              color: AppTheme.studentAmber,
-                            ),
-                            const _FeatureRow(
-                              title: 'Driver subscription amount',
-                              value: 'Rs 900 / month',
-                              icon: Icons.drive_eta_rounded,
-                              color: AppTheme.adminEmerald,
-                            ),
-                            const _FeatureRow(
-                              title: 'Parent subscription amount',
-                              value: 'Rs 300 / month',
-                              icon: Icons.family_restroom_rounded,
-                              color: AppTheme.parentPurple,
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      GlassCard(
-                        padding: const EdgeInsets.all(18),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Subscription Controls',
-                              style: TextStyle(
-                                color: context.textPrimary,
-                                fontSize: 15,
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-                            const _FeatureRow(
-                              title: 'Auto cut amount',
-                              value: 'Enabled',
-                              icon: Icons.verified_user_rounded,
-                              color: AppTheme.adminEmerald,
-                            ),
-                            const _FeatureRow(
-                              title: 'Cancel student subscription',
-                              value: 'Available',
-                              icon: Icons.school_rounded,
-                              color: AppTheme.info,
-                            ),
-                            const _FeatureRow(
-                              title: 'Cancel driver subscription',
-                              value: 'Available',
-                              icon: Icons.drive_eta_rounded,
-                              color: AppTheme.warning,
-                            ),
-                            const _FeatureRow(
-                              title: 'Cancel parent subscription',
-                              value: 'Available',
-                              icon: Icons.family_restroom_rounded,
-                              color: AppTheme.parentPurple,
-                            ),
-                            const _FeatureRow(
-                              title: 'Payout to admin wallet',
-                              value: 'Automatic',
-                              icon: Icons.route_rounded,
-                              color: AppTheme.info,
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      GlassCard(
-                        padding: const EdgeInsets.all(18),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Management Actions',
+                              'Fee Collection',
                               style: TextStyle(
                                 color: context.textPrimary,
                                 fontSize: 15,
@@ -182,43 +205,46 @@ class AdminSubscription extends StatelessWidget {
                             const SizedBox(height: 12),
                             Row(
                               children: [
-                                Expanded(
-                                  child: _ActionBtn(
-                                    label: 'Auto Deduct',
-                                    color: AppTheme.adminEmerald,
-                                    onTap: () => _showMessage(
-                                      context,
-                                      'Auto deduction is enabled for all active subscriptions.',
-                                    ),
-                                  ),
+                                _StatPill(
+                                  label: 'Collected',
+                                  value: loading ? '…' : _fmtPaisa(collected),
+                                  color: AppTheme.success,
                                 ),
-                                const SizedBox(width: 10),
-                                Expanded(
-                                  child: _ActionBtn(
-                                    label: 'Cancel Subscription',
-                                    color: AppTheme.info,
-                                    onTap: () => _showMessage(
-                                      context,
-                                      'Subscription cancellation flow will open here.',
-                                    ),
-                                  ),
+                                const SizedBox(width: 8),
+                                _StatPill(
+                                  label: 'Pending',
+                                  value: loading ? '…' : _fmtPaisa(pending),
+                                  color: AppTheme.warning,
+                                ),
+                                const SizedBox(width: 8),
+                                _StatPill(
+                                  label: 'Overdue',
+                                  value: loading ? '…' : _fmtPaisa(overdue),
+                                  color: AppTheme.error,
                                 ),
                               ],
                             ),
-                            const SizedBox(height: 10),
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: _ActionBtn(
-                                    label: 'View Collected Amount',
-                                    color: AppTheme.warning,
-                                    onTap: () => _showMessage(
-                                      context,
-                                      'Admin collection summary will be shown here.',
+                            const SizedBox(height: 12),
+                            GestureDetector(
+                              onTap: () => context.push('/admin/fees'),
+                              child: Row(
+                                children: [
+                                  Text(
+                                    'View full fee breakdown',
+                                    style: TextStyle(
+                                      color: AppTheme.adminAccent,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
                                     ),
                                   ),
-                                ),
-                              ],
+                                  const SizedBox(width: 4),
+                                  const Icon(
+                                    Icons.arrow_forward_rounded,
+                                    color: AppTheme.adminAccent,
+                                    size: 14,
+                                  ),
+                                ],
+                              ),
                             ),
                           ],
                         ),
@@ -230,7 +256,7 @@ class AdminSubscription extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'Subscribers',
+                              'Students',
                               style: TextStyle(
                                 color: context.textPrimary,
                                 fontSize: 15,
@@ -238,27 +264,31 @@ class AdminSubscription extends StatelessWidget {
                               ),
                             ),
                             const SizedBox(height: 12),
-                            const _SubscriberRow(
-                              name: 'Imran Khan',
-                              role: 'Driver',
-                              amount: 'Rs 900',
-                              status: 'Active',
-                              color: AppTheme.adminEmerald,
-                            ),
-                            const _SubscriberRow(
-                              name: 'Ayesha Malik',
-                              role: 'Student',
-                              amount: 'Rs 450',
-                              status: 'Auto cut',
-                              color: AppTheme.studentAmber,
-                            ),
-                            const _SubscriberRow(
-                              name: 'Bilal Ahmed',
-                              role: 'Parent',
-                              amount: 'Rs 300',
-                              status: 'Pending',
-                              color: AppTheme.parentPurple,
-                            ),
+                            if (loading)
+                              const Padding(
+                                padding: EdgeInsets.symmetric(vertical: 16),
+                                child: Center(
+                                  child: CircularProgressIndicator(),
+                                ),
+                              )
+                            else if (students.isEmpty)
+                              Text(
+                                'No students registered yet.',
+                                style: TextStyle(
+                                  color: context.textSecondary,
+                                ),
+                              )
+                            else
+                              ...students.map(
+                                (s) => _SubscriberRow(
+                                  student: s,
+                                  color: _statusColor(s.subscriptionStatus),
+                                  statusLabel: _statusLabel(
+                                    s.subscriptionStatus,
+                                  ),
+                                  onToggle: () => _toggleSubscription(s),
+                                ),
+                              ),
                           ],
                         ),
                       ),
@@ -272,137 +302,41 @@ class AdminSubscription extends StatelessWidget {
       ),
     );
   }
-
-  void _showMessage(BuildContext context, String message) {
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(message)));
-  }
 }
 
-class _PlanTile extends StatelessWidget {
-  final String title;
-  final String subtitle;
-  final String badge;
-  final Color badgeColor;
-  final IconData icon;
-
-  const _PlanTile({
-    required this.title,
-    required this.subtitle,
-    required this.badge,
-    required this.badgeColor,
-    required this.icon,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: badgeColor.withValues(alpha: 0.06),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: badgeColor.withValues(alpha: 0.16)),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: badgeColor.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: Icon(icon, color: badgeColor, size: 22),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: TextStyle(
-                    color: context.textPrimary,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  subtitle,
-                  style: TextStyle(color: context.textSecondary, fontSize: 12),
-                ),
-              ],
-            ),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            decoration: BoxDecoration(
-              color: badgeColor.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: badgeColor.withValues(alpha: 0.25)),
-            ),
-            child: Text(
-              badge,
-              style: TextStyle(
-                color: badgeColor,
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _FeatureRow extends StatelessWidget {
-  final String title;
-  final String value;
-  final IconData icon;
+class _StatPill extends StatelessWidget {
+  final String label, value;
   final Color color;
-
-  const _FeatureRow({
-    required this.title,
+  const _StatPill({
+    required this.label,
     required this.value,
-    required this.icon,
     required this.color,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
+    return Expanded(
       child: Container(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.symmetric(vertical: 10),
         decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.06),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: color.withValues(alpha: 0.14)),
+          color: color.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: color.withValues(alpha: 0.2)),
         ),
-        child: Row(
+        child: Column(
           children: [
-            Icon(icon, color: color, size: 20),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                title,
-                style: TextStyle(
-                  color: context.textPrimary,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
             Text(
               value,
               style: TextStyle(
                 color: color,
-                fontSize: 12,
+                fontSize: 14,
                 fontWeight: FontWeight.w700,
               ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              label,
+              style: TextStyle(color: context.textTertiary, fontSize: 10),
             ),
           ],
         ),
@@ -412,22 +346,22 @@ class _FeatureRow extends StatelessWidget {
 }
 
 class _SubscriberRow extends StatelessWidget {
-  final String name;
-  final String role;
-  final String amount;
-  final String status;
+  final Student student;
   final Color color;
+  final String statusLabel;
+  final VoidCallback onToggle;
 
   const _SubscriberRow({
-    required this.name,
-    required this.role,
-    required this.amount,
-    required this.status,
+    required this.student,
     required this.color,
+    required this.statusLabel,
+    required this.onToggle,
   });
 
   @override
   Widget build(BuildContext context) {
+    final isCancelled =
+        student.subscriptionStatus == SubscriptionStatus.cancelled;
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: Container(
@@ -446,15 +380,7 @@ class _SubscriberRow extends StatelessWidget {
                 color: color.withValues(alpha: 0.14),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: Icon(
-                role == 'Driver'
-                    ? Icons.drive_eta_rounded
-                    : role == 'Student'
-                    ? Icons.school_rounded
-                    : Icons.family_restroom_rounded,
-                color: color,
-                size: 20,
-              ),
+              child: Icon(Icons.school_rounded, color: color, size: 20),
             ),
             const SizedBox(width: 10),
             Expanded(
@@ -462,7 +388,7 @@ class _SubscriberRow extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    name,
+                    student.name,
                     style: TextStyle(
                       color: context.textPrimary,
                       fontSize: 13,
@@ -471,74 +397,35 @@ class _SubscriberRow extends StatelessWidget {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    '$role • $amount',
-                    style: TextStyle(
-                      color: context.textSecondary,
-                      fontSize: 12,
-                    ),
+                    statusLabel,
+                    style: TextStyle(color: color, fontSize: 12),
                   ),
                 ],
               ),
             ),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: color.withValues(alpha: 0.25)),
-              ),
-              child: Text(
-                status,
-                style: TextStyle(
-                  color: color,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
+            GestureDetector(
+              onTap: onToggle,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: color.withValues(alpha: 0.25)),
+                ),
+                child: Text(
+                  isCancelled ? 'Reactivate' : 'Cancel',
+                  style: TextStyle(
+                    color: color,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ),
             ),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ActionBtn extends StatelessWidget {
-  final String label;
-  final Color color;
-  final VoidCallback onTap;
-
-  const _ActionBtn({
-    required this.label,
-    required this.color,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [
-              color.withValues(alpha: 0.16),
-              color.withValues(alpha: 0.08),
-            ],
-          ),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: color.withValues(alpha: 0.2)),
-        ),
-        child: Center(
-          child: Text(
-            label,
-            style: TextStyle(
-              color: color,
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
         ),
       ),
     );

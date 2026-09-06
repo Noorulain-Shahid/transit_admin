@@ -199,6 +199,7 @@ class GradientButton extends StatelessWidget {
   final double height;
   final Color? glowColor;
   final bool isLoading;
+  final bool isEnabled;
 
   const GradientButton({
     super.key,
@@ -208,46 +209,57 @@ class GradientButton extends StatelessWidget {
     this.height = 52,
     this.glowColor,
     this.isLoading = false,
+    this.isEnabled = true,
   });
 
   @override
   Widget build(BuildContext context) {
+    final bool disabled = !isEnabled && !isLoading;
+
     return GestureDetector(
-      onTap: isLoading ? null : onTap,
-      child: Container(
-        height: height,
-        decoration: BoxDecoration(
-          gradient: isLoading ? null : gradient,
-          color: isLoading ? Colors.white.withValues(alpha: 0.1) : null,
-          borderRadius: BorderRadius.circular(14),
-          boxShadow: (!isLoading && glowColor != null)
-              ? [
-                  BoxShadow(
-                    color: glowColor!.withValues(alpha: 0.4),
-                    blurRadius: 20,
-                    offset: const Offset(0, 8),
+      onTap: isLoading || disabled ? null : onTap,
+      child: Opacity(
+        // Loading used to swap the gradient for a 10%-white fill, which on
+        // the light theme reads as a near-invisible box with a white spinner
+        // on a near-white surface — a stuck loading state looked exactly
+        // like the button had disappeared. Keeping the gradient (just
+        // dimmed) means it's always visibly "this button, doing something"
+        // in both themes.
+        opacity: disabled ? 0.45 : (isLoading ? 0.7 : 1.0),
+        child: Container(
+          height: height,
+          decoration: BoxDecoration(
+            gradient: gradient,
+            borderRadius: BorderRadius.circular(14),
+            boxShadow: (!isLoading && !disabled && glowColor != null)
+                ? [
+                    BoxShadow(
+                      color: glowColor!.withValues(alpha: 0.4),
+                      blurRadius: 20,
+                      offset: const Offset(0, 8),
+                    ),
+                  ]
+                : null,
+          ),
+          child: Center(
+            child: isLoading
+                ? const SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  )
+                : Text(
+                    label,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
-                ]
-              : null,
-        ),
-        child: Center(
-          child: isLoading
-              ? const SizedBox(
-                  width: 22,
-                  height: 22,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: Colors.white,
-                  ),
-                )
-              : Text(
-                  label,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
+          ),
         ),
       ),
     );

@@ -2,7 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:transit_core/transit_core.dart';
 import '../theme/theme_provider.dart';
+
+/// Thrown by [AuthService.signInWithEmail] when the credentials are valid but
+/// the account isn't an admin — kept separate from [FirebaseAuthException] so
+/// the login screen can show one clear message either way.
+class NotAnAdminException implements Exception {
+  const NotAnAdminException();
+}
 
 /// Persists the logged-in role and theme preference across app restarts.
 ///
@@ -17,12 +25,42 @@ class AuthService {
   static const _roleKey = 'logged_in_role';
   static const _themeKey = 'theme_is_dark';
 
-  final FirebaseAuth _firebaseAuth = FirebaseAuth.instance;
+  // A getter, not a field — main.dart deliberately swallows a failed
+  // Firebase.initializeApp() to keep running in "front-end mode" (see its
+  // comment), and widget tests never call main() at all. A `final` field
+  // would evaluate FirebaseAuth.instance (and throw `[core/no-app]`) the
+  // moment *anything* constructs AuthService, which now happens as soon as
+  // the router is built. Deferring to per-call access, with isSignedIn/
+  // authStateChanges below catching the failure, keeps both cases working.
+  FirebaseAuth get _firebaseAuth => FirebaseAuth.instance;
   final GoogleSignIn _googleSignIn = GoogleSignIn();
 
   /// In-memory cache populated by [preload] before runApp().
   String? _cachedRole;
   String? get cachedRole => _cachedRole;
+
+  /// True if a Firebase user is currently signed in. Note this only reflects
+  /// *authentication*, not the `role: admin` check — that only happens inside
+  /// [signInWithEmail] itself, so a non-admin account can never get signed in
+  /// in the first place. Returns false (rather than throwing) if Firebase
+  /// itself isn't initialized.
+  bool get isSignedIn {
+    try {
+      return _firebaseAuth.currentUser != null;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Fires on every sign-in/sign-out, used to drive the router's redirect.
+  /// An empty stream (rather than a throw) if Firebase isn't initialized.
+  Stream<User?> get authStateChanges {
+    try {
+      return _firebaseAuth.authStateChanges();
+    } catch (_) {
+      return const Stream.empty();
+    }
+  }
 
   /// Must be called in main() before runApp(). Loads role + theme into memory.
   Future<void> preload() async {
@@ -54,12 +92,35 @@ class AuthService {
         await _firebaseAuth.signInWithCredential(credential);
       } catch (e) {
         // Firebase not available, but Google Sign-In succeeded - front-end mode
-        debugPrint('Firebase unavailable (front-end mode), proceeding with local auth: $e');
+        debugPrint(
+          'Firebase unavailable (front-end mode), proceeding with local auth: $e',
+        );
       }
       return true; // Success in any case (Firebase or front-end mode)
     } catch (e) {
       debugPrint('Error signing in with Google: $e');
       rethrow;
+    }
+  }
+
+  /// Signs in with Firebase Auth and requires the resulting account to carry
+  /// `role: admin` on its `users/{uid}` document — that's the check every
+  /// `isAdmin()` Firestore rule relies on, so a non-admin account must never
+  /// be allowed to reach the admin shell even if the password is correct.
+  ///
+  /// Throws [FirebaseAuthException] for bad credentials, [NotAnAdminException]
+  /// if the account is real but not an admin (and signs it back out).
+  Future<void> signInWithEmail(String email, String password) async {
+    final credential = await _firebaseAuth.signInWithEmailAndPassword(
+      email: email,
+      password: password,
+    );
+    final uid = credential.user?.uid;
+    final user = uid == null ? null : await Db.users.doc(uid).get();
+    final role = user?.data()?.role;
+    if (role != UserRole.admin) {
+      await _firebaseAuth.signOut();
+      throw const NotAnAdminException();
     }
   }
 

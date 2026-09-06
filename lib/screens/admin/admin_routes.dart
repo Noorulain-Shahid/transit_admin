@@ -1,18 +1,77 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:transit_core/transit_core.dart';
+import '../../data/admin_repository.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/glass_card.dart';
 
-class AdminRoutes extends StatelessWidget {
+class AdminRoutes extends StatefulWidget {
   final VoidCallback? onBack;
   const AdminRoutes({super.key, this.onBack});
 
   @override
+  State<AdminRoutes> createState() => _AdminRoutesState();
+}
+
+class _AdminRoutesState extends State<AdminRoutes> {
+  final _repo = AdminRepository.instance;
+  List<BusRoute>? _routes;
+  List<Bus>? _buses;
+
+  StreamSubscription<List<BusRoute>>? _routesSub;
+  StreamSubscription<List<Bus>>? _busesSub;
+
+  static const _colors = [
+    AppTheme.success,
+    AppTheme.info,
+    AppTheme.purple,
+    AppTheme.warning,
+    AppTheme.driverCyan,
+    AppTheme.parentPurple,
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _routesSub = _repo.watchRoutes().listen(
+      (v) => setState(() => _routes = v),
+      onError: (e) => debugPrint('[AdminRoutes] routes stream error: $e'),
+    );
+    _busesSub = _repo.watchBuses().listen(
+      (v) => setState(() => _buses = v),
+      onError: (e) => debugPrint('[AdminRoutes] buses stream error: $e'),
+    );
+  }
+
+  @override
+  void dispose() {
+    _routesSub?.cancel();
+    _busesSub?.cancel();
+    super.dispose();
+  }
+
+  String _busNumberFor(String? busId) {
+    if (busId == null) return 'Unassigned';
+    final match = (_buses ?? const <Bus>[]).where((b) => b.id == busId);
+    return match.isEmpty ? 'Unassigned' : match.first.busNumber;
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final routes = _routes;
+    final loading = routes == null;
+    final totalStops = loading
+        ? 0
+        : routes.fold<int>(0, (s, r) => s + r.stops.length);
+    final activeCount = loading
+        ? 0
+        : routes.where((r) => r.isActive).length;
+
     return SingleChildScrollView(
       padding: const EdgeInsets.only(bottom: 100),
       child: Column(
         children: [
-          _Header(title: 'Route Management', onBack: onBack),
+          _Header(title: 'Route Management', onBack: widget.onBack),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Column(
@@ -23,216 +82,178 @@ class AdminRoutes extends StatelessWidget {
                     _MiniStat(
                       icon: Icons.map_rounded,
                       label: 'Total Routes',
-                      value: '18',
+                      value: loading ? '…' : '${routes.length}',
                       color: AppTheme.adminEmerald,
                     ),
                     const SizedBox(width: 10),
                     _MiniStat(
-                      icon: Icons.star_rounded,
-                      label: 'AI Optimized',
-                      value: '6',
-                      color: AppTheme.purple,
+                      icon: Icons.check_circle_rounded,
+                      label: 'Active',
+                      value: loading ? '…' : '$activeCount',
+                      color: AppTheme.success,
                     ),
                     const SizedBox(width: 10),
                     _MiniStat(
                       icon: Icons.location_on_rounded,
                       label: 'Stops',
-                      value: '84',
+                      value: loading ? '…' : '$totalStops',
                       color: AppTheme.info,
                     ),
                   ],
                 ),
                 const SizedBox(height: 16),
 
-                // ── AI optimization card ──────────────────────
-                GlassCard(
-                  gradient: LinearGradient(
-                    colors: [
-                      AppTheme.purple.withValues(alpha: 0.15),
-                      AppTheme.info.withValues(alpha: 0.08),
-                    ],
-                  ),
-                  borderColor: AppTheme.purple.withValues(alpha: 0.25),
-                  padding: const EdgeInsets.all(18),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 50,
-                        height: 50,
-                        decoration: BoxDecoration(
-                          gradient: AppTheme.mainGradient,
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: const Center(
-                          child: Text('🤖', style: TextStyle(fontSize: 26)),
-                        ),
-                      ),
-                      const SizedBox(width: 14),
-                      Expanded(
+                // ── Route list ────────────────────────────────
+                if (loading)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 24),
+                    child: Center(child: CircularProgressIndicator()),
+                  )
+                else if (routes.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 24),
+                    child: Text(
+                      'No routes have been created yet.',
+                      style: TextStyle(color: context.textSecondary),
+                    ),
+                  )
+                else
+                  ...routes.asMap().entries.map((entry) {
+                    final i = entry.key;
+                    final r = entry.value;
+                    final color = _colors[i % _colors.length];
+                    final stops = r.orderedStops;
+                    final desc = stops.isEmpty
+                        ? 'No stops added yet'
+                        : stops.map((s) => s.name).join(' ↔ ');
+                    final pickup = stops.isEmpty
+                        ? '—'
+                        : (stops.first.scheduledTime.isEmpty
+                              ? '—'
+                              : stops.first.scheduledTime);
+                    final drop = stops.isEmpty
+                        ? '—'
+                        : (stops.last.scheduledTime.isEmpty
+                              ? '—'
+                              : stops.last.scheduledTime);
+
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: GlassCard(
+                        padding: const EdgeInsets.all(16),
                         child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
-                              'AI Route Optimization',
-                              style: TextStyle(
-                                color: context.textPrimary,
-                                fontSize: 14,
-                                fontWeight: FontWeight.w700,
-                              ),
+                            Row(
+                              children: [
+                                Container(
+                                  width: 44,
+                                  height: 44,
+                                  decoration: BoxDecoration(
+                                    color: color.withValues(alpha: 0.15),
+                                    borderRadius: BorderRadius.circular(14),
+                                    border: Border.all(
+                                      color: color.withValues(alpha: 0.3),
+                                    ),
+                                  ),
+                                  child: const Center(
+                                    child: Text(
+                                      '🗺️',
+                                      style: TextStyle(fontSize: 20),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        r.name,
+                                        style: TextStyle(
+                                          color: context.textPrimary,
+                                          fontSize: 15,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        desc,
+                                        style: TextStyle(
+                                          color: context.textSecondary,
+                                          fontSize: 12,
+                                        ),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                StatusBadge(
+                                  label: r.isActive ? 'Active' : 'Inactive',
+                                  color: r.isActive
+                                      ? AppTheme.success
+                                      : context.textTertiary,
+                                ),
+                              ],
                             ),
-                            const SizedBox(height: 3),
-                            Text(
-                              '3 routes can be optimized to save 22 min total',
-                              style: TextStyle(
-                                color: context.textSecondary,
-                                fontSize: 12,
+                            const SizedBox(height: 12),
+                            Row(
+                              children: [
+                                _RouteDetail(
+                                  icon: Icons.location_on_rounded,
+                                  label: 'Stops',
+                                  value: '${stops.length}',
+                                ),
+                                _RouteDetail(
+                                  icon: Icons.timer_rounded,
+                                  label: 'Duration',
+                                  value: r.averageDurationMinutes == 0
+                                      ? '—'
+                                      : '${r.averageDurationMinutes} min',
+                                ),
+                                _RouteDetail(
+                                  icon: Icons.directions_bus_rounded,
+                                  label: 'Bus',
+                                  value: _busNumberFor(r.busId),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 10),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 8,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.04),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text(
+                                    '🌅 Pickup: $pickup',
+                                    style: TextStyle(
+                                      color: context.textSecondary,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                  Text(
+                                    '🌇 Drop: $drop',
+                                    style: TextStyle(
+                                      color: context.textSecondary,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                           ],
                         ),
                       ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 8,
-                        ),
-                        decoration: BoxDecoration(
-                          gradient: AppTheme.mainGradient,
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Text(
-                          'Optimize',
-                          style: TextStyle(
-                            color: context.textPrimary,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 12),
-
-                // ── Route list ────────────────────────────────
-                ..._routes.map(
-                  (r) => Padding(
-                    padding: const EdgeInsets.only(bottom: 10),
-                    child: GlassCard(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        children: [
-                          Row(
-                            children: [
-                              Container(
-                                width: 44,
-                                height: 44,
-                                decoration: BoxDecoration(
-                                  color: r.color.withValues(alpha: 0.15),
-                                  borderRadius: BorderRadius.circular(14),
-                                  border: Border.all(
-                                    color: r.color.withValues(alpha: 0.3),
-                                  ),
-                                ),
-                                child: Center(
-                                  child: Text(
-                                    r.icon,
-                                    style: const TextStyle(fontSize: 20),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      r.name,
-                                      style: TextStyle(
-                                        color: context.textPrimary,
-                                        fontSize: 15,
-                                        fontWeight: FontWeight.w700,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 2),
-                                    Text(
-                                      r.desc,
-                                      style: TextStyle(
-                                        color: context.textSecondary,
-                                        fontSize: 12,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              StatusBadge(
-                                label: r.status,
-                                color: r.statusColor,
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 12),
-                          // Route details row
-                          Row(
-                            children: [
-                              _RouteDetail(
-                                icon: Icons.location_on_rounded,
-                                label: 'Stops',
-                                value: r.stops,
-                              ),
-                              _RouteDetail(
-                                icon: Icons.star_rounded,
-                                label: 'Duration',
-                                value: r.duration,
-                              ),
-                              _RouteDetail(
-                                icon: Icons.star_rounded,
-                                label: 'Distance',
-                                value: r.distance,
-                              ),
-                              _RouteDetail(
-                                icon: Icons.directions_bus_rounded,
-                                label: 'Bus',
-                                value: r.bus,
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 10),
-                          // Pickup/drop times
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 8,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.04),
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Text(
-                                  '🌅 Pickup: ${r.pickupTime}',
-                                  style: TextStyle(
-                                    color: context.textSecondary,
-                                    fontSize: 12,
-                                  ),
-                                ),
-                                Text(
-                                  '🌇 Drop: ${r.dropTime}',
-                                  style: TextStyle(
-                                    color: context.textSecondary,
-                                    fontSize: 12,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
+                    );
+                  }),
               ],
             ),
           ),
@@ -240,87 +261,6 @@ class AdminRoutes extends StatelessWidget {
       ),
     );
   }
-}
-
-final _routes = [
-  _Route(
-    'Route A – North Zone',
-    'Lincoln Elem ↔ Pine Road ↔ Oak Street',
-    '🗺️',
-    AppTheme.success,
-    'Active',
-    AppTheme.success,
-    '8',
-    '35 min',
-    '12.4 km',
-    '#42',
-    '07:00 AM',
-    '03:15 PM',
-  ),
-  _Route(
-    'Route B – South Zone',
-    'Maple School ↔ Cedar Ave ↔ Elm Drive',
-    '🗺️',
-    AppTheme.info,
-    'Active',
-    AppTheme.success,
-    '6',
-    '28 min',
-    '9.8 km',
-    '#43',
-    '07:15 AM',
-    '03:30 PM',
-  ),
-  _Route(
-    'Route C – East Zone',
-    'Sunrise Academy ↔ Park Rd ↔ Hill View',
-    '🗺️',
-    AppTheme.purple,
-    'Optimizing',
-    AppTheme.warning,
-    '10',
-    '42 min',
-    '15.2 km',
-    '#44',
-    '06:45 AM',
-    '03:00 PM',
-  ),
-  _Route(
-    'Route D – West Zone',
-    'Green Valley ↔ Lake Side ↔ River Bend',
-    '🗺️',
-    AppTheme.warning,
-    'Draft',
-    AppTheme.info,
-    '5',
-    '25 min',
-    '8.1 km',
-    '#45',
-    '07:30 AM',
-    '03:45 PM',
-  ),
-];
-
-class _Route {
-  final String name, desc, icon;
-  final Color color;
-  final String status;
-  final Color statusColor;
-  final String stops, duration, distance, bus, pickupTime, dropTime;
-  const _Route(
-    this.name,
-    this.desc,
-    this.icon,
-    this.color,
-    this.status,
-    this.statusColor,
-    this.stops,
-    this.duration,
-    this.distance,
-    this.bus,
-    this.pickupTime,
-    this.dropTime,
-  );
 }
 
 // ── Shared widgets ──────────────────────────────────────────────────────

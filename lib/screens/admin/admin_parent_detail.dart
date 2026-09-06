@@ -1,12 +1,96 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:transit_core/transit_core.dart';
+import '../../data/admin_repository.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/glass_card.dart';
-import 'admin_user_models.dart';
 
-class AdminParentDetail extends StatelessWidget {
-  final ParentRecord parent;
-  const AdminParentDetail({super.key, required this.parent});
+class AdminParentDetail extends StatefulWidget {
+  final String parentId;
+  const AdminParentDetail({super.key, required this.parentId});
+
+  @override
+  State<AdminParentDetail> createState() => _AdminParentDetailState();
+}
+
+class _AdminParentDetailState extends State<AdminParentDetail> {
+  final _repo = AdminRepository.instance;
+  bool _editing = false;
+  final _nameCtrl = TextEditingController();
+  final _phoneCtrl = TextEditingController();
+  final _emailCtrl = TextEditingController();
+  bool _saving = false;
+
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    _phoneCtrl.dispose();
+    _emailCtrl.dispose();
+    super.dispose();
+  }
+
+  void _startEditing(AppUser p) {
+    _nameCtrl.text = p.name;
+    _phoneCtrl.text = p.phone;
+    _emailCtrl.text = p.email;
+    setState(() => _editing = true);
+  }
+
+  Future<void> _save(AppUser p) async {
+    setState(() => _saving = true);
+    try {
+      await _repo.updateUser(p.uid, {
+        'name': _nameCtrl.text.trim(),
+        'phone': _phoneCtrl.text.trim(),
+        'email': _emailCtrl.text.trim(),
+      });
+      if (mounted) {
+        setState(() => _editing = false);
+        _msg('Saved');
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<void> _toggleActive(AppUser p) async {
+    await _repo.updateUser(p.uid, {'isActive': !p.isActive});
+    if (mounted) _msg(p.isActive ? 'Account deactivated' : 'Account activated');
+  }
+
+  Future<void> _message(AppUser p) async {
+    final ctrl = TextEditingController();
+    final text = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Message ${p.name}'),
+        content: TextField(
+          controller: ctrl,
+          maxLines: 3,
+          autofocus: true,
+          decoration: const InputDecoration(
+            hintText: 'e.g. We\'ve fixed the pickup time issue you reported.',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(ctrl.text.trim()),
+            child: const Text('Send'),
+          ),
+        ],
+      ),
+    );
+    if (text == null || text.isEmpty) return;
+    await _repo.messageUser(p.uid, title: 'Message from admin', body: text);
+    if (mounted) _msg('Message sent to ${p.name}');
+  }
+
+  void _msg(String m) =>
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
 
   @override
   Widget build(BuildContext context) {
@@ -14,33 +98,44 @@ class AdminParentDetail extends StatelessWidget {
       body: Container(
         decoration: context.scaffoldBg,
         child: SafeArea(
-          child: Column(
-            children: [
-              _buildHeader(context),
-              Expanded(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.only(bottom: 40),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Column(
-                      children: [
-                        _buildProfileCard(context),
-                        const SizedBox(height: 12),
-                        _buildChildrenSection(context),
-                        const SizedBox(height: 12),
-                        _buildSubscriptionPanel(context),
-                        const SizedBox(height: 12),
-                        _buildPaymentSystem(context),
-                        const SizedBox(height: 12),
-                        _buildPlanInfo(context),
-                        const SizedBox(height: 12),
-                        _buildEnforcement(context),
-                      ],
-                    ),
+          child: StreamBuilder<AppUser?>(
+            stream: _repo.watchUser(widget.parentId),
+            builder: (context, snap) {
+              final p = snap.data;
+              return Column(
+                children: [
+                  _buildHeader(context),
+                  Expanded(
+                    child: !snap.hasData
+                        ? const Center(child: CircularProgressIndicator())
+                        : p == null
+                        ? Center(
+                            child: Text(
+                              'Parent not found.',
+                              style: TextStyle(color: context.textSecondary),
+                            ),
+                          )
+                        : SingleChildScrollView(
+                            padding: const EdgeInsets.only(bottom: 40),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                              ),
+                              child: Column(
+                                children: [
+                                  _buildProfileCard(context, p),
+                                  const SizedBox(height: 12),
+                                  _buildChildrenSection(context, p),
+                                  const SizedBox(height: 12),
+                                  _buildControls(context, p),
+                                ],
+                              ),
+                            ),
+                          ),
                   ),
-                ),
-              ),
-            ],
+                ],
+              );
+            },
           ),
         ),
       ),
@@ -74,7 +169,7 @@ class AdminParentDetail extends StatelessWidget {
           const SizedBox(width: 14),
           Expanded(
             child: Text(
-              'Billing Control',
+              'Parent Detail',
               style: TextStyle(
                 color: context.textPrimary,
                 fontSize: 20,
@@ -87,66 +182,105 @@ class AdminParentDetail extends StatelessWidget {
     );
   }
 
-  Widget _buildProfileCard(BuildContext context) {
+  Widget _buildProfileCard(BuildContext context, AppUser p) {
     return GlassCard(
       padding: const EdgeInsets.all(18),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            width: 56,
-            height: 56,
-            decoration: BoxDecoration(
-              color: AppTheme.parentPurple.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(18),
-              border: Border.all(
-                color: AppTheme.parentPurple.withValues(alpha: 0.25),
-              ),
-            ),
-            child: const Center(
-              child: Text('👨‍👩‍👧', style: TextStyle(fontSize: 24)),
-            ),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  parent.name,
-                  style: TextStyle(
-                    color: context.textPrimary,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w800,
+          Row(
+            children: [
+              Container(
+                width: 56,
+                height: 56,
+                decoration: BoxDecoration(
+                  color: AppTheme.parentPurple.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(
+                    color: AppTheme.parentPurple.withValues(alpha: 0.25),
                   ),
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  '${parent.childrenCount} children • ${parent.contact}',
-                  style: TextStyle(color: context.textSecondary, fontSize: 13),
+                child: const Center(
+                  child: Text('👨‍👩‍👧', style: TextStyle(fontSize: 24)),
                 ),
-                const SizedBox(height: 6),
-                Row(
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    StatusBadge(
-                      label: parent.planLabel,
-                      color: parent.planColor,
+                    Text(
+                      p.name,
+                      style: TextStyle(
+                        color: context.textPrimary,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                      ),
                     ),
-                    const SizedBox(width: 6),
+                    const SizedBox(height: 6),
                     StatusBadge(
-                      label: parent.statusLabel,
-                      color: parent.statusColor,
+                      label: p.isActive ? 'Active' : 'Inactive',
+                      color: p.isActive ? AppTheme.success : AppTheme.error,
                     ),
                   ],
                 ),
+              ),
+              if (!_editing)
+                IconButton(
+                  onPressed: () => _startEditing(p),
+                  icon: Icon(Icons.edit_rounded, color: context.textSecondary),
+                ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          if (_editing) ...[
+            _EditField(label: 'Name', controller: _nameCtrl),
+            const SizedBox(height: 8),
+            _EditField(label: 'Phone', controller: _phoneCtrl),
+            const SizedBox(height: 8),
+            _EditField(label: 'Email', controller: _emailCtrl),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: _ActionBtn(
+                    label: 'Cancel',
+                    color: AppTheme.error,
+                    icon: Icons.close_rounded,
+                    onTap: _saving
+                        ? null
+                        : () => setState(() => _editing = false),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _ActionBtn(
+                    label: _saving ? 'Saving…' : 'Save',
+                    color: AppTheme.success,
+                    icon: Icons.check_rounded,
+                    onTap: _saving ? null : () => _save(p),
+                  ),
+                ),
               ],
             ),
-          ),
+          ] else ...[
+            _DetailRow(
+              icon: Icons.phone_rounded,
+              label: 'Phone',
+              value: p.phone.isEmpty ? '—' : p.phone,
+            ),
+            _DetailRow(
+              icon: Icons.email_rounded,
+              label: 'Email',
+              value: p.email.isEmpty ? '—' : p.email,
+            ),
+          ],
         ],
       ),
     );
   }
 
-  Widget _buildChildrenSection(BuildContext context) {
+  Widget _buildChildrenSection(BuildContext context, AppUser p) {
     return GlassCard(
       padding: const EdgeInsets.all(18),
       child: Column(
@@ -161,7 +295,7 @@ class AdminParentDetail extends StatelessWidget {
               ),
               const SizedBox(width: 8),
               Text(
-                'Children Details',
+                'Children',
                 style: TextStyle(
                   color: context.textPrimary,
                   fontSize: 15,
@@ -171,264 +305,116 @@ class AdminParentDetail extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 12),
-          if (parent.children.isEmpty)
-            Text(
-              'No linked children data available.',
-              style: TextStyle(color: context.textSecondary, fontSize: 12),
-            )
-          else
-            ...parent.children.map(
-              (child) => Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: AppTheme.parentPurple.withValues(alpha: 0.05),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: AppTheme.parentPurple.withValues(alpha: 0.12),
-                    ),
-                  ),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 40,
-                        height: 40,
-                        decoration: BoxDecoration(
-                          color: AppTheme.parentPurple.withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Icon(
-                          child.level == 'College'
-                              ? Icons.school_rounded
-                              : Icons.menu_book_rounded,
-                          color: AppTheme.parentPurple,
-                          size: 18,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              child.name,
-                              style: TextStyle(
-                                color: context.textPrimary,
-                                fontSize: 13,
-                                fontWeight: FontWeight.w700,
+          StreamBuilder<List<Student>>(
+            stream: _repo.watchStudents(),
+            builder: (context, snap) {
+              final children = (snap.data ?? const <Student>[])
+                  .where((s) => s.parentId == p.uid)
+                  .toList();
+              if (!snap.hasData) {
+                return const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 16),
+                  child: Center(child: CircularProgressIndicator()),
+                );
+              }
+              if (children.isEmpty) {
+                return Text(
+                  'No linked children.',
+                  style: TextStyle(color: context.textSecondary, fontSize: 12),
+                );
+              }
+              return Column(
+                children: children
+                    .map(
+                      (child) => Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: GestureDetector(
+                          onTap: () => context.push(
+                            '/admin/student-detail',
+                            extra: child.id,
+                          ),
+                          child: Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: AppTheme.parentPurple.withValues(
+                                alpha: 0.05,
+                              ),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: AppTheme.parentPurple.withValues(
+                                  alpha: 0.12,
+                                ),
                               ),
                             ),
-                            const SizedBox(height: 2),
-                            Text(
-                              '${child.level} • ${child.institution}',
-                              style: TextStyle(
-                                color: context.textSecondary,
-                                fontSize: 11,
-                              ),
+                            child: Row(
+                              children: [
+                                Container(
+                                  width: 40,
+                                  height: 40,
+                                  decoration: BoxDecoration(
+                                    color: AppTheme.parentPurple.withValues(
+                                      alpha: 0.15,
+                                    ),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: const Icon(
+                                    Icons.menu_book_rounded,
+                                    color: AppTheme.parentPurple,
+                                    size: 18,
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        child.name,
+                                        style: TextStyle(
+                                          color: context.textPrimary,
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        '${child.grade} • ${child.school}',
+                                        style: TextStyle(
+                                          color: context.textSecondary,
+                                          fontSize: 11,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                Icon(
+                                  Icons.chevron_right_rounded,
+                                  color: context.textTertiary,
+                                ),
+                              ],
                             ),
-                            const SizedBox(height: 2),
-                            Text(
-                              '${child.classOrSemester} • ${child.route}',
-                              style: TextStyle(
-                                color: context.textTertiary,
-                                fontSize: 11,
-                              ),
-                            ),
-                          ],
+                          ),
                         ),
                       ),
-                      StatusBadge(
-                        label: child.status,
-                        color: child.status == 'Expired'
-                            ? AppTheme.error
-                            : AppTheme.success,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSubscriptionPanel(BuildContext context) {
-    return GlassCard(
-      padding: const EdgeInsets.all(18),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(
-                Icons.credit_card_rounded,
-                color: AppTheme.parentPurple,
-                size: 20,
-              ),
-              const SizedBox(width: 8),
-              Text(
-                'Subscription Management',
-                style: TextStyle(
-                  color: context.textPrimary,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          // Info rows
-          _DetailRow(
-            label: 'Current Plan',
-            value: parent.planLabel,
-            color: parent.planColor,
-          ),
-          _DetailRow(
-            label: 'Status',
-            value: parent.statusLabel,
-            color: parent.statusColor,
-          ),
-          _DetailRow(
-            label: 'Next Billing',
-            value: parent.nextBillingDate,
-            color: AppTheme.info,
-          ),
-          _DetailRow(
-            label: 'Amount Due',
-            value: '₨${parent.amountDue.toInt()}',
-            color: AppTheme.warning,
-          ),
-          _DetailRow(
-            label: 'Days Overdue',
-            value: '${parent.overdueDays} days',
-            color: AppTheme.error,
-          ),
-          const SizedBox(height: 12),
-          // Action buttons
-          Row(
-            children: [
-              Expanded(
-                child: _ActionBtn(
-                  label: 'Activate',
-                  color: AppTheme.success,
-                  icon: Icons.play_arrow_rounded,
-                  onTap: () => _msg(context, 'Subscription activated'),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _ActionBtn(
-                  label: 'Pause',
-                  color: AppTheme.warning,
-                  icon: Icons.pause_rounded,
-                  onTap: () => _msg(context, 'Subscription paused'),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _ActionBtn(
-                  label: 'Cancel',
-                  color: AppTheme.error,
-                  icon: Icons.stop_rounded,
-                  onTap: () => _msg(context, 'Subscription cancelled'),
-                ),
-              ),
-            ],
+                    )
+                    .toList(),
+              );
+            },
           ),
         ],
       ),
     );
   }
 
-  Widget _buildPaymentSystem(BuildContext context) {
-    return GlassCard(
-      padding: const EdgeInsets.all(18),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(Icons.payment_rounded, color: AppTheme.info, size: 20),
-              const SizedBox(width: 8),
-              Text(
-                'Payment History',
-                style: TextStyle(
-                  color: context.textPrimary,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          _PaymentRow(
-            date: 'May 15, 2026',
-            amount: '₨${parent.amountDue.toInt()}',
-            status: 'Paid',
-            color: AppTheme.success,
-          ),
-          _PaymentRow(
-            date: 'Apr 15, 2026',
-            amount: '₨${parent.amountDue.toInt()}',
-            status: 'Paid',
-            color: AppTheme.success,
-          ),
-          _PaymentRow(
-            date: 'Mar 15, 2026',
-            amount: '₨${parent.amountDue.toInt()}',
-            status: 'Failed',
-            color: AppTheme.error,
-          ),
-          _PaymentRow(
-            date: 'Feb 15, 2026',
-            amount: '₨${parent.amountDue.toInt()}',
-            status: 'Refunded',
-            color: AppTheme.warning,
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: _ActionBtn(
-                  label: 'Generate Invoice',
-                  color: AppTheme.info,
-                  icon: Icons.receipt_long_rounded,
-                  onTap: () => _msg(context, 'Invoice generated'),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _ActionBtn(
-                  label: 'Retry Payment',
-                  color: AppTheme.adminEmerald,
-                  icon: Icons.refresh_rounded,
-                  onTap: () => _msg(context, 'Retrying last failed payment'),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          _ActionBtn(
-            label: 'Refund Management',
-            color: AppTheme.warning,
-            icon: Icons.undo_rounded,
-            onTap: () => _msg(context, 'Refund management panel'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPlanInfo(BuildContext context) {
+  Widget _buildControls(BuildContext context, AppUser p) {
     return GlassCard(
       padding: const EdgeInsets.all(18),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Plan Details',
+            'Controls',
             style: TextStyle(
               color: context.textPrimary,
               fontSize: 15,
@@ -436,124 +422,57 @@ class AdminParentDetail extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 12),
-          _PlanDetail(
-            plan: 'Basic',
-            price: '₨300/mo',
-            features: [
-              '1 child tracking',
-              'Standard notifications',
-              'Basic support',
-            ],
-            color: const Color(0xFF94A3B8),
-            isActive: parent.plan == ParentPlan.basic,
-          ),
-          const SizedBox(height: 8),
-          _PlanDetail(
-            plan: 'Standard',
-            price: '₨700/mo',
-            features: [
-              '2-3 children tracking',
-              'Priority notifications',
-              'Email support',
-            ],
-            color: AppTheme.info,
-            isActive: parent.plan == ParentPlan.standard,
-          ),
-          const SizedBox(height: 8),
-          _PlanDetail(
-            plan: 'Premium',
-            price: '₨1200/mo',
-            features: [
-              'Unlimited children',
-              'Priority tracking',
-              'Priority support',
-              'Real-time alerts',
-            ],
-            color: AppTheme.purple,
-            isActive: parent.plan == ParentPlan.premium,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildEnforcement(BuildContext context) {
-    final isExpired = parent.status == SubscriptionStatus.expired;
-    return GlassCard(
-      padding: const EdgeInsets.all(18),
-      gradient: LinearGradient(
-        colors: [
-          (isExpired ? AppTheme.error : AppTheme.success).withValues(
-            alpha: 0.06,
-          ),
-          (isExpired ? AppTheme.error : AppTheme.success).withValues(
-            alpha: 0.02,
-          ),
-        ],
-      ),
-      borderColor: (isExpired ? AppTheme.error : AppTheme.success).withValues(
-        alpha: 0.15,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
           Row(
             children: [
-              Icon(
-                isExpired ? Icons.warning_rounded : Icons.verified_rounded,
-                color: isExpired ? AppTheme.error : AppTheme.success,
-                size: 20,
+              Expanded(
+                child: _ActionBtn(
+                  label: p.isActive ? 'Deactivate' : 'Activate',
+                  color: p.isActive ? AppTheme.error : AppTheme.success,
+                  icon: p.isActive
+                      ? Icons.block_rounded
+                      : Icons.check_circle_rounded,
+                  onTap: () => _toggleActive(p),
+                ),
               ),
               const SizedBox(width: 8),
-              Text(
-                'Subscription Enforcement',
-                style: TextStyle(
-                  color: context.textPrimary,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w700,
+              Expanded(
+                child: _ActionBtn(
+                  label: 'Message',
+                  color: AppTheme.parentPurple,
+                  icon: Icons.chat_bubble_rounded,
+                  onTap: () => _message(p),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          _EnforcementRow(
-            icon: Icons.block_rounded,
-            label: isExpired
-                ? 'Student access: BLOCKED'
-                : 'Student access: ACTIVE',
-            color: isExpired ? AppTheme.error : AppTheme.success,
-          ),
-          _EnforcementRow(
-            icon: Icons.timer_rounded,
-            label: isExpired
-                ? 'Grace period: ENDED'
-                : 'Grace period: 7 days after expiry',
-            color: isExpired ? AppTheme.error : AppTheme.info,
-          ),
-          _EnforcementRow(
-            icon: Icons.notifications_active_rounded,
-            label: isExpired
-                ? 'Warning sent: 3 days before expiry'
-                : 'Warning: Will notify 3 days before expiry',
-            color: AppTheme.warning,
-          ),
         ],
       ),
     );
   }
-
-  void _msg(BuildContext context, String m) =>
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
 }
 
 // ─── Sub-widgets ─────────────────────────────────────────────────────────────
+class _EditField extends StatelessWidget {
+  final String label;
+  final TextEditingController controller;
+  const _EditField({required this.label, required this.controller});
+  @override
+  Widget build(BuildContext context) {
+    return TextField(
+      controller: controller,
+      style: TextStyle(color: context.textPrimary, fontSize: 14),
+      decoration: InputDecoration(labelText: label),
+    );
+  }
+}
+
 class _DetailRow extends StatelessWidget {
+  final IconData icon;
   final String label, value;
-  final Color color;
   const _DetailRow({
+    required this.icon,
     required this.label,
     required this.value,
-    required this.color,
   });
   @override
   Widget build(BuildContext context) {
@@ -561,25 +480,22 @@ class _DetailRow extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 8),
       child: Row(
         children: [
+          Icon(icon, color: context.textTertiary, size: 16),
+          const SizedBox(width: 8),
           SizedBox(
-            width: 100,
+            width: 60,
             child: Text(
               label,
               style: TextStyle(color: context.textSecondary, fontSize: 12),
             ),
           ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(8),
-            ),
+          Expanded(
             child: Text(
               value,
               style: TextStyle(
-                color: color,
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
+                color: context.textPrimary,
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
               ),
             ),
           ),
@@ -593,7 +509,7 @@ class _ActionBtn extends StatelessWidget {
   final String label;
   final Color color;
   final IconData icon;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
   const _ActionBtn({
     required this.label,
     required this.color,
@@ -602,196 +518,42 @@ class _ActionBtn extends StatelessWidget {
   });
   @override
   Widget build(BuildContext context) {
+    final disabled = onTap == null;
     return GestureDetector(
       onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 11),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [
-              color.withValues(alpha: 0.14),
-              color.withValues(alpha: 0.06),
-            ],
+      child: Opacity(
+        opacity: disabled ? 0.5 : 1,
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 11),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                color.withValues(alpha: 0.14),
+                color.withValues(alpha: 0.06),
+              ],
+            ),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: color.withValues(alpha: 0.2)),
           ),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: color.withValues(alpha: 0.2)),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, color: color, size: 15),
-            const SizedBox(width: 5),
-            Flexible(
-              child: Text(
-                label,
-                style: TextStyle(
-                  color: color,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                ),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _PaymentRow extends StatelessWidget {
-  final String date, amount, status;
-  final Color color;
-  const _PaymentRow({
-    required this.date,
-    required this.amount,
-    required this.status,
-    required this.color,
-  });
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.06),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: color.withValues(alpha: 0.12)),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 8,
-              height: 8,
-              decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-            ),
-            const SizedBox(width: 10),
-            Text(
-              date,
-              style: TextStyle(color: context.textSecondary, fontSize: 11),
-            ),
-            const Spacer(),
-            Text(
-              amount,
-              style: TextStyle(
-                color: context.textPrimary,
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const SizedBox(width: 10),
-            StatusBadge(label: status, color: color),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _PlanDetail extends StatelessWidget {
-  final String plan, price;
-  final List<String> features;
-  final Color color;
-  final bool isActive;
-  const _PlanDetail({
-    required this.plan,
-    required this.price,
-    required this.features,
-    required this.color,
-    required this.isActive,
-  });
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: isActive ? 0.1 : 0.04),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: color.withValues(alpha: isActive ? 0.3 : 0.1),
-          width: isActive ? 1.5 : 1,
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Text(
-                plan,
-                style: TextStyle(
-                  color: context.textPrimary,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
+              Icon(icon, color: color, size: 15),
+              const SizedBox(width: 5),
+              Flexible(
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    color: color,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                  ),
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
-              const SizedBox(width: 8),
-              Text(
-                price,
-                style: TextStyle(
-                  color: color,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const Spacer(),
-              if (isActive) StatusBadge(label: 'Current', color: color),
             ],
           ),
-          const SizedBox(height: 8),
-          ...features.map(
-            (f) => Padding(
-              padding: const EdgeInsets.only(bottom: 2),
-              child: Row(
-                children: [
-                  Icon(Icons.check_circle_rounded, color: color, size: 14),
-                  const SizedBox(width: 6),
-                  Text(
-                    f,
-                    style: TextStyle(
-                      color: context.textSecondary,
-                      fontSize: 12,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _EnforcementRow extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final Color color;
-  const _EnforcementRow({
-    required this.icon,
-    required this.label,
-    required this.color,
-  });
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Row(
-        children: [
-          Icon(icon, color: color, size: 18),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              label,
-              style: TextStyle(
-                color: context.textPrimary,
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }

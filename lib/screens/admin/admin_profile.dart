@@ -1,10 +1,14 @@
+import 'dart:async';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:transit_core/transit_core.dart';
+import '../../data/admin_repository.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/theme_provider.dart';
 import '../../widgets/glass_card.dart';
 
-class AdminProfile extends StatelessWidget {
+class AdminProfile extends StatefulWidget {
   final void Function(int) onNavigate;
   final VoidCallback onLogout;
   const AdminProfile({
@@ -12,6 +16,68 @@ class AdminProfile extends StatelessWidget {
     required this.onNavigate,
     required this.onLogout,
   });
+
+  @override
+  State<AdminProfile> createState() => _AdminProfileState();
+}
+
+class _AdminProfileState extends State<AdminProfile> {
+  final _repo = AdminRepository.instance;
+
+  AppUser? _me;
+  int? _busCount;
+  int? _routeCount;
+  int? _userCount;
+
+  StreamSubscription<AppUser?>? _meSub;
+  StreamSubscription<List<Bus>>? _busesSub;
+  StreamSubscription<List<BusRoute>>? _routesSub;
+  StreamSubscription<List<Student>>? _studentsSub;
+  StreamSubscription<List<AppUser>>? _parentsSub;
+  StreamSubscription<List<Driver>>? _driversSub;
+
+  int _students = 0, _parents = 0, _drivers = 0;
+
+  void Function(int) get onNavigate => widget.onNavigate;
+  VoidCallback get onLogout => widget.onLogout;
+
+  @override
+  void initState() {
+    super.initState();
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid != null) {
+      _meSub = _repo.watchUser(uid).listen((v) => setState(() => _me = v));
+    }
+    _busesSub = _repo.watchBuses().listen(
+      (v) => setState(() => _busCount = v.length),
+    );
+    _routesSub = _repo.watchRoutes().listen(
+      (v) => setState(() => _routeCount = v.length),
+    );
+    _studentsSub = _repo.watchStudents().listen((v) {
+      _students = v.length;
+      setState(() => _userCount = _students + _parents + _drivers);
+    });
+    _parentsSub = _repo.watchUsersByRole(UserRole.parent).listen((v) {
+      _parents = v.length;
+      setState(() => _userCount = _students + _parents + _drivers);
+    });
+    _driversSub = _repo.watchDrivers().listen((v) {
+      _drivers = v.length;
+      setState(() => _userCount = _students + _parents + _drivers);
+    });
+  }
+
+  @override
+  void dispose() {
+    _meSub?.cancel();
+    _busesSub?.cancel();
+    _routesSub?.cancel();
+    _studentsSub?.cancel();
+    _parentsSub?.cancel();
+    _driversSub?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -48,6 +114,8 @@ class AdminProfile extends StatelessWidget {
   }
 
   Widget _buildAvatar(BuildContext context) {
+    final name = _me?.name.isNotEmpty == true ? _me!.name : 'Admin';
+    final email = FirebaseAuth.instance.currentUser?.email ?? '';
     return Center(
       child: Column(
         children: [
@@ -75,7 +143,7 @@ class AdminProfile extends StatelessWidget {
           ),
           const SizedBox(height: 14),
           Text(
-            'Admin User',
+            name,
             style: TextStyle(
               color: context.textPrimary,
               fontSize: 20,
@@ -84,37 +152,45 @@ class AdminProfile extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           Text(
-            'admin@transitpro.com',
+            email,
             style: TextStyle(color: context.textSecondary, fontSize: 13),
           ),
           const SizedBox(height: 6),
-          StatusBadge(label: 'Super Admin', color: AppTheme.adminEmerald),
+          StatusBadge(label: 'Admin', color: AppTheme.adminEmerald),
         ],
       ),
     );
   }
 
   Widget _buildQuickStats(BuildContext context) {
+    String fmt(int? n) => n == null ? '…' : '$n';
     return Row(
       children: [
         _ProfileStat(
           icon: Icons.directions_bus_rounded,
           label: 'Buses',
-          value: '12',
+          value: fmt(_busCount),
         ),
         const SizedBox(width: 10),
-        _ProfileStat(icon: Icons.map_rounded, label: 'Routes', value: '18'),
+        _ProfileStat(
+          icon: Icons.map_rounded,
+          label: 'Routes',
+          value: fmt(_routeCount),
+        ),
         const SizedBox(width: 10),
         _ProfileStat(
           icon: Icons.people_alt_rounded,
           label: 'Users',
-          value: '562',
+          value: fmt(_userCount),
         ),
       ],
     );
   }
 
   Widget _buildProfileInfo(BuildContext context) {
+    final name = _me?.name.isNotEmpty == true ? _me!.name : '—';
+    final email = FirebaseAuth.instance.currentUser?.email ?? '—';
+    final phone = _me?.phone.isNotEmpty == true ? _me!.phone : 'Not set';
     return GlassCard(
       padding: const EdgeInsets.all(18),
       child: Column(
@@ -142,25 +218,25 @@ class AdminProfile extends StatelessWidget {
           _InfoRow(
             icon: Icons.badge_rounded,
             label: 'Name',
-            value: 'Admin User',
+            value: name,
             color: AppTheme.adminEmerald,
           ),
           _InfoRow(
             icon: Icons.work_rounded,
             label: 'Role',
-            value: 'Super Admin',
+            value: 'Admin',
             color: AppTheme.purple,
           ),
           _InfoRow(
             icon: Icons.email_rounded,
             label: 'Email',
-            value: 'admin@transitpro.com',
+            value: email,
             color: AppTheme.info,
           ),
           _InfoRow(
             icon: Icons.phone_rounded,
             label: 'Phone',
-            value: '+92 300-1234567',
+            value: phone,
             color: AppTheme.driverCyan,
           ),
         ],
@@ -174,14 +250,19 @@ class AdminProfile extends StatelessWidget {
       child: Column(
         children: [
           _OptionRow(
-            icon: Icons.lock_rounded,
-            label: 'Change Password',
-            onTap: () => _msg(context, 'Change password form'),
+            icon: Icons.account_balance_wallet_rounded,
+            label: 'Fee Management',
+            onTap: () => context.push('/admin/fees'),
           ),
           _OptionRow(
-            icon: Icons.language_rounded,
-            label: 'Language Settings',
-            onTap: () => _msg(context, 'Language selector'),
+            icon: Icons.route_rounded,
+            label: 'Route Management',
+            onTap: () => context.push('/admin/routes'),
+          ),
+          _OptionRow(
+            icon: Icons.directions_bus_filled_rounded,
+            label: 'Vehicle Management',
+            onTap: () => context.push('/admin/vehicles'),
           ),
           _OptionRow(
             icon: Icons.notifications_rounded,
@@ -192,6 +273,18 @@ class AdminProfile extends StatelessWidget {
             icon: Icons.subscriptions_rounded,
             label: 'Subscription Management',
             onTap: () => context.push('/admin/subscription'),
+          ),
+          _OptionRow(
+            icon: Icons.lock_rounded,
+            label: 'Change Password',
+            comingSoon: true,
+            onTap: () => _msg(context, 'Change Password — coming soon'),
+          ),
+          _OptionRow(
+            icon: Icons.language_rounded,
+            label: 'Language Settings',
+            comingSoon: true,
+            onTap: () => _msg(context, 'Language Settings — coming soon'),
           ),
         ],
       ),
@@ -226,30 +319,34 @@ class AdminProfile extends StatelessWidget {
           _SecurityRow(
             icon: Icons.history_rounded,
             label: 'Login Session History',
-            detail: 'Last login: 2h ago',
+            detail: 'Not available yet',
             color: AppTheme.info,
-            onTap: () => _msg(context, 'Session history'),
+            comingSoon: true,
+            onTap: () => _msg(context, 'Session History — coming soon'),
           ),
           _SecurityRow(
             icon: Icons.devices_rounded,
             label: 'Active Devices',
-            detail: '2 devices active',
+            detail: 'Not available yet',
             color: AppTheme.adminEmerald,
-            onTap: () => _msg(context, 'Active devices list'),
+            comingSoon: true,
+            onTap: () => _msg(context, 'Active Devices — coming soon'),
           ),
           _SecurityRow(
             icon: Icons.logout_rounded,
             label: 'Logout All Sessions',
-            detail: 'Terminate all active sessions',
+            detail: 'Not available yet',
             color: AppTheme.error,
-            onTap: () => _msg(context, 'All sessions terminated'),
+            comingSoon: true,
+            onTap: () => _msg(context, 'Logout All Sessions — coming soon'),
           ),
           _SecurityRow(
             icon: Icons.admin_panel_settings_rounded,
             label: 'Role-Based Permissions',
-            detail: 'Super Admin — Full access',
+            detail: 'Single Admin role — no sub-roles yet',
             color: AppTheme.purple,
-            onTap: () => _msg(context, 'Permissions panel'),
+            comingSoon: true,
+            onTap: () => _msg(context, 'Role-Based Permissions — coming soon'),
           ),
         ],
       ),
@@ -286,23 +383,26 @@ class AdminProfile extends StatelessWidget {
           _SecurityRow(
             icon: Icons.article_rounded,
             label: 'System Logs',
-            detail: '1,247 entries today',
+            detail: 'Not available yet',
             color: AppTheme.info,
-            onTap: () => _msg(context, 'System logs viewer'),
+            comingSoon: true,
+            onTap: () => _msg(context, 'System Logs — coming soon'),
           ),
           _SecurityRow(
             icon: Icons.history_edu_rounded,
             label: 'Audit History',
-            detail: 'Full activity audit trail',
+            detail: 'Now recording — viewer coming soon',
             color: AppTheme.purple,
-            onTap: () => _msg(context, 'Audit history'),
+            comingSoon: true,
+            onTap: () => _msg(context, 'Audit History viewer — coming soon'),
           ),
           _SecurityRow(
             icon: Icons.analytics_rounded,
             label: 'Admin Activity Tracking',
-            detail: '23 actions today',
+            detail: 'Not available yet',
             color: AppTheme.warning,
-            onTap: () => _msg(context, 'Activity tracking'),
+            comingSoon: true,
+            onTap: () => _msg(context, 'Activity Tracking — coming soon'),
           ),
         ],
       ),
@@ -468,10 +568,12 @@ class _OptionRow extends StatelessWidget {
   final IconData icon;
   final String label;
   final VoidCallback onTap;
+  final bool comingSoon;
   const _OptionRow({
     required this.icon,
     required this.label,
     required this.onTap,
+    this.comingSoon = false,
   });
   @override
   Widget build(BuildContext context) {
@@ -482,22 +584,33 @@ class _OptionRow extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         child: Row(
           children: [
-            Icon(icon, color: AppTheme.adminAccent, size: 22),
+            Icon(
+              icon,
+              color: comingSoon
+                  ? context.textTertiary
+                  : AppTheme.adminAccent,
+              size: 22,
+            ),
             const SizedBox(width: 14),
             Expanded(
               child: Text(
                 label,
                 style: TextStyle(
-                  color: context.textPrimary,
+                  color: comingSoon
+                      ? context.textTertiary
+                      : context.textPrimary,
                   fontSize: 14,
                   fontWeight: FontWeight.w500,
                 ),
               ),
             ),
-            Text(
-              '›',
-              style: TextStyle(color: context.textTertiary, fontSize: 20),
-            ),
+            if (comingSoon)
+              StatusBadge(label: 'Soon', color: context.textTertiary)
+            else
+              Text(
+                '›',
+                style: TextStyle(color: context.textTertiary, fontSize: 20),
+              ),
           ],
         ),
       ),
@@ -510,15 +623,18 @@ class _SecurityRow extends StatelessWidget {
   final String label, detail;
   final Color color;
   final VoidCallback onTap;
+  final bool comingSoon;
   const _SecurityRow({
     required this.icon,
     required this.label,
     required this.detail,
     required this.color,
     required this.onTap,
+    this.comingSoon = false,
   });
   @override
   Widget build(BuildContext context) {
+    final rowColor = comingSoon ? context.textTertiary : color;
     return GestureDetector(
       onTap: onTap,
       child: Padding(
@@ -526,13 +642,13 @@ class _SecurityRow extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.06),
+            color: rowColor.withValues(alpha: 0.06),
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: color.withValues(alpha: 0.12)),
+            border: Border.all(color: rowColor.withValues(alpha: 0.12)),
           ),
           child: Row(
             children: [
-              Icon(icon, color: color, size: 18),
+              Icon(icon, color: rowColor, size: 18),
               const SizedBox(width: 10),
               Expanded(
                 child: Column(
@@ -556,11 +672,14 @@ class _SecurityRow extends StatelessWidget {
                   ],
                 ),
               ),
-              Icon(
-                Icons.chevron_right_rounded,
-                color: context.textTertiary,
-                size: 20,
-              ),
+              if (comingSoon)
+                StatusBadge(label: 'Soon', color: context.textTertiary)
+              else
+                Icon(
+                  Icons.chevron_right_rounded,
+                  color: context.textTertiary,
+                  size: 20,
+                ),
             ],
           ),
         ),

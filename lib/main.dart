@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -7,23 +8,35 @@ import 'app/auth_service.dart';
 import 'theme/app_theme.dart';
 import 'theme/theme_provider.dart';
 
-void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
+void main() {
+  // A live Firestore permission error (e.g. a session whose admin role was
+  // revoked after login) was observed to terminate the whole app process on
+  // a real device instead of just failing the one screen — each screen's own
+  // stream `onError` handler should already catch this, but this is the last
+  // line of defense so a gap in any one of them can never take the app down.
+  runZonedGuarded(
+    () async {
+      WidgetsFlutterBinding.ensureInitialized();
 
-  // Initialize Firebase with graceful fallback for front-end-only mode
-  try {
-    await Firebase.initializeApp(
-      options: DefaultFirebaseOptions.currentPlatform,
-    );
-  } catch (e) {
-    debugPrint('Firebase initialization skipped (front-end mode): $e');
-  }
+      // Initialize Firebase with graceful fallback for front-end-only mode
+      try {
+        await Firebase.initializeApp(
+          options: DefaultFirebaseOptions.currentPlatform,
+        );
+      } catch (e) {
+        debugPrint('Firebase initialization skipped (front-end mode): $e');
+      }
 
-  // Preload auth and theme settings
-  await AuthService.instance.preload();
+      // Preload auth and theme settings
+      await AuthService.instance.preload();
 
-  SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
-  runApp(const TransitAdminApp());
+      SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+      runApp(const TransitAdminApp());
+    },
+    (error, stack) {
+      debugPrint('[UNCAUGHT] $error\n$stack');
+    },
+  );
 }
 
 class TransitAdminApp extends StatefulWidget {

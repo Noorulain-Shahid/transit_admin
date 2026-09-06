@@ -1,6 +1,7 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import '../../app/auth_service.dart';
 import '../../theme/app_theme.dart';
 import 'admin_dashboard.dart';
 import 'admin_student_management.dart';
@@ -52,7 +53,10 @@ class _AdminLayoutState extends State<AdminLayout> {
               const AdminDriverManagement(),
               AdminProfile(
                 onNavigate: _goToTab,
-                onLogout: () => context.go('/login'),
+                onLogout: () async {
+                  await AuthService.instance.signOut();
+                  if (context.mounted) context.go('/login');
+                },
               ),
             ],
           ),
