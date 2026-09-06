@@ -560,17 +560,31 @@ class _AdminStudentDetailState extends State<AdminStudentDetail>
     );
   }
 
-  Widget _buildAccessLogs(BuildContext context) {
-    final items = [
-      ('May 26', 'Access: Active (subscription valid)', AppTheme.success),
-      ('May 20', 'Access: Renewed after payment', AppTheme.info),
-      ('May 15', 'Access: Blocked (subscription expired)', AppTheme.error),
-    ];
-    return ListView(
+  /// Access/subscription events have no query wired up yet either — there is
+  /// no per-student event log for subscription changes in `transit_core`
+  /// today (only the current `subscriptionStatus` field, no history), so
+  /// `accessLogsList` is honestly empty rather than hardcoded. The
+  /// active/renewed/blocked color-coding is preserved on `_LogRow`, running
+  /// only over real entries once a real event log exists.
+  Widget _buildAccessLogs(BuildContext context, Student? s) {
+    if (s == null) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    final List<(String date, String status, Color color)> accessLogsList =
+        const [];
+
+    if (accessLogsList.isEmpty) {
+      return const _AccessLogsEmptyState();
+    }
+
+    return ListView.builder(
       padding: const EdgeInsets.only(top: 12),
-      children: items
-          .map((e) => _LogRow(date: e.$1, status: e.$2, color: e.$3))
-          .toList(),
+      itemCount: accessLogsList.length,
+      itemBuilder: (context, i) {
+        final entry = accessLogsList[i];
+        return _LogRow(date: entry.$1, status: entry.$2, color: entry.$3);
+      },
     );
   }
 }
@@ -817,6 +831,21 @@ class _MissedLogsEmptyState extends StatelessWidget {
       subtitle: hasDriver
           ? 'A driver is assigned, but no trips have been recorded yet.'
           : 'Ensure a driver is assigned to begin tracking trips.',
+    );
+  }
+}
+
+/// Access tab's empty state — no `hasDriver` distinction, since subscription
+/// events are unrelated to whether a driver is assigned.
+class _AccessLogsEmptyState extends StatelessWidget {
+  const _AccessLogsEmptyState();
+
+  @override
+  Widget build(BuildContext context) {
+    return const _NeumorphicEmptyState(
+      icon: Icons.verified_user_outlined,
+      title: 'No access or subscription events recorded for this student.',
+      subtitle: 'Events appear here once a subscription change is recorded.',
     );
   }
 }

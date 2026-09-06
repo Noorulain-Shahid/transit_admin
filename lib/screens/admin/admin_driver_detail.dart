@@ -585,7 +585,7 @@ class _AdminDriverDetailState extends State<AdminDriverDetail>
                     child: TabBarView(
                       controller: _tabCtrl,
                       children: [
-                        _buildTrips(context),
+                        _buildTrips(context, d),
                         _buildAttendance(context),
                         _buildSOS(context),
                         _buildEarnings(context),
@@ -619,18 +619,31 @@ class _AdminDriverDetailState extends State<AdminDriverDetail>
     return list;
   }
 
-  Widget _buildTrips(BuildContext context) {
-    final items = [
-      ('May 26', 'Route A — Completed (34 students)', AppTheme.success),
-      ('May 25', 'Route A — Completed (32 students)', AppTheme.success),
-      ('May 24', 'Route A — Delayed 8 min', AppTheme.warning),
-      ('May 23', 'Route A — Completed (35 students)', AppTheme.success),
-    ];
-    return ListView(
+  /// Real trip data has no query wired up yet — no `Trip` has ever been
+  /// recorded for any driver in this schema (live tracking/Phase 2 hasn't
+  /// started, see the mobile app's IMPLEMENTATION.md), so `driverTripsList`
+  /// is honestly empty rather than hardcoded. The completed/delayed
+  /// color-coding is preserved on `_LogRow`, running only over real entries
+  /// once a real query fills the list.
+  Widget _buildTrips(BuildContext context, Driver? d) {
+    if (d == null) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    final List<(String date, String status, Color color)> driverTripsList =
+        const [];
+
+    if (!d.isApproved || driverTripsList.isEmpty) {
+      return _DriverTripsEmptyState(isVerified: d.isApproved);
+    }
+
+    return ListView.builder(
       padding: const EdgeInsets.only(top: 12),
-      children: items
-          .map((e) => _LogRow(date: e.$1, status: e.$2, color: e.$3))
-          .toList(),
+      itemCount: driverTripsList.length,
+      itemBuilder: (context, i) {
+        final entry = driverTripsList[i];
+        return _LogRow(date: entry.$1, status: entry.$2, color: entry.$3);
+      },
     );
   }
 
@@ -955,6 +968,80 @@ class _ActionBtn extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Shared neumorphic shell (soft, elevated card — two opposing shadows
+/// rather than this app's usual glassmorphic `GlassCard`) for a tab's empty
+/// state, matching the pattern used on `admin_student_detail.dart`.
+class _NeumorphicEmptyState extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  const _NeumorphicEmptyState({required this.icon, required this.title});
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = context.isDark;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 20),
+        decoration: BoxDecoration(
+          color: context.cardBg,
+          borderRadius: BorderRadius.circular(18),
+          boxShadow: [
+            BoxShadow(
+              color: isDark
+                  ? Colors.black.withValues(alpha: 0.45)
+                  : const Color(0xFFB8BEC8).withValues(alpha: 0.6),
+              offset: const Offset(6, 6),
+              blurRadius: 12,
+            ),
+            BoxShadow(
+              color: isDark
+                  ? Colors.white.withValues(alpha: 0.04)
+                  : Colors.white.withValues(alpha: 0.9),
+              offset: const Offset(-6, -6),
+              blurRadius: 12,
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 36, color: context.textTertiary),
+            const SizedBox(height: 12),
+            Text(
+              title,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: context.textSecondary,
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Trip History tab's empty state — distinguishes an unverified driver (the
+/// far more common reason a new account has no trips) from a verified driver
+/// who simply hasn't run one yet.
+class _DriverTripsEmptyState extends StatelessWidget {
+  final bool isVerified;
+  const _DriverTripsEmptyState({required this.isVerified});
+
+  @override
+  Widget build(BuildContext context) {
+    return _NeumorphicEmptyState(
+      icon: Icons.directions_car_outlined,
+      title: isVerified
+          ? 'No trips recorded for this driver yet.'
+          : 'No trips available. Driver is pending verification.',
     );
   }
 }

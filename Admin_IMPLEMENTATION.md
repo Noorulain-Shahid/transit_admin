@@ -7,7 +7,7 @@
 > - [`README.md`](README.md) — architecture, schema, screen docs (mobile app)
 > - [`../../transit_admin/README.md`](../../transit_admin/README.md) — admin app
 >
-> **Last updated:** 2026-09-06
+> **Last updated:** 2026-09-06 (later)
 
 ---
 
@@ -233,11 +233,12 @@ no per-parent billing concept, and a fake billing panel wired to nothing would
 have been worse than no panel. A real payment view would read the `payments`
 collection instead; not built here. The history tabs on the driver/student
 detail screens (Trip/Attendance/SOS/Earnings/Missed/Access) were originally
-illustrative mock rows; **as of 2026-09-06**, the student detail screen's
-Attendance, Trip History, and Missed Logs tabs no longer show hardcoded rows —
-see the 2026-09-06 changelog entry. Access (on student) and all four driver-side
-tabs (Trip/SOS/Earnings/Missed) are still mock — no trip/attendance data source
-is wired into either app's admin view yet regardless.
+illustrative mock rows; **as of 2026-09-06**, all four tabs on the student
+detail screen (Attendance, Trip History, Missed Logs, Access) and the Trip
+History tab on the driver detail screen no longer show hardcoded rows — see
+the 2026-09-06 changelog entries. The remaining three driver-side tabs
+(Attendance/SOS/Earnings) are still mock — no trip/attendance data source is
+wired into either app's admin view yet regardless.
 
 **Verified:** `flutter analyze` — zero errors in `transit_core`, `transit_pro`
 (4 pre-existing infos, unchanged), and `transit_admin`. **Not verified: real
@@ -723,6 +724,72 @@ its note above — pick a real id whenever you're ready and it can be redone.
 ---
 
 ## 📝 Changelog
+
+### 2026-09-06 (even later) — honest empty state for the Trip History tab on the driver detail screen (transit_admin)
+
+Same request pattern, moved to the driver side: `_buildTrips` in
+`admin_driver_detail.dart` unconditionally rendered four hardcoded rows
+("Route A — Completed (34 students)", "Route A — Delayed 8 min", etc.) for
+every driver, including brand-new, unverified accounts with zero recorded
+trips.
+
+**Fix.** `_buildTrips` now takes the live `Driver?` (already in scope at the
+call site via the screen's existing `StreamBuilder<Driver?>`) and checks
+`!d.isApproved || driverTripsList.isEmpty` (`driverTripsList` hardcoded
+`const []` — same "no `Trip` has ever been recorded" situation as the student
+screen's tabs) before rendering a new `_DriverTripsEmptyState`. `isApproved`
+is a real, pre-existing `transit_core` `Driver` getter (`false` while
+`status` is `pendingVerification` or `suspended`) — no new field invented,
+matching the task's "isVerified" concept exactly. The empty state shows one
+of two messages depending on which condition tripped: "No trips available.
+Driver is pending verification." for an unverified driver (the more likely
+reason a new account has nothing), or "No trips recorded for this driver
+yet." for a verified one who simply hasn't driven yet. When real entries
+exist, a `ListView.builder` renders them via the existing `_LogRow`,
+preserving the completed (green) / delayed (orange) color-coding unchanged.
+
+Introduced a `_NeumorphicEmptyState` shell local to this file (same two-
+opposing-`BoxShadow` recipe as `admin_student_detail.dart`'s version, not
+shared across files since the two screens have no common widget module to
+put it in) plus `_DriverTripsEmptyState` on top of it.
+
+`flutter analyze lib/screens/admin/admin_driver_detail.dart` (transit_admin):
+**No issues found!**
+
+Not touched this pass: the driver detail screen's other three tabs
+(Attendance, SOS History, Earnings) still show hardcoded rows — out of scope
+for this request.
+
+### 2026-09-06 (later) — honest empty state for the Access tab on the student detail screen (transit_admin)
+
+Same request, applied to the fourth and last tab on this screen:
+`_buildAccessLogs` in `admin_student_detail.dart` unconditionally rendered
+three hardcoded rows ("Access: Active (subscription valid)", "Renewed after
+payment", "Blocked (subscription expired)") for every student regardless of
+whether any subscription event had actually happened.
+
+**Fix, same shape as the other three tabs.** `_buildAccessLogs` now takes the
+live `Student?` and checks `accessLogsList.isEmpty` (hardcoded `const []` for
+now — no per-student subscription/access *event* log exists in `transit_core`
+today, only the current-state `subscriptionStatus` field, no history of past
+changes) before rendering a new `_AccessLogsEmptyState` — built on the same
+shared `_NeumorphicEmptyState` shell as the other three tabs, with
+`Icons.verified_user_outlined` and "No access or subscription events recorded
+for this student." Unlike the other three, this one does **not** branch on
+`hasDriver` — subscription/access status is unrelated to whether a driver is
+assigned, so that distinction doesn't apply here. When real entries exist, a
+`ListView.builder` renders them via the existing `_LogRow`, preserving the
+active (green) / renewed (blue) / blocked-or-expired (red) color-coding
+unchanged.
+
+`flutter analyze lib/screens/admin/admin_student_detail.dart` (transit_admin):
+**No issues found!**
+
+All four tabs on this screen (Attendance, Trip History, Missed Logs, Access)
+now correctly show an honest empty state instead of fake rows; wiring each to
+a real data source (a `trips`/`attendance` collection-group query, and a real
+subscription-event log respectively) remains future work once those data
+sources exist — see Phase 2 above and the note against P1c.
 
 ### 2026-09-06 — honest empty states for Attendance, Trip History, and Missed Logs on the student detail screen (transit_admin)
 
