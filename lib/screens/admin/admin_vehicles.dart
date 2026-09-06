@@ -93,7 +93,7 @@ class _AdminVehiclesState extends State<AdminVehicles> {
             child: Column(
               children: [
                 // ── Header ──────────────────────────────────────
-                _Header(title: 'Fleet Management', onBack: widget.onBack),
+                _Header(title: 'Vehicle Management', onBack: widget.onBack),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: Column(

@@ -7,7 +7,7 @@
 > - [`README.md`](README.md) — architecture, schema, screen docs (mobile app)
 > - [`../../transit_admin/README.md`](../../transit_admin/README.md) — admin app
 >
-> **Last updated:** 2026-09-06 (fleet redesign)
+> **Last updated:** 2026-09-06 (fleet heading rename)
 
 ---
 
@@ -725,6 +725,17 @@ its note above — pick a real id whenever you're ready and it can be redone.
 ---
 
 ## 📝 Changelog
+
+### 2026-09-06 (fleet heading rename) — "Fleet Management" → "Vehicle Management" heading text (transit_admin)
+
+One-line copy change: `admin_vehicles.dart`'s `_Header(title: 'Fleet Management', ...)`
+call → `_Header(title: 'Vehicle Management', ...)`, to match the app's
+naming conventions elsewhere. `_Header`'s own `Text` widget (font size 20,
+weight 800, `context.textPrimary`) is unchanged — `title` is just the string
+it renders, so no styling touched.
+
+`flutter analyze lib/screens/admin/admin_vehicles.dart` (transit_admin):
+**No issues found!**
 
 ### 2026-09-06 (fleet redesign) — fixed missing-Material root cause + visual redesign of the Fleet/Vehicle Management screen (transit_admin)
 
