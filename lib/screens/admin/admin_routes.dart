@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:transit_core/transit_core.dart';
+import '../../app/locale_provider.dart';
 import '../../data/admin_repository.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/glass_card.dart';
@@ -42,10 +43,14 @@ class _AdminRoutesState extends State<AdminRoutes> {
       (v) => setState(() => _buses = v),
       onError: (e) => debugPrint('[AdminRoutes] buses stream error: $e'),
     );
+    LocaleProvider.instance.addListener(_onLangChanged);
   }
+
+  void _onLangChanged() => setState(() {});
 
   @override
   void dispose() {
+    LocaleProvider.instance.removeListener(_onLangChanged);
     _routesSub?.cancel();
     _busesSub?.cancel();
     super.dispose();
@@ -76,7 +81,10 @@ class _AdminRoutesState extends State<AdminRoutes> {
             padding: const EdgeInsets.only(bottom: 100),
             child: Column(
               children: [
-                _Header(title: 'Route Management', onBack: widget.onBack),
+                _Header(
+                  title: AppStrings.t('route_management'),
+                  onBack: widget.onBack,
+                ),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: Column(
@@ -86,21 +94,21 @@ class _AdminRoutesState extends State<AdminRoutes> {
                         children: [
                           _MiniStat(
                             icon: Icons.map_rounded,
-                            label: 'Total Routes',
+                            label: AppStrings.t('total_routes_lbl'),
                             value: loading ? '…' : '${routes.length}',
                             color: AppTheme.adminEmerald,
                           ),
                           const SizedBox(width: 10),
                           _MiniStat(
                             icon: Icons.check_circle_rounded,
-                            label: 'Active',
+                            label: AppStrings.t('active_lbl'),
                             value: loading ? '…' : '$activeCount',
                             color: AppTheme.success,
                           ),
                           const SizedBox(width: 10),
                           _MiniStat(
                             icon: Icons.location_on_rounded,
-                            label: 'Stops',
+                            label: AppStrings.t('stops_lbl'),
                             value: loading ? '…' : '$totalStops',
                             color: AppTheme.info,
                           ),
@@ -411,7 +419,7 @@ class _EmptyState extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           Text(
-            'No routes have been created yet.',
+            AppStrings.t('no_routes_created'),
             textAlign: TextAlign.center,
             style: TextStyle(color: context.textTertiary, fontSize: 16),
           ),
@@ -433,7 +441,7 @@ class _EmptyState extends StatelessWidget {
                   ),
                   const SizedBox(width: 8),
                   Text(
-                    'Create Route',
+                    AppStrings.t('create_route_action'),
                     style: TextStyle(
                       color: AppTheme.adminAccent,
                       fontSize: 14,

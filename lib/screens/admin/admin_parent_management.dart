@@ -1,9 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:transit_core/transit_core.dart';
+import '../../app/locale_provider.dart';
 import '../../data/admin_repository.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/glass_card.dart';
+
+// Urdu doesn't inflect for count the way English's child/children does, but
+// "1 بچہ" (1 child) still reads oddly with the plain plural, so this keeps
+// the same singular/plural branch the English string had, translated.
+String _childrenLabel(int count) =>
+    '$count ${count == 1 ? AppStrings.t('child_singular') : AppStrings.t('children_plural')}';
 
 class AdminParentManagement extends StatefulWidget {
   const AdminParentManagement({super.key});
@@ -13,6 +20,20 @@ class AdminParentManagement extends StatefulWidget {
 
 class _AdminParentManagementState extends State<AdminParentManagement> {
   String _search = '';
+
+  @override
+  void initState() {
+    super.initState();
+    LocaleProvider.instance.addListener(_onLangChanged);
+  }
+
+  void _onLangChanged() => setState(() {});
+
+  @override
+  void dispose() {
+    LocaleProvider.instance.removeListener(_onLangChanged);
+    super.dispose();
+  }
 
   List<AppUser> _filtered(List<AppUser> parents) => parents
       .where(
@@ -117,7 +138,7 @@ class _AdminParentManagementState extends State<AdminParentManagement> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Parent Management',
+                  AppStrings.t('parent_management'),
                   style: TextStyle(
                     color: context.textPrimary,
                     fontSize: 20,
@@ -126,7 +147,9 @@ class _AdminParentManagementState extends State<AdminParentManagement> {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  '$total parents registered',
+                  AppStrings.t(
+                    'parents_registered',
+                  ).replaceFirst('{count}', '$total'),
                   style: TextStyle(color: context.textSecondary, fontSize: 13),
                 ),
               ],
@@ -144,7 +167,7 @@ class _AdminParentManagementState extends State<AdminParentManagement> {
         onChanged: (v) => setState(() => _search = v),
         style: TextStyle(color: context.textPrimary, fontSize: 14),
         decoration: InputDecoration(
-          hintText: 'Search parents...',
+          hintText: AppStrings.t('search_parents_hint'),
           prefixIcon: Icon(Icons.search_rounded, color: context.textTertiary),
           border: InputBorder.none,
           enabledBorder: InputBorder.none,
@@ -163,21 +186,21 @@ class _AdminParentManagementState extends State<AdminParentManagement> {
       children: [
         _MiniStat(
           icon: Icons.people_rounded,
-          label: 'Total',
+          label: AppStrings.t('total_lbl'),
           value: '${parents.length}',
           color: AppTheme.parentPurple,
         ),
         const SizedBox(width: 8),
         _MiniStat(
           icon: Icons.check_circle_rounded,
-          label: 'Active',
+          label: AppStrings.t('active_lbl'),
           value: '${parents.where((p) => p.isActive).length}',
           color: AppTheme.success,
         ),
         const SizedBox(width: 8),
         _MiniStat(
           icon: Icons.pause_circle_rounded,
-          label: 'Inactive',
+          label: AppStrings.t('inactive_status'),
           value: '${parents.where((p) => !p.isActive).length}',
           color: AppTheme.error,
         ),
@@ -268,13 +291,14 @@ class _ParentCard extends StatelessWidget {
           Row(
             children: [
               StatusBadge(
-                label:
-                    '${children.length} ${children.length == 1 ? 'child' : 'children'}',
+                label: _childrenLabel(children.length),
                 color: AppTheme.parentPurple,
               ),
               const SizedBox(width: 6),
               StatusBadge(
-                label: parent.isActive ? 'Active' : 'Inactive',
+                label: parent.isActive
+                    ? AppStrings.t('active_lbl')
+                    : AppStrings.t('inactive_status'),
                 color: parent.isActive ? AppTheme.success : AppTheme.error,
               ),
               const Spacer(),

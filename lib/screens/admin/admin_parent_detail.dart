@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:transit_core/transit_core.dart';
+import '../../app/locale_provider.dart';
 import '../../data/admin_repository.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/glass_card.dart';
@@ -22,7 +23,16 @@ class _AdminParentDetailState extends State<AdminParentDetail> {
   bool _saving = false;
 
   @override
+  void initState() {
+    super.initState();
+    LocaleProvider.instance.addListener(_onLangChanged);
+  }
+
+  void _onLangChanged() => setState(() {});
+
+  @override
   void dispose() {
+    LocaleProvider.instance.removeListener(_onLangChanged);
     _nameCtrl.dispose();
     _phoneCtrl.dispose();
     _emailCtrl.dispose();
@@ -91,6 +101,15 @@ class _AdminParentDetailState extends State<AdminParentDetail> {
 
   void _msg(String m) =>
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
+
+  // Only the two known institute-type values are translated — any other
+  // grade value (e.g. a school grade like "Grade 5") passes through
+  // untouched, same fallback rule used by Student Management's mapper.
+  String _childTypeLabel(String grade) => switch (grade) {
+    'University' => AppStrings.t('university_type'),
+    'College' => AppStrings.t('college_type'),
+    _ => grade,
+  };
 
   @override
   Widget build(BuildContext context) {
@@ -169,7 +188,7 @@ class _AdminParentDetailState extends State<AdminParentDetail> {
           const SizedBox(width: 14),
           Expanded(
             child: Text(
-              'Parent Detail',
+              AppStrings.t('parent_detail_title'),
               style: TextStyle(
                 color: context.textPrimary,
                 fontSize: 20,
@@ -219,7 +238,9 @@ class _AdminParentDetailState extends State<AdminParentDetail> {
                     ),
                     const SizedBox(height: 6),
                     StatusBadge(
-                      label: p.isActive ? 'Active' : 'Inactive',
+                      label: p.isActive
+                          ? AppStrings.t('active_lbl')
+                          : AppStrings.t('inactive_status'),
                       color: p.isActive ? AppTheme.success : AppTheme.error,
                     ),
                   ],
@@ -234,17 +255,25 @@ class _AdminParentDetailState extends State<AdminParentDetail> {
           ),
           const SizedBox(height: 14),
           if (_editing) ...[
-            _EditField(label: 'Name', controller: _nameCtrl),
+            _EditField(label: AppStrings.t('name_lbl'), controller: _nameCtrl),
             const SizedBox(height: 8),
-            _EditField(label: 'Phone', controller: _phoneCtrl),
+            _EditField(
+              label: AppStrings.t('phone_lbl'),
+              controller: _phoneCtrl,
+              textDirection: TextDirection.ltr,
+            ),
             const SizedBox(height: 8),
-            _EditField(label: 'Email', controller: _emailCtrl),
+            _EditField(
+              label: AppStrings.t('email_lbl'),
+              controller: _emailCtrl,
+              textDirection: TextDirection.ltr,
+            ),
             const SizedBox(height: 12),
             Row(
               children: [
                 Expanded(
                   child: _ActionBtn(
-                    label: 'Cancel',
+                    label: AppStrings.t('cancel_action'),
                     color: AppTheme.error,
                     icon: Icons.close_rounded,
                     onTap: _saving
@@ -255,7 +284,9 @@ class _AdminParentDetailState extends State<AdminParentDetail> {
                 const SizedBox(width: 8),
                 Expanded(
                   child: _ActionBtn(
-                    label: _saving ? 'Saving…' : 'Save',
+                    label: _saving
+                        ? AppStrings.t('saving_action')
+                        : AppStrings.t('save_action'),
                     color: AppTheme.success,
                     icon: Icons.check_rounded,
                     onTap: _saving ? null : () => _save(p),
@@ -266,12 +297,12 @@ class _AdminParentDetailState extends State<AdminParentDetail> {
           ] else ...[
             _DetailRow(
               icon: Icons.phone_rounded,
-              label: 'Phone',
+              label: AppStrings.t('phone_lbl'),
               value: p.phone.isEmpty ? '—' : p.phone,
             ),
             _DetailRow(
               icon: Icons.email_rounded,
-              label: 'Email',
+              label: AppStrings.t('email_lbl'),
               value: p.email.isEmpty ? '—' : p.email,
             ),
           ],
@@ -295,7 +326,7 @@ class _AdminParentDetailState extends State<AdminParentDetail> {
               ),
               const SizedBox(width: 8),
               Text(
-                'Children',
+                AppStrings.t('children_section_title'),
                 style: TextStyle(
                   color: context.textPrimary,
                   fontSize: 15,
@@ -379,7 +410,21 @@ class _AdminParentDetailState extends State<AdminParentDetail> {
                                       ),
                                       const SizedBox(height: 2),
                                       Text(
-                                        '${child.grade} • ${child.school}',
+                                        // '{type} • {name}' — only the known
+                                        // grade/type values are translated
+                                        // (mirrors _instituteTypeLabel on
+                                        // Student Management); the school
+                                        // name is a proper noun and is never
+                                        // translated. Under RTL, the neutral
+                                        // '•' between an Urdu word (کالج)
+                                        // and a Latin run scrambles because
+                                        // it has no strong-direction anchor
+                                        // of its own — isolateLtr() wraps
+                                        // the Latin run in Unicode First
+                                        // Strong Isolate marks so it (and
+                                        // the '•' beside it) resolve in the
+                                        // correct logical order.
+                                        '${_childTypeLabel(child.grade)} • ${AppStrings.isolateLtr(child.school)}',
                                         style: TextStyle(
                                           color: context.textSecondary,
                                           fontSize: 11,
@@ -414,7 +459,7 @@ class _AdminParentDetailState extends State<AdminParentDetail> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Controls',
+            AppStrings.t('controls_title'),
             style: TextStyle(
               color: context.textPrimary,
               fontSize: 15,
@@ -426,7 +471,9 @@ class _AdminParentDetailState extends State<AdminParentDetail> {
             children: [
               Expanded(
                 child: _ActionBtn(
-                  label: p.isActive ? 'Deactivate' : 'Activate',
+                  label: p.isActive
+                      ? AppStrings.t('deactivate_action')
+                      : 'Activate', // not requested this pass
                   color: p.isActive ? AppTheme.error : AppTheme.success,
                   icon: p.isActive
                       ? Icons.block_rounded
@@ -437,7 +484,7 @@ class _AdminParentDetailState extends State<AdminParentDetail> {
               const SizedBox(width: 8),
               Expanded(
                 child: _ActionBtn(
-                  label: 'Message',
+                  label: AppStrings.t('message_action'),
                   color: AppTheme.parentPurple,
                   icon: Icons.chat_bubble_rounded,
                   onTap: () => _message(p),
@@ -455,11 +502,21 @@ class _AdminParentDetailState extends State<AdminParentDetail> {
 class _EditField extends StatelessWidget {
   final String label;
   final TextEditingController controller;
-  const _EditField({required this.label, required this.controller});
+  // Email/Phone must stay LTR even under the Urdu/RTL locale so the admin
+  // can type the value naturally (digits, '@', '.') without it reordering
+  // mid-keystroke; left null for fields like Name that should follow the
+  // ambient (possibly RTL) directionality.
+  final TextDirection? textDirection;
+  const _EditField({
+    required this.label,
+    required this.controller,
+    this.textDirection,
+  });
   @override
   Widget build(BuildContext context) {
     return TextField(
       controller: controller,
+      textDirection: textDirection,
       style: TextStyle(color: context.textPrimary, fontSize: 14),
       decoration: InputDecoration(labelText: label),
     );

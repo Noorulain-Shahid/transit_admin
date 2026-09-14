@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:transit_core/transit_core.dart';
 import '../../app/auth_service.dart';
+import '../../app/locale_provider.dart';
 import '../../data/admin_repository.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/glass_card.dart';
@@ -107,7 +108,10 @@ class _AdminDashboardState extends State<AdminDashboard> {
           onError: (e) => _onStreamError('Payments', e),
         );
     _loadHistoricalStats();
+    LocaleProvider.instance.addListener(_onLangChanged);
   }
+
+  void _onLangChanged() => setState(() {});
 
   Future<void> _loadHistoricalStats() async {
     try {
@@ -152,6 +156,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
     _driversSub?.cancel();
     _tripsSub?.cancel();
     _paymentsSub?.cancel();
+    LocaleProvider.instance.removeListener(_onLangChanged);
     super.dispose();
   }
 
@@ -213,7 +218,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'Command Center',
+                  AppStrings.t('command_center'),
                   style: TextStyle(
                     color: context.textPrimary,
                     fontSize: 22,
@@ -233,7 +238,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                     ),
                     const SizedBox(width: 6),
                     Text(
-                      'System Online • Real-time',
+                      AppStrings.t('system_online_realtime'),
                       style: TextStyle(
                         color: AppTheme.success,
                         fontSize: 11,
@@ -347,37 +352,37 @@ class _AdminDashboardState extends State<AdminDashboard> {
           children: [
             _StatCard(
               icon: Icons.school_rounded,
-              label: 'Students',
+              label: AppStrings.t('students_lbl'),
               value: _fmtCount(studentCount),
               color: AppTheme.studentAmber,
             ),
             _StatCard(
               icon: Icons.family_restroom_rounded,
-              label: 'Parents',
+              label: AppStrings.t('parents_lbl'),
               value: _fmtCount(parentCount),
               color: AppTheme.parentPurple,
             ),
             _StatCard(
               icon: Icons.directions_bus_rounded,
-              label: 'Drivers',
+              label: AppStrings.t('drivers_lbl'),
               value: _fmtCount(driverCount),
               color: AppTheme.driverCyan,
             ),
             _StatCard(
               icon: Icons.navigation_rounded,
-              label: 'Active Trips',
+              label: AppStrings.t('active_trips_lbl'),
               value: _fmtCount(activeTrips),
               color: AppTheme.adminEmerald,
             ),
             _StatCard(
               icon: Icons.wifi_tethering_rounded,
-              label: 'Online',
+              label: AppStrings.t('online_status'),
               value: _fmtCount(online),
               color: AppTheme.success,
             ),
             _StatCard(
               icon: Icons.pending_actions_rounded,
-              label: 'Pending',
+              label: AppStrings.t('pending_lbl'),
               value: _fmtCount(pending),
               color: AppTheme.warning,
             ),
@@ -389,9 +394,11 @@ class _AdminDashboardState extends State<AdminDashboard> {
             Expanded(
               child: _WideStatCard(
                 icon: Icons.check_circle_rounded,
-                label: 'Active Subs',
+                label: AppStrings.t('active_subs_lbl'),
                 value: _fmtCount(activeSubs),
-                sub: 'of ${_fmtCount(studentCount)} students',
+                sub: AppStrings.t(
+                  'active_subs_sub',
+                ).replaceFirst('{count}', _fmtCount(studentCount)),
                 color: AppTheme.success,
               ),
             ),
@@ -399,9 +406,9 @@ class _AdminDashboardState extends State<AdminDashboard> {
             Expanded(
               child: _WideStatCard(
                 icon: Icons.cancel_rounded,
-                label: 'Expired',
+                label: AppStrings.t('expired_status'),
                 value: _fmtCount(expiredSubs),
-                sub: 'this billing cycle',
+                sub: AppStrings.t('expired_sub_cycle'),
                 color: AppTheme.error,
               ),
             ),
@@ -409,9 +416,9 @@ class _AdminDashboardState extends State<AdminDashboard> {
             Expanded(
               child: _WideStatCard(
                 icon: Icons.attach_money_rounded,
-                label: 'Revenue (MTD)',
+                label: AppStrings.t('revenue_mtd_lbl'),
                 value: mrrPaisa == null ? '…' : _fmtPaisa(mrrPaisa),
-                sub: 'this month, collected',
+                sub: AppStrings.t('revenue_mtd_sub'),
                 color: AppTheme.info,
               ),
             ),
@@ -472,7 +479,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Subscription Analytics',
+            AppStrings.t('subscription_analytics'),
             style: TextStyle(
               color: context.textPrimary,
               fontSize: 15,
@@ -482,28 +489,28 @@ class _AdminDashboardState extends State<AdminDashboard> {
           const SizedBox(height: 16),
           // Progress bars
           _SubAnalyticBar(
-            label: 'Active',
+            label: AppStrings.t('active_lbl'),
             count: active,
             total: barTotal,
             color: AppTheme.success,
           ),
           const SizedBox(height: 8),
           _SubAnalyticBar(
-            label: 'Expired',
+            label: AppStrings.t('expired_status'),
             count: expired,
             total: barTotal,
             color: AppTheme.error,
           ),
           const SizedBox(height: 8),
           _SubAnalyticBar(
-            label: 'Trial',
+            label: AppStrings.t('trial_status'),
             count: trial,
             total: barTotal,
             color: AppTheme.info,
           ),
           const SizedBox(height: 16),
           Text(
-            'Monthly Revenue',
+            AppStrings.t('monthly_revenue'),
             style: TextStyle(color: context.textSecondary, fontSize: 12),
           ),
           const SizedBox(height: 8),
@@ -531,7 +538,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
             children: [
               Expanded(
                 child: _RateCard(
-                  label: 'Payment\nSuccess',
+                  label: AppStrings.t('payment_success'),
                   pct: successPct,
                   color: AppTheme.success,
                 ),
@@ -539,7 +546,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
               const SizedBox(width: 10),
               Expanded(
                 child: _RateCard(
-                  label: 'Payment\nFailure',
+                  label: AppStrings.t('payment_failure'),
                   pct: failurePct,
                   color: AppTheme.error,
                 ),
@@ -547,7 +554,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
               const SizedBox(width: 10),
               Expanded(
                 child: _RateCard(
-                  label: 'Renewal\nRate',
+                  label: AppStrings.t('renewal_rate'),
                   pct: null,
                   color: AppTheme.info,
                 ),
@@ -634,7 +641,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
               ),
               const SizedBox(width: 10),
               Text(
-                'Alerts',
+                AppStrings.t('alerts_title'),
                 style: TextStyle(
                   color: context.textPrimary,
                   fontSize: 15,
@@ -643,7 +650,9 @@ class _AdminDashboardState extends State<AdminDashboard> {
               ),
               const Spacer(),
               StatusBadge(
-                label: alerts.isEmpty ? 'All clear' : '${alerts.length} Active',
+                label: alerts.isEmpty
+                    ? AppStrings.t('all_clear')
+                    : '${alerts.length} Active', // not in the requested term list
                 color: alerts.isEmpty ? AppTheme.success : AppTheme.error,
               ),
             ],
@@ -651,7 +660,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
           const SizedBox(height: 12),
           if (alerts.isEmpty)
             Text(
-              'No overdue payments or lapsed subscriptions right now.',
+              AppStrings.t('no_overdue_alerts_desc'),
               style: TextStyle(color: context.textSecondary, fontSize: 12),
             )
           else
@@ -677,7 +686,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Analytics',
+            AppStrings.t('analytics_title'),
             style: TextStyle(
               color: context.textPrimary,
               fontSize: 15,
@@ -700,7 +709,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Daily Trips',
+                        AppStrings.t('daily_trips_lbl'),
                         style: TextStyle(
                           color: context.textSecondary,
                           fontSize: 11,
@@ -708,7 +717,9 @@ class _AdminDashboardState extends State<AdminDashboard> {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        '${dailyTrips.values.last} completed',
+                        AppStrings.t(
+                          'trips_completed_count',
+                        ).replaceFirst('{count}', '${dailyTrips.values.last}'),
                         style: TextStyle(
                           color: context.textPrimary,
                           fontSize: 14,
@@ -732,7 +743,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Attendance Rate',
+                        AppStrings.t('attendance_rate_lbl'),
                         style: TextStyle(
                           color: context.textSecondary,
                           fontSize: 11,

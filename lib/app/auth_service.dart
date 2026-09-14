@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:transit_core/transit_core.dart';
 import '../theme/theme_provider.dart';
+import 'locale_provider.dart';
 
 /// Thrown by [AuthService.signInWithEmail] when the credentials are valid but
 /// the account isn't an admin — kept separate from [FirebaseAuthException] so
@@ -24,6 +25,7 @@ class AuthService {
 
   static const _roleKey = 'logged_in_role';
   static const _themeKey = 'theme_is_dark';
+  static const _localeKey = 'locale_code';
 
   // A getter, not a field — main.dart deliberately swallows a failed
   // Firebase.initializeApp() to keep running in "front-end mode" (see its
@@ -62,7 +64,8 @@ class AuthService {
     }
   }
 
-  /// Must be called in main() before runApp(). Loads role + theme into memory.
+  /// Must be called in main() before runApp(). Loads role + theme + locale
+  /// into memory.
   Future<void> preload() async {
     final prefs = await SharedPreferences.getInstance();
     _cachedRole = prefs.getString(_roleKey);
@@ -70,6 +73,16 @@ class AuthService {
     if (isDark != null) {
       ThemeProvider.instance.setMode(isDark ? ThemeMode.dark : ThemeMode.light);
     }
+    final localeCode = prefs.getString(_localeKey);
+    if (localeCode != null) {
+      LocaleProvider.instance.setLocale(Locale(localeCode));
+    }
+  }
+
+  /// Call whenever the user picks a language on the Profile screen.
+  Future<void> saveLocale(Locale locale) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_localeKey, locale.languageCode);
   }
 
   /// Returns true if sign-in succeeded (Firebase or front-end mode).

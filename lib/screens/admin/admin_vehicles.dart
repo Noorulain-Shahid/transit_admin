@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:transit_core/transit_core.dart';
+import '../../app/locale_provider.dart';
 import '../../data/admin_repository.dart';
 import '../../theme/app_theme.dart';
 
@@ -38,22 +39,28 @@ class _AdminVehiclesState extends State<AdminVehicles> {
       (v) => setState(() => _drivers = v),
       onError: (e) => debugPrint('[AdminVehicles] drivers stream error: $e'),
     );
+    LocaleProvider.instance.addListener(_onLangChanged);
   }
+
+  void _onLangChanged() => setState(() {});
 
   @override
   void dispose() {
     _busesSub?.cancel();
     _routesSub?.cancel();
     _driversSub?.cancel();
+    LocaleProvider.instance.removeListener(_onLangChanged);
     super.dispose();
   }
 
   String _routeNameFor(String? routeId) {
-    if (routeId == null) return 'Unassigned route';
+    if (routeId == null) return AppStrings.t('unassigned_route');
     final match = (_routes ?? const <BusRoute>[]).where(
       (r) => r.id == routeId,
     );
-    return match.isEmpty ? 'Unassigned route' : match.first.name;
+    return match.isEmpty
+        ? AppStrings.t('unassigned_route')
+        : match.first.name;
   }
 
   String _driverNameFor(String? driverId) {
@@ -65,12 +72,15 @@ class _AdminVehiclesState extends State<AdminVehicles> {
   }
 
   (String, Color) _healthOf(Bus bus) {
+    // Only 'Good' was in this task's requested term list — the other three
+    // health labels ('Critical'/'Warning'/'Out of Service') stay hardcoded
+    // English for now rather than inventing keys nobody asked for.
     if (bus.needsMaintenance) return ('Critical', AppTheme.error);
     if (bus.needsInsuranceRenewal) return ('Warning', AppTheme.warning);
     if (bus.status == VehicleStatus.outOfService) {
       return ('Out of Service', AppTheme.error);
     }
-    return ('Good', AppTheme.success);
+    return (AppStrings.t('good_status'), AppTheme.success);
   }
 
   @override
@@ -93,7 +103,10 @@ class _AdminVehiclesState extends State<AdminVehicles> {
             child: Column(
               children: [
                 // ── Header ──────────────────────────────────────
-                _Header(title: 'Vehicle Management', onBack: widget.onBack),
+                _Header(
+                  title: AppStrings.t('vehicle_management'),
+                  onBack: widget.onBack,
+                ),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: Column(
@@ -103,21 +116,21 @@ class _AdminVehiclesState extends State<AdminVehicles> {
                         children: [
                           _MiniStat(
                             icon: Icons.directions_bus_rounded,
-                            label: 'Total',
+                            label: AppStrings.t('total_lbl'),
                             value: loading ? '…' : '${buses.length}',
                             color: AppTheme.adminEmerald,
                           ),
                           const SizedBox(width: 10),
                           _MiniStat(
                             icon: Icons.check_circle_rounded,
-                            label: 'Active',
+                            label: AppStrings.t('active_lbl'),
                             value: loading ? '…' : '$activeCount',
                             color: AppTheme.success,
                           ),
                           const SizedBox(width: 10),
                           _MiniStat(
                             icon: Icons.build_circle_rounded,
-                            label: 'Service',
+                            label: AppStrings.t('service_lbl'),
                             value: loading ? '…' : '$serviceCount',
                             color: AppTheme.warning,
                           ),
@@ -213,7 +226,24 @@ class _AdminVehiclesState extends State<AdminVehicles> {
                                               overflow: TextOverflow.ellipsis,
                                             ),
                                             Text(
-                                              'Driver: ${_driverNameFor(bus.driverId)}',
+                                              // The driver's name is a proper
+                                              // noun (often Latin script) —
+                                              // isolateLtr() keeps it a
+                                              // self-contained LTR unit so it
+                                              // doesn't scramble against the
+                                              // Urdu label/colon under RTL,
+                                              // same fix used for the child
+                                              // subtitle on Parent Detail.
+                                              AppStrings.t(
+                                                'driver_prefix',
+                                              ).replaceFirst(
+                                                '{name}',
+                                                AppStrings.isolateLtr(
+                                                  _driverNameFor(
+                                                    bus.driverId,
+                                                  ),
+                                                ),
+                                              ),
                                               style: TextStyle(
                                                 color: context.textTertiary,
                                                 fontSize: 11,
@@ -232,21 +262,39 @@ class _AdminVehiclesState extends State<AdminVehicles> {
                                     children: [
                                       _VehicleInfo(
                                         icon: Icons.calendar_today_rounded,
-                                        label: 'Next Service',
+                                        label: AppStrings.t(
+                                          'next_service_lbl',
+                                        ),
                                         value: nextService == null
-                                            ? 'Not scheduled'
+                                            ? AppStrings.t(
+                                                'not_scheduled_status',
+                                              )
                                             : '${nextService.day}/${nextService.month}/${nextService.year}',
                                       ),
                                       _VehicleInfo(
                                         icon: Icons.speed_rounded,
-                                        label: 'Mileage',
-                                        value:
-                                            '${bus.currentMileage.toStringAsFixed(0)} km',
+                                        label: AppStrings.t('mileage_lbl'),
+                                        // 'km' has no strong direction of its
+                                        // own (all-Latin, neutral run) — under
+                                        // RTL it would flip to "km 0" the same
+                                        // way "1 yrs" flipped to "yrs 1" on
+                                        // Driver Detail. Translating the unit
+                                        // itself ('کلومیٹر', a real RTL
+                                        // string) fixes it at the source
+                                        // instead of isolating it.
+                                        value: AppStrings.t(
+                                          'mileage_value',
+                                        ).replaceFirst(
+                                          '{value}',
+                                          bus.currentMileage.toStringAsFixed(
+                                            0,
+                                          ),
+                                        ),
                                       ),
                                       _VehicleInfo(
                                         icon: Icons
                                             .airline_seat_recline_normal_rounded,
-                                        label: 'Capacity',
+                                        label: AppStrings.t('capacity_lbl'),
                                         value: '${bus.capacity}',
                                       ),
                                     ],

@@ -1,10 +1,12 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 import 'app/router.dart';
 import 'app/auth_service.dart';
+import 'app/locale_provider.dart';
 import 'theme/app_theme.dart';
 import 'theme/theme_provider.dart';
 
@@ -51,13 +53,17 @@ class _TransitAdminAppState extends State<TransitAdminApp> {
   void initState() {
     super.initState();
     ThemeProvider.instance.addListener(_onThemeChanged);
+    LocaleProvider.instance.addListener(_onLocaleChanged);
   }
 
   @override
   void dispose() {
     ThemeProvider.instance.removeListener(_onThemeChanged);
+    LocaleProvider.instance.removeListener(_onLocaleChanged);
     super.dispose();
   }
+
+  void _onLocaleChanged() => setState(() {});
 
   void _onThemeChanged() => setState(() {
     final isDark = ThemeProvider.instance.isDark;
@@ -80,6 +86,18 @@ class _TransitAdminAppState extends State<TransitAdminApp> {
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,
       themeMode: ThemeProvider.instance.mode,
+      // `locale` bound to LocaleProvider is what actually flips the app to
+      // RTL when Urdu is picked — 'ur' is on Flutter's built-in RTL language
+      // list, so once this locale is active, `Directionality.of(context)`
+      // switches automatically everywhere in the tree; nothing else needs
+      // to opt in.
+      locale: LocaleProvider.instance.locale,
+      supportedLocales: LocaleProvider.supportedLocales,
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
       routerConfig: appRouter,
     );
   }

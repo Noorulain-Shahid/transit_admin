@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:transit_core/transit_core.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../../app/locale_provider.dart';
 import '../../data/admin_repository.dart';
 import '../../services/audit_service.dart';
 import '../../theme/app_theme.dart';
@@ -10,19 +11,23 @@ import '../../widgets/glass_card.dart';
 import '../../widgets/mini_chart.dart';
 import 'admin_driver_management.dart' show driverStatusLabel, driverStatusColor;
 
+// Only Driving License / Vehicle Registration were in the requested term
+// list — the other four document types stay hardcoded English.
 String documentTypeLabel(DocumentType type) => switch (type) {
-  DocumentType.drivingLicense => 'Driving License',
-  DocumentType.vehicleRegistration => 'Vehicle Registration',
+  DocumentType.drivingLicense => AppStrings.t('driving_license_doc'),
+  DocumentType.vehicleRegistration => AppStrings.t('vehicle_registration_doc'),
   DocumentType.insuranceCertificate => 'Insurance Certificate',
   DocumentType.routePermit => 'Route Permit',
   DocumentType.medicalFitness => 'Medical Fitness',
   DocumentType.schoolContract => 'School Contract',
 };
 
+// Only 'Verified' was requested — the other three document statuses stay
+// hardcoded English.
 String documentStatusLabel(DocumentStatus status) => switch (status) {
   DocumentStatus.notUploaded => 'Not uploaded',
   DocumentStatus.pending => 'Pending review',
-  DocumentStatus.verified => 'Verified',
+  DocumentStatus.verified => AppStrings.t('verified_status'),
   DocumentStatus.rejected => 'Rejected',
 };
 
@@ -49,11 +54,15 @@ class _AdminDriverDetailState extends State<AdminDriverDetail>
   void initState() {
     super.initState();
     _tabCtrl = TabController(length: 4, vsync: this);
+    LocaleProvider.instance.addListener(_onLangChanged);
   }
+
+  void _onLangChanged() => setState(() {});
 
   @override
   void dispose() {
     _tabCtrl.dispose();
+    LocaleProvider.instance.removeListener(_onLangChanged);
     super.dispose();
   }
 
@@ -209,7 +218,7 @@ class _AdminDriverDetailState extends State<AdminDriverDetail>
                         const SizedBox(width: 14),
                         Expanded(
                           child: Text(
-                            'Driver Detail',
+                            AppStrings.t('driver_detail_title'),
                             style: TextStyle(
                               color: context.textPrimary,
                               fontSize: 20,
@@ -284,7 +293,7 @@ class _AdminDriverDetailState extends State<AdminDriverDetail>
                         const SizedBox(height: 4),
                         Text(
                           d.busId?.isNotEmpty == true
-                              ? 'Bus ${d.busId} • ${d.routeId ?? 'No route'}'
+                              ? '${AppStrings.t('bus_prefix')} ${d.busId} • ${d.routeId ?? AppStrings.t('no_route_status')}'
                               : 'No bus assigned',
                           style: TextStyle(
                             color: context.textSecondary,
@@ -300,7 +309,9 @@ class _AdminDriverDetailState extends State<AdminDriverDetail>
                             ),
                             const SizedBox(width: 6),
                             StatusBadge(
-                              label: d.isApproved ? 'Approved' : 'Pending',
+                              label: d.isApproved
+                                  ? AppStrings.t('approved_status')
+                                  : AppStrings.t('pending_lbl'),
                               color: d.isApproved
                                   ? AppTheme.success
                                   : AppTheme.warning,
@@ -322,7 +333,7 @@ class _AdminDriverDetailState extends State<AdminDriverDetail>
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Details',
+                    AppStrings.t('details_title'),
                     style: TextStyle(
                       color: context.textPrimary,
                       fontSize: 15,
@@ -332,34 +343,46 @@ class _AdminDriverDetailState extends State<AdminDriverDetail>
                   const SizedBox(height: 12),
                   _InfoRow(
                     icon: Icons.badge_rounded,
-                    label: 'License',
+                    label: AppStrings.t('license_lbl'),
                     value: d.licenseNumber.isEmpty ? '—' : d.licenseNumber,
                     color: AppTheme.info,
                   ),
                   _InfoRow(
                     icon: Icons.phone_rounded,
-                    label: 'Contact',
+                    label: AppStrings.t('contact_lbl'),
                     value: d.phone.isEmpty ? '—' : d.phone,
                     color: AppTheme.adminEmerald,
                   ),
                   _InfoRow(
                     icon: Icons.email_rounded,
-                    label: 'Email',
+                    label: AppStrings.t('email_lbl'),
                     value: d.email.isEmpty ? '—' : d.email,
                     color: AppTheme.driverCyan,
                   ),
                   _InfoRow(
                     icon: Icons.route_rounded,
-                    label: 'Route',
+                    label: AppStrings.t('route_lbl'),
                     value: d.routeId?.isNotEmpty == true
                         ? d.routeId!
-                        : 'Unassigned',
+                        : AppStrings.t('unassigned_status'),
                     color: AppTheme.purple,
                   ),
                   _InfoRow(
                     icon: Icons.work_history_rounded,
-                    label: 'Experience',
-                    value: '${d.experienceYears} yrs',
+                    label: AppStrings.t('experience_lbl'),
+                    // Was `'${d.experienceYears} yrs'` — a plain all-Latin
+                    // string with no strong-direction character, sitting
+                    // inside this screen's RTL `Directionality` once Urdu is
+                    // active. With no RTL anchor, the bidi algorithm falls
+                    // back to the paragraph's own (RTL) base direction and
+                    // visually reverses the whole neutral run — "1 yrs"
+                    // showing as "yrs 1". Translating the unit itself fixes
+                    // it: "1 سال" has a real RTL character (سال), so the
+                    // digit anchors correctly in front of it instead of the
+                    // whole fragment flipping.
+                    value: AppStrings.t(
+                      'experience_years_value',
+                    ).replaceFirst('{count}', '${d.experienceYears}'),
                     color: AppTheme.warning,
                   ),
                 ],
@@ -374,7 +397,7 @@ class _AdminDriverDetailState extends State<AdminDriverDetail>
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Performance',
+                    AppStrings.t('performance_lbl'),
                     style: TextStyle(
                       color: context.textPrimary,
                       fontSize: 15,
@@ -403,19 +426,19 @@ class _AdminDriverDetailState extends State<AdminDriverDetail>
                         child: Column(
                           children: [
                             _PerfBar(
-                              label: 'Reliability',
+                              label: AppStrings.t('reliability_lbl'),
                               pct: d.reliabilityScore.clamp(0, 100) / 100,
                               color: AppTheme.success,
                             ),
                             const SizedBox(height: 8),
                             _PerfBar(
-                              label: 'Rating',
+                              label: AppStrings.t('rating_lbl'),
                               pct: d.rating / 5,
                               color: AppTheme.info,
                             ),
                             const SizedBox(height: 8),
                             _PerfBar(
-                              label: 'Safety',
+                              label: AppStrings.t('safety_lbl'),
                               pct:
                                   (1 -
                                           ((d.harshBrakingEvents +
@@ -442,7 +465,7 @@ class _AdminDriverDetailState extends State<AdminDriverDetail>
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Controls',
+                    AppStrings.t('controls_title'),
                     style: TextStyle(
                       color: context.textPrimary,
                       fontSize: 15,
@@ -454,7 +477,9 @@ class _AdminDriverDetailState extends State<AdminDriverDetail>
                     children: [
                       Expanded(
                         child: _ActionBtn(
-                          label: d.isApproved ? 'Approved' : 'Approve',
+                          label: d.isApproved
+                              ? AppStrings.t('approved_status')
+                              : 'Approve', // not in the requested term list
                           color: AppTheme.success,
                           icon: Icons.check_circle_rounded,
                           onTap: d.isApproved ? null : () => _approve(d),
@@ -464,8 +489,8 @@ class _AdminDriverDetailState extends State<AdminDriverDetail>
                       Expanded(
                         child: _ActionBtn(
                           label: d.status == DriverStatus.suspended
-                              ? 'Suspended'
-                              : 'Suspend',
+                              ? 'Suspended' // not in the requested term list
+                              : AppStrings.t('suspend_action'),
                           color: AppTheme.error,
                           icon: Icons.block_rounded,
                           onTap: d.status == DriverStatus.suspended
@@ -480,7 +505,7 @@ class _AdminDriverDetailState extends State<AdminDriverDetail>
                     children: [
                       Expanded(
                         child: _ActionBtn(
-                          label: 'Message Driver',
+                          label: AppStrings.t('message_driver_action'),
                           color: AppTheme.driverCyan,
                           icon: Icons.chat_bubble_rounded,
                           onTap: () => _message(d),
@@ -500,7 +525,7 @@ class _AdminDriverDetailState extends State<AdminDriverDetail>
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Compliance Documents',
+                    AppStrings.t('compliance_documents_title'),
                     style: TextStyle(
                       color: context.textPrimary,
                       fontSize: 15,
@@ -573,11 +598,18 @@ class _AdminDriverDetailState extends State<AdminDriverDetail>
                       fontWeight: FontWeight.w700,
                     ),
                     tabAlignment: TabAlignment.start,
-                    tabs: const [
-                      Tab(text: 'Trip History'),
-                      Tab(text: 'Attendance'),
-                      Tab(text: 'SOS History'),
-                      Tab(text: 'Earnings'),
+                    // Was `const [Tab(text: '...'), ...]` — `AppStrings.t()`
+                    // is a runtime call, so `const` has to go (a `const`
+                    // widget can't depend on anything computed at runtime).
+                    // Dropping `const` changes nothing about layout —
+                    // `isScrollable`, `tabAlignment: TabAlignment.start`,
+                    // and `labelStyle` above are what control tab
+                    // sizing/alignment, none of which touch constness.
+                    tabs: [
+                      Tab(text: AppStrings.t('trip_history_tab')),
+                      Tab(text: AppStrings.t('attendance_tab')),
+                      Tab(text: AppStrings.t('sos_history_tab')),
+                      Tab(text: AppStrings.t('earnings_tab')),
                     ],
                   ),
                   SizedBox(
@@ -839,7 +871,7 @@ class _DocumentRow extends StatelessWidget {
                 TextButton.icon(
                   onPressed: onView,
                   icon: const Icon(Icons.open_in_new_rounded, size: 15),
-                  label: const Text('View'),
+                  label: Text(AppStrings.t('view_action')),
                 ),
                 if (onVerify != null)
                   TextButton.icon(
@@ -1089,8 +1121,8 @@ class _DriverTripsEmptyState extends StatelessWidget {
     return _NeumorphicEmptyState(
       icon: Icons.directions_car_outlined,
       title: isVerified
-          ? 'No trips recorded for this driver yet.'
-          : 'No trips available. Driver is pending verification.',
+          ? AppStrings.t('no_trips_recorded_driver')
+          : 'No trips available. Driver is pending verification.', // not requested this pass
     );
   }
 }
@@ -1105,8 +1137,8 @@ class _DriverAttendanceEmptyState extends StatelessWidget {
     return _NeumorphicEmptyState(
       icon: Icons.event_available_outlined,
       title: isVerified
-          ? 'No attendance logged for this driver yet.'
-          : 'No attendance records. Driver is pending verification.',
+          ? AppStrings.t('no_attendance_logged_driver')
+          : 'No attendance records. Driver is pending verification.', // not requested this pass
     );
   }
 }
@@ -1123,8 +1155,8 @@ class _DriverSOSEmptyState extends StatelessWidget {
     return _NeumorphicEmptyState(
       icon: Icons.verified_user_outlined,
       title: isVerified
-          ? 'Zero SOS alerts. This driver has a clean safety record.'
-          : 'No SOS alerts. Driver is pending verification.',
+          ? AppStrings.t('no_sos_alerts_clean_record')
+          : 'No SOS alerts. Driver is pending verification.', // not requested this pass
     );
   }
 }
@@ -1139,8 +1171,8 @@ class _DriverEarningsEmptyState extends StatelessWidget {
     return _NeumorphicEmptyState(
       icon: Icons.account_balance_wallet_outlined,
       title: isVerified
-          ? 'No earnings recorded for this driver yet.'
-          : 'No financial data. Driver is pending verification.',
+          ? AppStrings.t('no_earnings_recorded_driver')
+          : 'No financial data. Driver is pending verification.', // not requested this pass
     );
   }
 }

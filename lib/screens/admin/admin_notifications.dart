@@ -1,12 +1,32 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:transit_core/transit_core.dart';
+import '../../app/locale_provider.dart';
 import '../../data/admin_repository.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/glass_card.dart';
 
-class AdminNotifications extends StatelessWidget {
+class AdminNotifications extends StatefulWidget {
   const AdminNotifications({super.key});
+
+  @override
+  State<AdminNotifications> createState() => _AdminNotificationsState();
+}
+
+class _AdminNotificationsState extends State<AdminNotifications> {
+  @override
+  void initState() {
+    super.initState();
+    LocaleProvider.instance.addListener(_onLangChanged);
+  }
+
+  void _onLangChanged() => setState(() {});
+
+  @override
+  void dispose() {
+    LocaleProvider.instance.removeListener(_onLangChanged);
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -57,7 +77,7 @@ class AdminNotifications extends StatelessWidget {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    'Admin Notifications',
+                                    AppStrings.t('admin_notifications_title'),
                                     style: TextStyle(
                                       color: context.textPrimary,
                                       fontSize: 16,
@@ -66,7 +86,7 @@ class AdminNotifications extends StatelessWidget {
                                   ),
                                   const SizedBox(height: 4),
                                   Text(
-                                    'New driver, student, and parent accounts appear here for review.',
+                                    AppStrings.t('admin_notifications_desc'),
                                     style: TextStyle(
                                       color: context.textSecondary,
                                       fontSize: 12,
@@ -113,9 +133,9 @@ class _PendingDriversSection extends StatelessWidget {
           return const SizedBox.shrink();
         }
         return _SectionCard(
-          title: 'Driver Verification Queue',
+          title: AppStrings.t('driver_verification_queue'),
           subtitle: drivers.isEmpty
-              ? 'No drivers are waiting for verification right now.'
+              ? AppStrings.t('no_drivers_pending_verification')
               : 'Review uploaded documents before allowing the driver to start driving in the app.',
           children: drivers
               .map(
@@ -156,14 +176,40 @@ class _RecentAccountsSection extends StatelessWidget {
     UserRole.admin: AppTheme.adminEmerald,
   };
 
+  // Only the day-based branch was in this task's requested term list ('ago',
+  // 'd') — 'Just now'/'min ago'/'h ago' stay hardcoded English rather than
+  // inventing keys nobody asked for. English's unit sits directly against
+  // the number ('5d'); Urdu's needs a space before it ('5 دن') — that space
+  // lives inside the `day_unit` dictionary value itself, not here, so this
+  // one composition works correctly for both languages unchanged.
   String _timeAgo(DateTime? t) {
     if (t == null) return '';
     final diff = DateTime.now().difference(t);
     if (diff.inMinutes < 1) return 'Just now';
     if (diff.inMinutes < 60) return '${diff.inMinutes} min ago';
     if (diff.inHours < 24) return '${diff.inHours}h ago';
-    return '${diff.inDays}d ago';
+    return '${diff.inDays}${AppStrings.t('day_unit')} ${AppStrings.t('ago_suffix')}';
   }
+
+  // Per-role title/subtitle, rather than capitalizing `u.role.name` — that
+  // trick doesn't generalize to translation, since Urdu word order/grammar
+  // isn't "capitalize a role name and append a fixed suffix".
+  String _accountCreatedTitle(UserRole role) => switch (role) {
+    UserRole.parent => AppStrings.t('parent_account_created'),
+    UserRole.student => AppStrings.t('student_account_created'),
+    UserRole.driver => AppStrings.t('driver_account_created'),
+    UserRole.admin => '${role.name} account created',
+  };
+
+  String _registeredAsSubtitle(String name, UserRole role) => switch (role) {
+    UserRole.parent =>
+      AppStrings.t('registered_as_parent').replaceFirst('{name}', name),
+    UserRole.student =>
+      AppStrings.t('registered_as_student').replaceFirst('{name}', name),
+    UserRole.driver =>
+      AppStrings.t('registered_as_driver').replaceFirst('{name}', name),
+    UserRole.admin => '$name registered as a ${role.name}.',
+  };
 
   @override
   Widget build(BuildContext context) {
@@ -175,15 +221,15 @@ class _RecentAccountsSection extends StatelessWidget {
           return const SizedBox.shrink();
         }
         return _SectionCard(
-          title: 'New Account Activity',
+          title: AppStrings.t('new_account_activity_title'),
           subtitle: users.isEmpty
               ? 'No accounts have been created yet.'
-              : 'Recent account creations from drivers, students, and parents.',
+              : AppStrings.t('new_account_activity_desc'),
           children: users
               .map(
                 (u) => _NotificationItem(
-                  title: '${u.role.name[0].toUpperCase()}${u.role.name.substring(1)} account created',
-                  subtitle: '${u.name} registered as a ${u.role.name}.',
+                  title: _accountCreatedTitle(u.role),
+                  subtitle: _registeredAsSubtitle(u.name, u.role),
                   time: _timeAgo(u.createdAt),
                   icon: _roleIcons[u.role] ?? Icons.person_rounded,
                   color: _roleColors[u.role] ?? AppTheme.info,
@@ -369,7 +415,7 @@ class _Header extends StatelessWidget {
           ),
           const SizedBox(width: 14),
           Text(
-            'Notifications',
+            AppStrings.t('notifications_title'),
             style: TextStyle(
               color: context.textPrimary,
               fontSize: 20,

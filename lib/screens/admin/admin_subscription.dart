@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:transit_core/transit_core.dart';
+import '../../app/locale_provider.dart';
 import '../../data/admin_repository.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/glass_card.dart';
@@ -38,10 +39,14 @@ class _AdminSubscriptionState extends State<AdminSubscription> {
       (v) => setState(() => _payments = v),
       onError: (e) => debugPrint('[AdminSubscription] payments error: $e'),
     );
+    LocaleProvider.instance.addListener(_onLangChanged);
   }
+
+  void _onLangChanged() => setState(() {});
 
   @override
   void dispose() {
+    LocaleProvider.instance.removeListener(_onLangChanged);
     _studentsSub?.cancel();
     _paymentsSub?.cancel();
     super.dispose();
@@ -74,8 +79,10 @@ class _AdminSubscriptionState extends State<AdminSubscription> {
 
   String _statusLabel(SubscriptionStatus s) {
     switch (s) {
+      case SubscriptionStatus.active:
+        return AppStrings.t('active_lbl');
       case SubscriptionStatus.gracePeriod:
-        return 'Grace Period';
+        return 'Grace Period'; // not requested this pass
       default:
         final name = s.name;
         return name[0].toUpperCase() + name.substring(1);
@@ -167,7 +174,7 @@ class _AdminSubscriptionState extends State<AdminSubscription> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    'Subscription Management',
+                                    AppStrings.t('subscription_management'),
                                     style: TextStyle(
                                       color: context.textPrimary,
                                       fontSize: 16,
@@ -176,7 +183,7 @@ class _AdminSubscriptionState extends State<AdminSubscription> {
                                   ),
                                   const SizedBox(height: 4),
                                   Text(
-                                    "Each student's transport subscription status, and what's been collected in fees.",
+                                    AppStrings.t('subscription_desc'),
                                     style: TextStyle(
                                       color: context.textSecondary,
                                       fontSize: 12,
@@ -195,7 +202,7 @@ class _AdminSubscriptionState extends State<AdminSubscription> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'Fee Collection',
+                              AppStrings.t('fee_collection_title'),
                               style: TextStyle(
                                 color: context.textPrimary,
                                 fontSize: 15,
@@ -206,19 +213,19 @@ class _AdminSubscriptionState extends State<AdminSubscription> {
                             Row(
                               children: [
                                 _StatPill(
-                                  label: 'Collected',
+                                  label: AppStrings.t('collected_lbl'),
                                   value: loading ? '…' : _fmtPaisa(collected),
                                   color: AppTheme.success,
                                 ),
                                 const SizedBox(width: 8),
                                 _StatPill(
-                                  label: 'Pending',
+                                  label: AppStrings.t('pending_lbl'),
                                   value: loading ? '…' : _fmtPaisa(pending),
                                   color: AppTheme.warning,
                                 ),
                                 const SizedBox(width: 8),
                                 _StatPill(
-                                  label: 'Overdue',
+                                  label: AppStrings.t('overdue_lbl'),
                                   value: loading ? '…' : _fmtPaisa(overdue),
                                   color: AppTheme.error,
                                 ),
@@ -230,7 +237,9 @@ class _AdminSubscriptionState extends State<AdminSubscription> {
                               child: Row(
                                 children: [
                                   Text(
-                                    'View full fee breakdown',
+                                    AppStrings.t(
+                                      'view_full_fee_breakdown_action',
+                                    ),
                                     style: TextStyle(
                                       color: AppTheme.adminAccent,
                                       fontSize: 12,
@@ -256,7 +265,7 @@ class _AdminSubscriptionState extends State<AdminSubscription> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'Students',
+                              AppStrings.t('students_lbl'),
                               style: TextStyle(
                                 color: context.textPrimary,
                                 fontSize: 15,
@@ -416,7 +425,9 @@ class _SubscriberRow extends StatelessWidget {
                   border: Border.all(color: color.withValues(alpha: 0.25)),
                 ),
                 child: Text(
-                  isCancelled ? 'Reactivate' : 'Cancel',
+                  isCancelled
+                      ? 'Reactivate' // not requested this pass
+                      : AppStrings.t('cancel_action'),
                   style: TextStyle(
                     color: color,
                     fontSize: 11,
@@ -462,7 +473,7 @@ class _Header extends StatelessWidget {
           ),
           const SizedBox(width: 14),
           Text(
-            'Subscription',
+            AppStrings.t('subscription_title'),
             style: TextStyle(
               color: context.textPrimary,
               fontSize: 20,

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:transit_core/transit_core.dart';
+import '../../app/locale_provider.dart';
 import '../../data/admin_repository.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/glass_card.dart';
@@ -14,6 +15,19 @@ const _statusFilters = [
   'Suspended',
 ];
 
+// Displays the internal filter identifier translated — `_filterStatus`
+// itself (used by `_matchesFilter` and the cycle-through-filters index
+// lookup below) stays the literal English token; only what's shown on
+// screen changes. 'Online'/'On Trip' weren't in the requested term list, so
+// they fall through unchanged.
+String _filterDisplay(String filter) => switch (filter) {
+  'All' => AppStrings.t('status_all'),
+  'Pending' => AppStrings.t('pending_lbl'),
+  'Offline' => AppStrings.t('offline_status'),
+  'Suspended' => AppStrings.t('suspended_status'),
+  _ => filter,
+};
+
 bool _matchesFilter(Driver d, String filter) => switch (filter) {
   'Pending' => d.status == DriverStatus.pendingVerification,
   'Online' => d.status == DriverStatus.online,
@@ -23,11 +37,14 @@ bool _matchesFilter(Driver d, String filter) => switch (filter) {
   _ => true,
 };
 
+// Only 'Offline' and 'Suspended' were in the requested translation term
+// list — 'Online'/'On Trip'/'Pending Verification' stay hardcoded English
+// rather than inventing keys nobody asked for.
 String driverStatusLabel(DriverStatus status) => switch (status) {
   DriverStatus.online => 'Online',
-  DriverStatus.offline => 'Offline',
+  DriverStatus.offline => AppStrings.t('offline_status'),
   DriverStatus.onTrip => 'On Trip',
-  DriverStatus.suspended => 'Suspended',
+  DriverStatus.suspended => AppStrings.t('suspended_status'),
   DriverStatus.pendingVerification => 'Pending Verification',
 };
 
@@ -48,6 +65,20 @@ class AdminDriverManagement extends StatefulWidget {
 class _AdminDriverManagementState extends State<AdminDriverManagement> {
   String _search = '';
   String _filterStatus = 'All';
+
+  @override
+  void initState() {
+    super.initState();
+    LocaleProvider.instance.addListener(_onLangChanged);
+  }
+
+  void _onLangChanged() => setState(() {});
+
+  @override
+  void dispose() {
+    LocaleProvider.instance.removeListener(_onLangChanged);
+    super.dispose();
+  }
 
   List<Driver> _filtered(List<Driver> drivers) => drivers.where((d) {
     if (_search.isNotEmpty &&
@@ -143,7 +174,7 @@ class _AdminDriverManagementState extends State<AdminDriverManagement> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Driver Management',
+                  AppStrings.t('driver_management'),
                   style: TextStyle(
                     color: context.textPrimary,
                     fontSize: 20,
@@ -152,7 +183,9 @@ class _AdminDriverManagementState extends State<AdminDriverManagement> {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  '$total drivers registered',
+                  AppStrings.t(
+                    'drivers_registered',
+                  ).replaceFirst('{count}', '$total'),
                   style: TextStyle(color: context.textSecondary, fontSize: 13),
                 ),
               ],
@@ -170,7 +203,7 @@ class _AdminDriverManagementState extends State<AdminDriverManagement> {
         onChanged: (v) => setState(() => _search = v),
         style: TextStyle(color: context.textPrimary, fontSize: 14),
         decoration: InputDecoration(
-          hintText: 'Search drivers...',
+          hintText: AppStrings.t('search_drivers_hint'),
           prefixIcon: Icon(Icons.search_rounded, color: context.textTertiary),
           border: InputBorder.none,
           enabledBorder: InputBorder.none,
@@ -191,7 +224,8 @@ class _AdminDriverManagementState extends State<AdminDriverManagement> {
         scrollDirection: Axis.horizontal,
         children: [
           _FilterChip(
-            label: 'Status: $_filterStatus',
+            label:
+                '${AppStrings.t('status_prefix')}: ${_filterDisplay(_filterStatus)}',
             icon: Icons.circle,
             color: AppTheme.driverCyan,
             onTap: () {
@@ -212,14 +246,14 @@ class _AdminDriverManagementState extends State<AdminDriverManagement> {
       children: [
         _MiniStat(
           icon: Icons.people_rounded,
-          label: 'Total',
+          label: AppStrings.t('total_lbl'),
           value: '${drivers.length}',
           color: AppTheme.driverCyan,
         ),
         const SizedBox(width: 8),
         _MiniStat(
           icon: Icons.hourglass_top_rounded,
-          label: 'Pending',
+          label: AppStrings.t('pending_lbl'),
           value:
               '${drivers.where((d) => d.status == DriverStatus.pendingVerification).length}',
           color: const Color(0xFFF59E0B),
@@ -227,7 +261,7 @@ class _AdminDriverManagementState extends State<AdminDriverManagement> {
         const SizedBox(width: 8),
         _MiniStat(
           icon: Icons.wifi_off_rounded,
-          label: 'Suspended',
+          label: AppStrings.t('suspended_status'),
           value:
               '${drivers.where((d) => d.status == DriverStatus.suspended).length}',
           color: const Color(0xFFEF4444),
@@ -295,7 +329,7 @@ class _DriverCard extends StatelessWidget {
                     const SizedBox(height: 2),
                     Text(
                       driver.busId?.isNotEmpty == true
-                          ? 'Bus ${driver.busId}'
+                          ? '${AppStrings.t('bus_prefix')} ${driver.busId}'
                           : 'No bus assigned',
                       style: TextStyle(
                         color: context.textSecondary,

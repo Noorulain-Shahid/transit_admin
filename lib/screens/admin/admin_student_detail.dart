@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:transit_core/transit_core.dart';
+import '../../app/locale_provider.dart';
 import '../../data/admin_repository.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/glass_card.dart';
@@ -29,10 +30,14 @@ class _AdminStudentDetailState extends State<AdminStudentDetail>
   void initState() {
     super.initState();
     _tabCtrl = TabController(length: 4, vsync: this);
+    LocaleProvider.instance.addListener(_onLangChanged);
   }
+
+  void _onLangChanged() => setState(() {});
 
   @override
   void dispose() {
+    LocaleProvider.instance.removeListener(_onLangChanged);
     _tabCtrl.dispose();
     _nameCtrl.dispose();
     _gradeCtrl.dispose();
@@ -157,7 +162,7 @@ class _AdminStudentDetailState extends State<AdminStudentDetail>
                         const SizedBox(width: 14),
                         Expanded(
                           child: Text(
-                            'Student Detail',
+                            AppStrings.t('student_detail_title'),
                             style: TextStyle(
                               color: context.textPrimary,
                               fontSize: 20,
@@ -263,8 +268,8 @@ class _AdminStudentDetailState extends State<AdminStudentDetail>
                               children: [
                                 StatusBadge(
                                   label: s.isTransportSuspended
-                                      ? 'Suspended'
-                                      : 'Active',
+                                      ? AppStrings.t('suspended_status')
+                                      : AppStrings.t('active_lbl'),
                                   color: s.isTransportSuspended
                                       ? AppTheme.warning
                                       : AppTheme.success,
@@ -286,14 +291,23 @@ class _AdminStudentDetailState extends State<AdminStudentDetail>
                   ),
                   if (_editing) ...[
                     const SizedBox(height: 14),
-                    _EditField(label: 'Name', controller: _nameCtrl),
-                    const SizedBox(height: 8),
-                    _EditField(label: 'Grade', controller: _gradeCtrl),
-                    const SizedBox(height: 8),
-                    _EditField(label: 'School', controller: _schoolCtrl),
-                    const SizedBox(height: 8),
                     _EditField(
-                      label: 'Medical notes',
+                      label: AppStrings.t('name_lbl'),
+                      controller: _nameCtrl,
+                    ),
+                    const SizedBox(height: 12),
+                    _EditField(
+                      label: AppStrings.t('grade_lbl'),
+                      controller: _gradeCtrl,
+                    ),
+                    const SizedBox(height: 12),
+                    _EditField(
+                      label: AppStrings.t('school_lbl'),
+                      controller: _schoolCtrl,
+                    ),
+                    const SizedBox(height: 12),
+                    _EditField(
+                      label: AppStrings.t('medical_notes_lbl'),
                       controller: _medicalCtrl,
                       maxLines: 2,
                     ),
@@ -302,7 +316,7 @@ class _AdminStudentDetailState extends State<AdminStudentDetail>
                       children: [
                         Expanded(
                           child: _ActionBtn(
-                            label: 'Cancel',
+                            label: AppStrings.t('cancel_action'),
                             color: AppTheme.error,
                             icon: Icons.close_rounded,
                             onTap: _saving
@@ -313,7 +327,9 @@ class _AdminStudentDetailState extends State<AdminStudentDetail>
                         const SizedBox(width: 8),
                         Expanded(
                           child: _ActionBtn(
-                            label: _saving ? 'Saving…' : 'Save',
+                            label: _saving
+                                ? AppStrings.t('saving_action')
+                                : AppStrings.t('save_action'),
                             color: AppTheme.success,
                             icon: Icons.check_rounded,
                             onTap: _saving ? null : () => _save(s),
@@ -334,7 +350,7 @@ class _AdminStudentDetailState extends State<AdminStudentDetail>
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Details',
+                    AppStrings.t('details_title'),
                     style: TextStyle(
                       color: context.textPrimary,
                       fontSize: 15,
@@ -344,29 +360,29 @@ class _AdminStudentDetailState extends State<AdminStudentDetail>
                   const SizedBox(height: 12),
                   _InfoRow(
                     icon: Icons.school_rounded,
-                    label: 'School',
+                    label: AppStrings.t('school_lbl'),
                     value: s.school.isEmpty ? '—' : s.school,
                     color: AppTheme.purple,
                   ),
                   _InfoRow(
                     icon: Icons.grade_rounded,
-                    label: 'Grade',
+                    label: AppStrings.t('grade_lbl'),
                     value: s.grade.isEmpty ? '—' : s.grade,
                     color: AppTheme.purple,
                   ),
                   _InfoRow(
                     icon: Icons.directions_bus_rounded,
-                    label: 'Driver',
+                    label: AppStrings.t('driver_lbl'),
                     value: (s.driverId ?? '').isEmpty
-                        ? 'Unassigned'
+                        ? AppStrings.t('unassigned_status')
                         : s.driverId!,
                     color: AppTheme.driverCyan,
                   ),
                   _InfoRow(
                     icon: Icons.route_rounded,
-                    label: 'Route',
+                    label: AppStrings.t('route_lbl'),
                     value: (s.routeId ?? '').isEmpty
-                        ? 'Unassigned'
+                        ? AppStrings.t('unassigned_status')
                         : s.routeId!,
                     color: AppTheme.info,
                   ),
@@ -389,7 +405,7 @@ class _AdminStudentDetailState extends State<AdminStudentDetail>
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Controls',
+                    AppStrings.t('controls_title'),
                     style: TextStyle(
                       color: context.textPrimary,
                       fontSize: 15,
@@ -402,8 +418,8 @@ class _AdminStudentDetailState extends State<AdminStudentDetail>
                       Expanded(
                         child: _ActionBtn(
                           label: s.isTransportSuspended
-                              ? 'Re-enable'
-                              : 'Suspend',
+                              ? 'Re-enable' // not requested this pass
+                              : AppStrings.t('suspend_action'),
                           color: s.isTransportSuspended
                               ? AppTheme.success
                               : AppTheme.warning,
@@ -416,7 +432,7 @@ class _AdminStudentDetailState extends State<AdminStudentDetail>
                       const SizedBox(width: 8),
                       Expanded(
                         child: _ActionBtn(
-                          label: 'Message',
+                          label: AppStrings.t('message_action'),
                           color: AppTheme.studentAmber,
                           icon: Icons.chat_bubble_rounded,
                           onTap: () => _message(s),
@@ -447,11 +463,11 @@ class _AdminStudentDetailState extends State<AdminStudentDetail>
                       fontWeight: FontWeight.w700,
                     ),
                     tabAlignment: TabAlignment.start,
-                    tabs: const [
-                      Tab(text: 'Attendance'),
-                      Tab(text: 'Trip History'),
-                      Tab(text: 'Missed Logs'),
-                      Tab(text: 'Access'),
+                    tabs: [
+                      Tab(text: AppStrings.t('attendance_tab')),
+                      Tab(text: AppStrings.t('trip_history_tab')),
+                      Tab(text: AppStrings.t('missed_logs_tab')),
+                      Tab(text: AppStrings.t('access_tab')),
                     ],
                   ),
                   SizedBox(
@@ -590,6 +606,10 @@ class _AdminStudentDetailState extends State<AdminStudentDetail>
 }
 
 // ─── Sub-widgets ────────────────────────────────────────────────────────────
+/// Label-outside layout — the localized label sits above the Neumorphic
+/// input box (not as a Material floating label riding on the box's top
+/// border), so a wider Urdu label never clips against the box's edge the
+/// way a floating label did.
 class _EditField extends StatelessWidget {
   final String label;
   final TextEditingController controller;
@@ -601,11 +621,56 @@ class _EditField extends StatelessWidget {
   });
   @override
   Widget build(BuildContext context) {
-    return TextField(
-      controller: controller,
-      maxLines: maxLines,
-      style: TextStyle(color: context.textPrimary, fontSize: 14),
-      decoration: InputDecoration(labelText: label),
+    final isDark = context.isDark;
+    return Column(
+      // start = right-aligned under Urdu/RTL, left-aligned under
+      // English/LTR — the ambient Directionality already flips this.
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            color: context.textSecondary,
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Container(
+          decoration: BoxDecoration(
+            color: context.cardBg,
+            borderRadius: BorderRadius.circular(14),
+            boxShadow: [
+              BoxShadow(
+                color: isDark
+                    ? Colors.black.withValues(alpha: 0.45)
+                    : const Color(0xFFB8BEC8).withValues(alpha: 0.6),
+                offset: const Offset(4, 4),
+                blurRadius: 10,
+              ),
+              BoxShadow(
+                color: isDark
+                    ? Colors.white.withValues(alpha: 0.04)
+                    : Colors.white.withValues(alpha: 0.9),
+                offset: const Offset(-4, -4),
+                blurRadius: 10,
+              ),
+            ],
+          ),
+          child: TextField(
+            controller: controller,
+            maxLines: maxLines,
+            style: TextStyle(color: context.textPrimary, fontSize: 14),
+            decoration: const InputDecoration(
+              border: InputBorder.none,
+              contentPadding: EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 14,
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -792,10 +857,10 @@ class _AttendanceEmptyState extends StatelessWidget {
   Widget build(BuildContext context) {
     return _NeumorphicEmptyState(
       icon: Icons.assignment_outlined,
-      title: 'No attendance records exist for this student.',
+      title: AppStrings.t('no_attendance_records_student'),
       subtitle: hasDriver
-          ? 'A driver is assigned, but no trips have been recorded yet.'
-          : 'Ensure a driver is assigned to begin tracking trips.',
+          ? 'A driver is assigned, but no trips have been recorded yet.' // not requested this pass
+          : AppStrings.t('ensure_driver_assigned_desc'),
     );
   }
 }
@@ -809,10 +874,10 @@ class _TripHistoryEmptyState extends StatelessWidget {
   Widget build(BuildContext context) {
     return _NeumorphicEmptyState(
       icon: Icons.route_rounded,
-      title: 'No trip history exists for this student.',
+      title: AppStrings.t('no_trip_history_student'),
       subtitle: hasDriver
-          ? 'A driver is assigned, but no trips have been recorded yet.'
-          : 'Ensure a driver is assigned to begin tracking trips.',
+          ? 'A driver is assigned, but no trips have been recorded yet.' // not requested this pass
+          : AppStrings.t('ensure_driver_assigned_desc'),
     );
   }
 }
@@ -827,10 +892,10 @@ class _MissedLogsEmptyState extends StatelessWidget {
   Widget build(BuildContext context) {
     return _NeumorphicEmptyState(
       icon: Icons.fact_check_outlined,
-      title: 'No missed logs exist for this student.',
+      title: AppStrings.t('no_missed_logs_student'),
       subtitle: hasDriver
-          ? 'A driver is assigned, but no trips have been recorded yet.'
-          : 'Ensure a driver is assigned to begin tracking trips.',
+          ? 'A driver is assigned, but no trips have been recorded yet.' // not requested this pass
+          : AppStrings.t('ensure_driver_assigned_desc'),
     );
   }
 }
@@ -842,10 +907,10 @@ class _AccessLogsEmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const _NeumorphicEmptyState(
+    return _NeumorphicEmptyState(
       icon: Icons.verified_user_outlined,
-      title: 'No access or subscription events recorded for this student.',
-      subtitle: 'Events appear here once a subscription change is recorded.',
+      title: AppStrings.t('no_access_events_student'),
+      subtitle: AppStrings.t('access_events_appear_desc'),
     );
   }
 }

@@ -2,6 +2,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../app/auth_service.dart';
+import '../../app/locale_provider.dart';
 import '../../theme/app_theme.dart';
 import 'admin_dashboard.dart';
 import 'admin_student_management.dart';
@@ -21,12 +22,29 @@ class _AdminLayoutState extends State<AdminLayout> {
 
   void _goToTab(int index) => setState(() => _tab = index);
 
+  @override
+  void initState() {
+    super.initState();
+    LocaleProvider.instance.addListener(_onLangChanged);
+  }
+
+  void _onLangChanged() => setState(() {});
+
+  @override
+  void dispose() {
+    LocaleProvider.instance.removeListener(_onLangChanged);
+    super.dispose();
+  }
+
+  // `label` holds an AppStrings key, not display text — `_navItems` is
+  // `static const`, which can't call `AppStrings.t()` at construction time,
+  // so the lookup happens where it's rendered below instead.
   static const _navItems = [
-    _NavItem(icon: Icons.dashboard_rounded, label: 'Dashboard'),
-    _NavItem(icon: Icons.school_rounded, label: 'Student'),
-    _NavItem(icon: Icons.family_restroom_rounded, label: 'Parent'),
-    _NavItem(icon: Icons.directions_bus_rounded, label: 'Driver'),
-    _NavItem(icon: Icons.person_rounded, label: 'Profile'),
+    _NavItem(icon: Icons.dashboard_rounded, label: 'nav_dashboard'),
+    _NavItem(icon: Icons.school_rounded, label: 'nav_student'),
+    _NavItem(icon: Icons.family_restroom_rounded, label: 'nav_parent'),
+    _NavItem(icon: Icons.directions_bus_rounded, label: 'nav_driver'),
+    _NavItem(icon: Icons.person_rounded, label: 'nav_profile'),
   ];
 
   static const _navColors = [
@@ -129,7 +147,7 @@ class _AdminLayoutState extends State<AdminLayout> {
                             ),
                             const SizedBox(height: 2),
                             Text(
-                              _navItems[i].label,
+                              AppStrings.t(_navItems[i].label),
                               style: TextStyle(
                                 color: isActive ? activeColor : context.textTertiary,
                                 fontSize: isActive ? 10 : 9,

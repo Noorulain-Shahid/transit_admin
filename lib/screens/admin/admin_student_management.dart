@@ -1,9 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:transit_core/transit_core.dart';
+import '../../app/locale_provider.dart';
 import '../../data/admin_repository.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/glass_card.dart';
+
+// `student.instituteType`/`student.grade` are free-text data fields (a
+// school can type anything into the signup form), not a fixed Dart enum —
+// only the two known common values this task named get translated; anything
+// else (the default 'School', or a custom grade like 'Grade 5') passes
+// through unchanged, exactly like a student's own name is never translated.
+String _instituteTypeLabel(String type) => switch (type) {
+  'University' => AppStrings.t('university_type'),
+  'College' => AppStrings.t('college_type'),
+  _ => type,
+};
 
 String subscriptionStatusLabel(SubscriptionStatus s) => switch (s) {
   SubscriptionStatus.active => 'Active',
@@ -31,6 +43,20 @@ class AdminStudentManagement extends StatefulWidget {
 
 class _AdminStudentManagementState extends State<AdminStudentManagement> {
   String _search = '';
+
+  @override
+  void initState() {
+    super.initState();
+    LocaleProvider.instance.addListener(_onLangChanged);
+  }
+
+  void _onLangChanged() => setState(() {});
+
+  @override
+  void dispose() {
+    LocaleProvider.instance.removeListener(_onLangChanged);
+    super.dispose();
+  }
 
   List<Student> _filtered(List<Student> students) => students
       .where(
@@ -124,7 +150,7 @@ class _AdminStudentManagementState extends State<AdminStudentManagement> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Student Management',
+                  AppStrings.t('student_management'),
                   style: TextStyle(
                     color: context.textPrimary,
                     fontSize: 20,
@@ -133,7 +159,9 @@ class _AdminStudentManagementState extends State<AdminStudentManagement> {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  '$total students enrolled',
+                  AppStrings.t(
+                    'students_enrolled',
+                  ).replaceFirst('{count}', '$total'),
                   style: TextStyle(color: context.textSecondary, fontSize: 13),
                 ),
               ],
@@ -151,7 +179,7 @@ class _AdminStudentManagementState extends State<AdminStudentManagement> {
         onChanged: (v) => setState(() => _search = v),
         style: TextStyle(color: context.textPrimary, fontSize: 14),
         decoration: InputDecoration(
-          hintText: 'Search students...',
+          hintText: AppStrings.t('search_students_hint'),
           prefixIcon: Icon(Icons.search_rounded, color: context.textTertiary),
           border: InputBorder.none,
           enabledBorder: InputBorder.none,
@@ -170,14 +198,14 @@ class _AdminStudentManagementState extends State<AdminStudentManagement> {
       children: [
         _MiniStat(
           icon: Icons.people_rounded,
-          label: 'Total',
+          label: AppStrings.t('total_lbl'),
           value: '${students.length}',
           color: AppTheme.studentAmber,
         ),
         const SizedBox(width: 8),
         _MiniStat(
           icon: Icons.directions_bus_rounded,
-          label: 'With Driver',
+          label: AppStrings.t('with_driver_status'),
           value:
               '${students.where((s) => (s.driverId ?? '').isNotEmpty).length}',
           color: AppTheme.success,
@@ -185,7 +213,7 @@ class _AdminStudentManagementState extends State<AdminStudentManagement> {
         const SizedBox(width: 8),
         _MiniStat(
           icon: Icons.block_rounded,
-          label: 'Suspended',
+          label: AppStrings.t('suspended_status'),
           value: '${students.where((s) => s.isTransportSuspended).length}',
           color: AppTheme.warning,
         ),
@@ -254,7 +282,7 @@ class _StudentCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      '${student.grade.isEmpty ? student.instituteType : student.grade} • ${student.school}',
+                      '${_instituteTypeLabel(student.grade.isEmpty ? student.instituteType : student.grade)} • ${student.school}',
                       style: TextStyle(
                         color: context.textSecondary,
                         fontSize: 12,
@@ -272,13 +300,15 @@ class _StudentCard extends StatelessWidget {
               _InfoPill(
                 icon: Icons.directions_bus_rounded,
                 label: (student.driverId ?? '').isEmpty
-                    ? 'No driver'
-                    : 'Assigned',
+                    ? AppStrings.t('no_driver_status')
+                    : 'Assigned', // not in the requested term list
                 color: AppTheme.driverCyan,
               ),
               const Spacer(),
               StatusBadge(
-                label: student.isTransportSuspended ? 'Suspended' : 'Active',
+                label: student.isTransportSuspended
+                    ? AppStrings.t('suspended_status')
+                    : AppStrings.t('active_lbl'),
                 color: student.isTransportSuspended
                     ? AppTheme.warning
                     : AppTheme.success,

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:transit_core/transit_core.dart';
+import '../../app/locale_provider.dart';
 import '../../data/admin_repository.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/glass_card.dart';
@@ -35,10 +36,14 @@ class _AdminFeesState extends State<AdminFees> {
       (v) => setState(() => _students = v),
       onError: (e) => debugPrint('[AdminFees] students stream error: $e'),
     );
+    LocaleProvider.instance.addListener(_onLangChanged);
   }
+
+  void _onLangChanged() => setState(() {});
 
   @override
   void dispose() {
+    LocaleProvider.instance.removeListener(_onLangChanged);
     _paymentsSub?.cancel();
     _studentsSub?.cancel();
     super.dispose();
@@ -65,6 +70,14 @@ class _AdminFeesState extends State<AdminFees> {
     }
   }
 
+  // Under RTL, digits are "weak" direction and a currency symbol sitting
+  // right next to them (no strong-direction anchor of its own) can get
+  // reordered by the surrounding paragraph — the same class of bug as the
+  // driver "yrs" and child-subtitle bidi issues fixed earlier. The fix here
+  // is the same tool used for the child subtitle: wrap the whole formatted
+  // amount ('₨1,200', not just the symbol) in a Unicode First Strong
+  // Isolate so the symbol and the digits are locked together as one
+  // logical-order unit, regardless of which locale/direction surrounds it.
   static String _fmtPaisa(int paisa) {
     final rupees = (paisa / 100).round().toString();
     final buf = StringBuffer();
@@ -72,7 +85,7 @@ class _AdminFeesState extends State<AdminFees> {
       if (i > 0 && (rupees.length - i) % 3 == 0) buf.write(',');
       buf.write(rupees[i]);
     }
-    return '₨$buf';
+    return AppStrings.isolateLtr('₨$buf');
   }
 
   Future<void> _sendReminder(Payment p) async {
@@ -121,7 +134,10 @@ class _AdminFeesState extends State<AdminFees> {
             padding: const EdgeInsets.only(bottom: 100),
             child: Column(
               children: [
-                _Header(title: 'Fee Management', onBack: widget.onBack),
+                _Header(
+                  title: AppStrings.t('fee_management'),
+                  onBack: widget.onBack,
+                ),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: Column(
@@ -138,7 +154,7 @@ class _AdminFeesState extends State<AdminFees> {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
-                                      'Total Collected',
+                                      AppStrings.t('total_collected_lbl'),
                                       style: TextStyle(
                                         color: context.textSecondary,
                                         fontSize: 12,
@@ -161,19 +177,19 @@ class _AdminFeesState extends State<AdminFees> {
                             Row(
                               children: [
                                 _FeeStatPill(
-                                  label: 'Collected',
+                                  label: AppStrings.t('collected_lbl'),
                                   value: loading ? '…' : _fmtPaisa(collected),
                                   color: AppTheme.success,
                                 ),
                                 const SizedBox(width: 8),
                                 _FeeStatPill(
-                                  label: 'Pending',
+                                  label: AppStrings.t('pending_lbl'),
                                   value: loading ? '…' : _fmtPaisa(pending),
                                   color: AppTheme.warning,
                                 ),
                                 const SizedBox(width: 8),
                                 _FeeStatPill(
-                                  label: 'Overdue',
+                                  label: AppStrings.t('overdue_lbl'),
                                   value: loading ? '…' : _fmtPaisa(overdue),
                                   color: AppTheme.error,
                                 ),
@@ -186,7 +202,12 @@ class _AdminFeesState extends State<AdminFees> {
 
                       // ── Filters (segmented control) ───────────
                       _FilterSegmentedControl(
-                        labels: const ['All', 'Paid', 'Pending', 'Overdue'],
+                        labels: [
+                          AppStrings.t('all_filter'),
+                          AppStrings.t('paid_status'),
+                          AppStrings.t('pending_lbl'),
+                          AppStrings.t('overdue_lbl'),
+                        ],
                         selected: _filter,
                         onChanged: (i) => setState(() => _filter = i),
                       ),
@@ -199,9 +220,7 @@ class _AdminFeesState extends State<AdminFees> {
                           child: Center(child: CircularProgressIndicator()),
                         )
                       else if (_getFiltered().isEmpty)
-                        const _EmptyState(
-                          message: 'No payments found in this category.',
-                        )
+                        _EmptyState(message: AppStrings.t('no_payments_found'))
                       else
                         ..._getFiltered().map(
                           (p) => Padding(
