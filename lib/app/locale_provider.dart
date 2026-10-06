@@ -314,6 +314,10 @@ class AppStrings {
         "Each student's transport subscription status, and what's been collected in fees.",
     'fee_collection_title': 'Fee Collection',
     'view_full_fee_breakdown_action': 'View full fee breakdown',
+
+    // Dashboard — Suspended Users metric card
+    'suspended_users_lbl': 'Suspended Users',
+    'of_total_users_sub': 'of {count} total users',
   };
 
   static final Map<String, String> _ur = {
@@ -566,5 +570,9 @@ class AppStrings {
         'ہر طالب علم کی ٹرانسپورٹ سبسکرپشن کی صورتحال، اور فیس میں کتنی رقم وصول ہوئی۔',
     'fee_collection_title': 'فیس وصولی',
     'view_full_fee_breakdown_action': 'مکمل فیس تفصیل دیکھیں',
+
+    // Dashboard — Suspended Users metric card
+    'suspended_users_lbl': 'معطل صارفین',
+    'of_total_users_sub': 'کل {count} صارفین میں سے',
   };
 }

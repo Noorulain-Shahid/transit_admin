@@ -99,6 +99,8 @@ class _AdminNotificationsState extends State<AdminNotifications> {
                         ),
                       ),
                       const SizedBox(height: 12),
+                      _RecentFeedbackSection(),
+                      const SizedBox(height: 12),
                       _RecentAccountsSection(),
                       const SizedBox(height: 12),
                       _PendingDriversSection(),
@@ -157,6 +159,63 @@ class _PendingDriversSection extends StatelessWidget {
   }
 }
 
+/// Real, live-Firestore replacement for the old hardcoded "Recent Reviews"
+/// notice — every "Rate the App" submission, newest first.
+class _RecentFeedbackSection extends StatelessWidget {
+  const _RecentFeedbackSection();
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<List<AppFeedback>>(
+      stream: AdminRepository.instance.watchRecentFeedback(),
+      builder: (context, snapshot) {
+        final feedback = snapshot.data ?? const <AppFeedback>[];
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const SizedBox.shrink();
+        }
+        return _SectionCard(
+          title: 'Recent Feedback',
+          subtitle: feedback.isEmpty
+              ? 'No one has rated the app yet.'
+              : 'Ratings and comments submitted from "Rate the App".',
+          children: feedback
+              .map(
+                (f) => _NotificationItem(
+                  title: '${'⭐' * f.rating}${'☆' * (5 - f.rating)} rating',
+                  subtitle: (f.comment == null || f.comment!.isEmpty)
+                      ? 'No comment left.'
+                      : f.comment!,
+                  time: _timeAgo(f.timestamp),
+                  icon: Icons.star_rounded,
+                  color: f.rating >= 4
+                      ? AppTheme.success
+                      : f.rating == 3
+                      ? AppTheme.warning
+                      : AppTheme.error,
+                ),
+              )
+              .toList(),
+        );
+      },
+    );
+  }
+}
+
+// Only the day-based branch was in this task's requested term list ('ago',
+// 'd') — 'Just now'/'min ago'/'h ago' stay hardcoded English rather than
+// inventing keys nobody asked for. English's unit sits directly against the
+// number ('5d'); Urdu's needs a space before it ('5 دن') — that space lives
+// inside the `day_unit` dictionary value itself, not here, so this one
+// composition works correctly for both languages unchanged.
+String _timeAgo(DateTime? t) {
+  if (t == null) return '';
+  final diff = DateTime.now().difference(t);
+  if (diff.inMinutes < 1) return 'Just now';
+  if (diff.inMinutes < 60) return '${diff.inMinutes} min ago';
+  if (diff.inHours < 24) return '${diff.inHours}h ago';
+  return '${diff.inDays}${AppStrings.t('day_unit')} ${AppStrings.t('ago_suffix')}';
+}
+
 /// Real, live-Firestore replacement for the old hardcoded "New Account
 /// Activity" list — the 5 most recently created accounts across every role.
 class _RecentAccountsSection extends StatelessWidget {
@@ -176,21 +235,6 @@ class _RecentAccountsSection extends StatelessWidget {
     UserRole.admin: AppTheme.adminEmerald,
   };
 
-  // Only the day-based branch was in this task's requested term list ('ago',
-  // 'd') — 'Just now'/'min ago'/'h ago' stay hardcoded English rather than
-  // inventing keys nobody asked for. English's unit sits directly against
-  // the number ('5d'); Urdu's needs a space before it ('5 دن') — that space
-  // lives inside the `day_unit` dictionary value itself, not here, so this
-  // one composition works correctly for both languages unchanged.
-  String _timeAgo(DateTime? t) {
-    if (t == null) return '';
-    final diff = DateTime.now().difference(t);
-    if (diff.inMinutes < 1) return 'Just now';
-    if (diff.inMinutes < 60) return '${diff.inMinutes} min ago';
-    if (diff.inHours < 24) return '${diff.inHours}h ago';
-    return '${diff.inDays}${AppStrings.t('day_unit')} ${AppStrings.t('ago_suffix')}';
-  }
-
   // Per-role title/subtitle, rather than capitalizing `u.role.name` — that
   // trick doesn't generalize to translation, since Urdu word order/grammar
   // isn't "capitalize a role name and append a fixed suffix".
@@ -202,12 +246,15 @@ class _RecentAccountsSection extends StatelessWidget {
   };
 
   String _registeredAsSubtitle(String name, UserRole role) => switch (role) {
-    UserRole.parent =>
-      AppStrings.t('registered_as_parent').replaceFirst('{name}', name),
-    UserRole.student =>
-      AppStrings.t('registered_as_student').replaceFirst('{name}', name),
-    UserRole.driver =>
-      AppStrings.t('registered_as_driver').replaceFirst('{name}', name),
+    UserRole.parent => AppStrings.t(
+      'registered_as_parent',
+    ).replaceFirst('{name}', name),
+    UserRole.student => AppStrings.t(
+      'registered_as_student',
+    ).replaceFirst('{name}', name),
+    UserRole.driver => AppStrings.t(
+      'registered_as_driver',
+    ).replaceFirst('{name}', name),
     UserRole.admin => '$name registered as a ${role.name}.',
   };
 

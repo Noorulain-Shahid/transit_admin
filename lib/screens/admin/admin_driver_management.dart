@@ -223,17 +223,23 @@ class _AdminDriverManagementState extends State<AdminDriverManagement> {
       child: ListView(
         scrollDirection: Axis.horizontal,
         children: [
-          _FilterChip(
+          _StatusFilterChip(
             label:
                 '${AppStrings.t('status_prefix')}: ${_filterDisplay(_filterStatus)}',
             icon: Icons.circle,
             color: AppTheme.driverCyan,
-            onTap: () {
-              setState(
-                () => _filterStatus =
-                    _statusFilters[(_statusFilters.indexOf(_filterStatus) + 1) %
-                        _statusFilters.length],
-              );
+            selected: _filterStatus,
+            options: _statusFilters,
+            displayLabel: _filterDisplay,
+            onSelected: (status) {
+              // Placeholder for the real filter trigger — `_filtered()`
+              // already re-runs off `_filterStatus` on every rebuild, so
+              // this setState is what actually re-queries/re-filters the
+              // list today. Swap/extend this with a Firestore query (e.g.
+              // `AdminRepository.instance.watchDrivers(status: ...)`) here
+              // if filtering should happen server-side instead of
+              // client-side in `_matchesFilter`.
+              setState(() => _filterStatus = status);
             },
           ),
         ],
@@ -482,21 +488,43 @@ class _MiniStat extends StatelessWidget {
   }
 }
 
-class _FilterChip extends StatelessWidget {
+/// Status pill that opens a [PopupMenuButton] menu on tap instead of just
+/// cycling through `options` in a fixed order — the pill's own visuals
+/// (container/icon/label/chevron) are unchanged from the old `_FilterChip`,
+/// only the tap behavior is now a real dropdown.
+class _StatusFilterChip extends StatelessWidget {
   final String label;
   final IconData icon;
   final Color color;
-  final VoidCallback onTap;
-  const _FilterChip({
+  final String selected;
+  final List<String> options;
+  final String Function(String option) displayLabel;
+  final ValueChanged<String> onSelected;
+  const _StatusFilterChip({
     required this.label,
     required this.icon,
     required this.color,
-    required this.onTap,
+    required this.selected,
+    required this.options,
+    required this.displayLabel,
+    required this.onSelected,
   });
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
+    return PopupMenuButton<String>(
+      initialValue: selected,
+      onSelected: onSelected,
+      // Match the pill's own rounded shape so the menu reads as "opening
+      // from" the pill rather than a generic unrelated Material menu.
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      itemBuilder: (context) => options
+          .map(
+            (option) => PopupMenuItem<String>(
+              value: option,
+              child: Text(displayLabel(option)),
+            ),
+          )
+          .toList(),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(

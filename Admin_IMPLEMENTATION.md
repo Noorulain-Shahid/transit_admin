@@ -7,7 +7,7 @@
 > - [`README.md`](README.md) — architecture, schema, screen docs (mobile app)
 > - [`../../transit_admin/README.md`](../../transit_admin/README.md) — admin app
 >
-> **Last updated:** 2026-09-08 (subscription screen)
+> **Last updated:** 2026-10-06 (dashboard suspended users card)
 
 ---
 
@@ -725,6 +725,157 @@ its note above — pick a real id whenever you're ready and it can be redone.
 ---
 
 ## 📝 Changelog
+
+### 2026-10-06 (dashboard suspended users card) — replaced the "Active Subs" metric card with a "Suspended Users" card (transit_admin)
+
+**Data**, `admin_dashboard.dart`'s `_buildOverviewCards` — there's no single
+unified `status == 'suspended'` field across one `users` collection in
+this schema: it's `Student.isTransportSuspended` (transport-specific),
+`Driver.status == DriverStatus.suspended`, and `AppUser.isActive == false`
+for parents (the closest parent-side equivalent — surfaced elsewhere as
+"Inactive", since there's no separate parent-suspension flag). Summed
+across all three, off the streams this screen already subscribes to in
+`initState` (`watchStudents`/`watchDrivers`/`watchUsersByRole(parent)`):
+```dart
+final suspendedStudents = _students?.where((s) => s.isTransportSuspended).length;
+final suspendedDrivers = _drivers?.where((d) => d.status == DriverStatus.suspended).length;
+final suspendedParents = _parents?.where((p) => !p.isActive).length;
+final suspendedUsers = (_students == null || _drivers == null || _parents == null)
+    ? null
+    : (suspendedStudents ?? 0) + (suspendedDrivers ?? 0) + (suspendedParents ?? 0);
+final totalUsers = (_students == null || _drivers == null || _parents == null)
+    ? null
+    : _students!.length + _drivers!.length + _parents!.length;
+```
+`activeSubs` (the old card's count) and its `active_subs_lbl`/
+`active_subs_sub` dictionary keys are no longer referenced by this card —
+left in the dictionary rather than removed, since deleting a key that
+might be reused elsewhere is riskier than an unused string.
+
+**New dictionary keys** (`lib/app/locale_provider.dart`):
+```dart
+// English
+'suspended_users_lbl': 'Suspended Users',
+'of_total_users_sub': 'of {count} total users',
+// Urdu
+'suspended_users_lbl': 'معطل صارفین',
+'of_total_users_sub': 'کل {count} صارفین میں سے',
+```
+
+**Widget** — icon swapped from the green checkmark to `Icons.person_off_rounded`
+in `AppTheme.error` (red), label/subtitle now reference suspended users
+instead of active subscriptions:
+```dart
+_WideStatCard(
+  icon: Icons.person_off_rounded,
+  label: AppStrings.t('suspended_users_lbl'),
+  value: _fmtCount(suspendedUsers),
+  sub: AppStrings.t('of_total_users_sub').replaceFirst('{count}', _fmtCount(totalUsers)),
+  color: AppTheme.error,
+),
+```
+
+**Firestore query logic** — this card (like every other card on this
+dashboard) filters client-side over collections already subscribed to in
+`initState`, rather than a dedicated per-card `StreamBuilder`/query. That's
+consistent with how the rest of the dashboard works and required no
+repository changes. A server-side equivalent is possible for the driver
+half today — `AdminRepository.watchDrivers` already accepts an optional
+`status`:
+```dart
+AdminRepository.instance.watchDrivers(status: DriverStatus.suspended)
+// → Db.drivers.where('status', isEqualTo: 'suspended').snapshots()
+```
+`watchStudents()`/`watchUsersByRole()` don't take an equivalent filter
+param yet — extending them would look like:
+```dart
+Stream<List<Student>> watchSuspendedStudents() =>
+    Db.students.where('isTransportSuspended', isEqualTo: true).snapshots().docsList;
+
+Stream<List<AppUser>> watchInactiveUsersByRole(UserRole role) => Db.users
+    .where('role', isEqualTo: role.name)
+    .where('isActive', isEqualTo: false)
+    .snapshots()
+    .docsList;
+```
+Not added to `AdminRepository` in this pass — the dashboard already holds
+the full collections in memory for its other cards, so adding three more
+server-side-filtered streams would mean redundant reads rather than a real
+efficiency gain here. Flagging this if the admin ever needs this count
+independent of the rest of the dashboard's data.
+
+`flutter analyze` (`lib/app/locale_provider.dart`,
+`lib/screens/admin/admin_dashboard.dart`): **No issues found!**
+
+### 2026-10-06 (driver management status filter dropdown) — made the "Status: X" pill on Driver Management a real dropdown instead of a tap-to-cycle button (transit_admin)
+
+The status pill below the search bar previously cycled through
+`_statusFilters` in a fixed order on every tap (`onTap` advanced
+`_filterStatus` to the next item, wrapping around). Replaced that with a
+`PopupMenuButton<String>` so an admin can jump directly to any status in
+one tap, while keeping the pill's existing visuals (container, dot icon,
+label, chevron) unchanged.
+
+**`_FilterChip` → `_StatusFilterChip`** (`admin_driver_management.dart`):
+the old `GestureDetector(onTap: ..., child: Container(...))` wrapper became
+`PopupMenuButton<String>(initialValue: ..., onSelected: ..., itemBuilder: ..., child: Container(...))`
+— same `Container`/`Row`/`Icon`/`Text` pill body, just the tap target swapped:
+```dart
+class _StatusFilterChip extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final Color color;
+  final String selected;
+  final List<String> options;
+  final String Function(String option) displayLabel;
+  final ValueChanged<String> onSelected;
+  const _StatusFilterChip({...});
+
+  @override
+  Widget build(BuildContext context) {
+    return PopupMenuButton<String>(
+      initialValue: selected,
+      onSelected: onSelected,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      itemBuilder: (context) => options
+          .map((option) => PopupMenuItem<String>(value: option, child: Text(displayLabel(option))))
+          .toList(),
+      child: Container(/* unchanged pill visuals */),
+    );
+  }
+}
+```
+
+**Call site** (`_buildFilters`) — `options` is the existing
+`_statusFilters` constant (`['All', 'Pending', 'Online', 'Offline',
+'On Trip', 'Suspended']`), `displayLabel` is the existing `_filterDisplay`
+function (so menu entries show translated text the same way the pill label
+already does), and `onSelected` is the state-update + filtering trigger
+point:
+```dart
+_StatusFilterChip(
+  label: '${AppStrings.t('status_prefix')}: ${_filterDisplay(_filterStatus)}',
+  icon: Icons.circle,
+  color: AppTheme.driverCyan,
+  selected: _filterStatus,
+  options: _statusFilters,
+  displayLabel: _filterDisplay,
+  onSelected: (status) {
+    // Placeholder for the real filter trigger — setState alone already
+    // re-runs `_filtered()`/`_matchesFilter` client-side; swap/extend this
+    // with a server-side query (e.g. `AdminRepository.instance.watchDrivers(status: ...)`)
+    // if filtering should happen in Firestore instead.
+    setState(() => _filterStatus = status);
+  },
+),
+```
+`_filterStatus` itself is still the literal English identifier (`'All'`,
+`'Suspended'`, etc.) used by `_matchesFilter`/`_filterDisplay` — only the
+selection mechanism changed, not the state shape, so no other code in this
+file needed to change.
+
+`flutter analyze` (`lib/screens/admin/admin_driver_management.dart`): **No
+issues found!**
 
 ### 2026-09-08 (subscription screen) — localized the Subscription screen's header, fee collection card, and students list (transit_admin)
 

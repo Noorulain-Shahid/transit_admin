@@ -97,10 +97,8 @@ class AdminRepository {
   /// Payments due/paid in [monthKey] (`YYYY-MM`) — used to derive MRR and
   /// payment success/failure rates. Pass [Payment.monthKeyFor(DateTime.now())]
   /// for the current month.
-  Stream<List<Payment>> watchPaymentsForMonth(String monthKey) => Db.payments
-      .where('monthKey', isEqualTo: monthKey)
-      .snapshots()
-      .docsList;
+  Stream<List<Payment>> watchPaymentsForMonth(String monthKey) =>
+      Db.payments.where('monthKey', isEqualTo: monthKey).snapshots().docsList;
 
   /// One-time (not live) sum of `paid` payments for each of [monthKeys], in
   /// paisa — used for the dashboard's revenue trend chart. A `Future`, not a
@@ -137,6 +135,40 @@ class AdminRepository {
     final snap = await Db.trips.where('dateKey', isEqualTo: dateKey).get();
     return snap.docs.map((d) => d.data()).toList();
   }
+
+  // ── App feedback ──────────────────────────────────────────────────────────
+
+  /// Newest "Rate the App" submissions — used for the admin notifications
+  /// feed's "Recent Feedback" section, the same live-Firestore pattern as
+  /// [watchRecentUsers]/[watchDrivers] rather than a separate stored
+  /// notification record: the feedback documents themselves are the source
+  /// of truth, and there's nothing a notification doc would carry that this
+  /// stream doesn't already have.
+  Stream<List<AppFeedback>> watchRecentFeedback({int limit = 10}) => Db
+      .appFeedback
+      .orderBy('timestamp', descending: true)
+      .limit(limit)
+      .snapshots()
+      .docsList;
+
+  // ── Live Chat support inbox ──────────────────────────────────────────────
+
+  /// Every "Live Chat" support thread, most recently active first — the
+  /// query "which users currently need help" resolves to. Support threads
+  /// have `[realUserUid, kSupportParticipantId]` as `participants`, not a
+  /// specific admin's uid (see `kSupportParticipantId`'s doc comment in
+  /// `transit_core`), so this filters on that fixed sentinel instead of
+  /// [watchDrivers]/[watchRecentUsers]'s pattern of filtering on this
+  /// admin's own uid — any admin reading this stream sees every open
+  /// support thread, not just ones addressed to them personally, since
+  /// there is no "addressed to them personally". Messages within a thread
+  /// (`MessagingRepository.watchMessages`/`.sendMessage`) work unchanged —
+  /// this is only the missing piece: finding which threads exist at all.
+  Stream<List<ChatThread>> watchSupportThreads() => Db.chats
+      .where('participants', arrayContains: kSupportParticipantId)
+      .orderBy('updatedAt', descending: true)
+      .snapshots()
+      .docsList;
 
   // ── Messaging ─────────────────────────────────────────────────────────────
 

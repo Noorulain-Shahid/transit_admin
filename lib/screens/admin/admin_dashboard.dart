@@ -329,9 +329,30 @@ class _AdminDashboardState extends State<AdminDashboard> {
         ?.where((d) => d.status == DriverStatus.pendingVerification)
         .length;
 
-    final activeSubs = _students
-        ?.where((s) => s.subscriptionStatus == SubscriptionStatus.active)
+    // "Suspended" isn't one unified field across a single `users`
+    // collection in this schema — it's `Student.isTransportSuspended`
+    // (transport-specific), `Driver.status == DriverStatus.suspended`, and
+    // `AppUser.isActive == false` for parents (surfaced elsewhere as
+    // "Inactive" — there's no separate parent-suspension flag). Summed
+    // across all three so the card reflects the whole user base, not just
+    // students.
+    final suspendedStudents = _students
+        ?.where((s) => s.isTransportSuspended)
         .length;
+    final suspendedDrivers = _drivers
+        ?.where((d) => d.status == DriverStatus.suspended)
+        .length;
+    final suspendedParents = _parents?.where((p) => !p.isActive).length;
+    final suspendedUsers =
+        (_students == null || _drivers == null || _parents == null)
+        ? null
+        : (suspendedStudents ?? 0) +
+              (suspendedDrivers ?? 0) +
+              (suspendedParents ?? 0);
+    final totalUsers =
+        (_students == null || _drivers == null || _parents == null)
+        ? null
+        : _students!.length + _drivers!.length + _parents!.length;
     final expiredSubs = _students
         ?.where((s) => s.subscriptionStatus == SubscriptionStatus.expired)
         .length;
@@ -393,13 +414,13 @@ class _AdminDashboardState extends State<AdminDashboard> {
           children: [
             Expanded(
               child: _WideStatCard(
-                icon: Icons.check_circle_rounded,
-                label: AppStrings.t('active_subs_lbl'),
-                value: _fmtCount(activeSubs),
+                icon: Icons.person_off_rounded,
+                label: AppStrings.t('suspended_users_lbl'),
+                value: _fmtCount(suspendedUsers),
                 sub: AppStrings.t(
-                  'active_subs_sub',
-                ).replaceFirst('{count}', _fmtCount(studentCount)),
-                color: AppTheme.success,
+                  'of_total_users_sub',
+                ).replaceFirst('{count}', _fmtCount(totalUsers)),
+                color: AppTheme.error,
               ),
             ),
             const SizedBox(width: 8),
