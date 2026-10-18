@@ -321,6 +321,11 @@ class AppStrings {
 
     // Driver Management — status filter dropdown
     'eligible_status': 'Eligible',
+
+    // Student Management — institution level filter dropdown
+    'school_type': 'School',
+    'all_levels_filter': 'All Levels',
+    'level_prefix': 'Level',
   };
 
   static final Map<String, String> _ur = {
@@ -580,5 +585,10 @@ class AppStrings {
 
     // Driver Management — status filter dropdown
     'eligible_status': 'اہل',
+
+    // Student Management — institution level filter dropdown
+    'school_type': 'اسکول',
+    'all_levels_filter': 'تمام سطحیں',
+    'level_prefix': 'سطح',
   };
 }

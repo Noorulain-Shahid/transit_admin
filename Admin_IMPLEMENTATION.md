@@ -7,7 +7,7 @@
 > - [`README.md`](README.md) — architecture, schema, screen docs (mobile app)
 > - [`../../transit_admin/README.md`](../../transit_admin/README.md) — admin app
 >
-> **Last updated:** 2026-10-18 (driver management eligible filter)
+> **Last updated:** 2026-10-18 (dashboard suspended accounts — include university students)
 
 ---
 
@@ -725,6 +725,139 @@ its note above — pick a real id whenever you're ready and it can be redone.
 ---
 
 ## 📝 Changelog
+
+### 2026-10-18 (dashboard suspended accounts — include university students) — expanded the primary-accounts tally to include university students as their own account holders (transit_admin)
+
+**Not a hardcoded-"5" bug** — `totalUsers` was already a live sum
+(`_drivers!.length + _parents!.length`), not a literal constant; "5" was
+simply the real count of drivers + parents in the connected
+project/dataset at the time, before university students were added to the
+denominator. Confirmed this directly before changing anything (see the
+prior turn), since the originally reported symptom didn't match the code.
+
+**The actual change**: university students are old enough to hold and
+manage their own account rather than being a dependent monitored by a
+parent, so `Student` docs with `instituteType == 'University'` now count
+as a primary account in this tally too. School/College students remain
+excluded — they're still dependent child profiles linked to a parent via
+`Student.parentId`, and counting them would double-count the same
+"suspended family" under its own parent's tally (the reasoning from the
+original fix, unchanged for non-university students):
+```dart
+final universityStudents =
+    _students?.where((s) => s.instituteType == 'University').toList();
+final suspendedDrivers = _drivers?.where((d) => d.status == DriverStatus.suspended).length;
+final suspendedParents = _parents?.where((p) => !p.isActive).length;
+final suspendedUniversityStudents = universityStudents?.where((s) => s.isTransportSuspended).length;
+
+final suspendedUsers = (_drivers == null || _parents == null || _students == null)
+    ? null
+    : (suspendedDrivers ?? 0) + (suspendedParents ?? 0) + (suspendedUniversityStudents ?? 0);
+final totalUsers = (_drivers == null || _parents == null || _students == null)
+    ? null
+    : _drivers!.length + _parents!.length + (universityStudents?.length ?? 0);
+```
+`suspendedUsers`/`totalUsers` now wait on `_students` as well as
+`_drivers`/`_parents` before resolving (previously only the latter two),
+so the card still shows its loading state (`'…'`) until all three streams
+have delivered at least one snapshot.
+
+**Query approach, re-confirmed**: still no single `users` collection or
+cross-collection `Future.wait` needed — `_students`, `_drivers`, and
+`_parents` are the same three streams this screen already subscribes to in
+`initState` (`watchStudents()`, `watchDrivers()`,
+`watchUsersByRole(UserRole.parent)`); the new university-student filter is
+just another `.where()` over the already-loaded `_students` list,
+consistent with how every other count on this card is computed.
+
+**Widget/subtitle binding unchanged** — already dynamic before this
+change and needed no edit:
+```dart
+sub: AppStrings.t('of_accounts_sub').replaceFirst('{count}', _fmtCount(totalUsers)),
+```
+
+`flutter analyze` (`lib/screens/admin/admin_dashboard.dart`): **No issues
+found!**
+
+### 2026-10-18 (student management level filter dropdown) — added an education-level filter (School/College/University) to Student Management (transit_admin)
+
+**New state + filter logic** (`admin_student_management.dart`):
+```dart
+const _levelFilters = ['All', 'School', 'College', 'University'];
+
+String _levelFilterDisplay(String level) => switch (level) {
+  'All' => AppStrings.t('all_levels_filter'),
+  'School' => AppStrings.t('school_type'),
+  'College' => AppStrings.t('college_type'),
+  'University' => AppStrings.t('university_type'),
+  _ => level,
+};
+
+// `Student.instituteType` defaults to empty for a school-level student
+// rather than literally storing 'School', so the 'School' filter matches
+// both — the same either-or already used for the per-card institute label.
+bool _matchesLevel(Student s, String level) => switch (level) {
+  'School' => s.instituteType.isEmpty || s.instituteType == 'School',
+  'College' => s.instituteType == 'College',
+  'University' => s.instituteType == 'University',
+  _ => true,
+};
+```
+`_AdminStudentManagementState` gained a `String _levelFilter = 'All';`
+field, and `_filtered()` now combines both conditions so the list reflects
+search text AND the selected level simultaneously:
+```dart
+List<Student> _filtered(List<Student> students) => students
+    .where((s) =>
+        (_search.isEmpty || s.name.toLowerCase().contains(_search.toLowerCase())) &&
+        _matchesLevel(s, _levelFilter))
+    .toList();
+```
+
+**Dropdown UI** — a new `_LevelFilterChip` pill (same
+`PopupMenuButton`-backed pattern as Driver Management's
+`_StatusFilterChip`), placed directly below the search bar and above the
+summary cards:
+```dart
+Widget _buildLevelFilter(BuildContext context) {
+  return Align(
+    alignment: Alignment.centerLeft,
+    child: _LevelFilterChip(
+      label: '${AppStrings.t('level_prefix')}: ${_levelFilterDisplay(_levelFilter)}',
+      selected: _levelFilter,
+      options: _levelFilters,
+      displayLabel: _levelFilterDisplay,
+      onSelected: (level) => setState(() => _levelFilter = level),
+    ),
+  );
+}
+```
+`_LevelFilterChip` reuses the exact pill container/border/chevron styling
+already established for this app's filter pills (rounded `context.cardBg`
+container, `context.surfaceBorder`, `Icons.unfold_more_rounded` chevron),
+with a school icon in `AppTheme.studentAmber` to match this screen's own
+accent color.
+
+**New dictionary keys** (`lib/app/locale_provider.dart`):
+```dart
+// English
+'school_type': 'School',
+'all_levels_filter': 'All Levels',
+'level_prefix': 'Level',
+// Urdu
+'school_type': 'اسکول',
+'all_levels_filter': 'تمام سطحیں',
+'level_prefix': 'سطح',
+```
+`university_type`/`college_type` already existed and are reused.
+
+**State management**: the selected level lives in local widget state
+(`_levelFilter`, via `setState`), consistent with this screen's existing
+`_search` field — no new provider/controller introduced. The pill's label
+updates immediately on selection since it reads `_levelFilter` directly.
+
+`flutter analyze` (`lib/app/locale_provider.dart`,
+`lib/screens/admin/admin_student_management.dart`): **No issues found!**
 
 ### 2026-10-18 (driver management eligible filter) — added an "Eligible" macro-filter to the status dropdown (transit_admin)
 

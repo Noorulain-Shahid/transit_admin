@@ -17,6 +17,32 @@ String _instituteTypeLabel(String type) => switch (type) {
   _ => type,
 };
 
+// Education-level filter dropdown — distinct from `_instituteTypeLabel`
+// above (which displays whatever free-text value a student's own record
+// happens to hold) because the filter only ever offers these four fixed
+// options, regardless of what custom values exist in the data.
+const _levelFilters = ['All', 'School', 'College', 'University'];
+
+String _levelFilterDisplay(String level) => switch (level) {
+  'All' => AppStrings.t('all_levels_filter'),
+  'School' => AppStrings.t('school_type'),
+  'College' => AppStrings.t('college_type'),
+  'University' => AppStrings.t('university_type'),
+  _ => level,
+};
+
+// `Student.instituteType` is a free-text field (a school can type anything
+// into the signup form) that defaults to empty for a school-level student
+// rather than literally storing 'School' — so the 'School' filter matches
+// both the empty default and an explicit 'School' value, the same
+// either-or already used for the institute label shown on each card.
+bool _matchesLevel(Student s, String level) => switch (level) {
+  'School' => s.instituteType.isEmpty || s.instituteType == 'School',
+  'College' => s.instituteType == 'College',
+  'University' => s.instituteType == 'University',
+  _ => true,
+};
+
 String subscriptionStatusLabel(SubscriptionStatus s) => switch (s) {
   SubscriptionStatus.active => 'Active',
   SubscriptionStatus.trial => 'Trial',
@@ -43,6 +69,7 @@ class AdminStudentManagement extends StatefulWidget {
 
 class _AdminStudentManagementState extends State<AdminStudentManagement> {
   String _search = '';
+  String _levelFilter = 'All';
 
   @override
   void initState() {
@@ -61,8 +88,9 @@ class _AdminStudentManagementState extends State<AdminStudentManagement> {
   List<Student> _filtered(List<Student> students) => students
       .where(
         (s) =>
-            _search.isEmpty ||
-            s.name.toLowerCase().contains(_search.toLowerCase()),
+            (_search.isEmpty ||
+                s.name.toLowerCase().contains(_search.toLowerCase())) &&
+            _matchesLevel(s, _levelFilter),
       )
       .toList();
 
@@ -83,6 +111,8 @@ class _AdminStudentManagementState extends State<AdminStudentManagement> {
                 child: Column(
                   children: [
                     _buildSearch(context),
+                    const SizedBox(height: 10),
+                    _buildLevelFilter(context),
                     const SizedBox(height: 10),
                     _buildStats(context, students),
                     const SizedBox(height: 14),
@@ -189,6 +219,20 @@ class _AdminStudentManagementState extends State<AdminStudentManagement> {
             vertical: 14,
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildLevelFilter(BuildContext context) {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: _LevelFilterChip(
+        label:
+            '${AppStrings.t('level_prefix')}: ${_levelFilterDisplay(_levelFilter)}',
+        selected: _levelFilter,
+        options: _levelFilters,
+        displayLabel: _levelFilterDisplay,
+        onSelected: (level) => setState(() => _levelFilter = level),
       ),
     );
   }
@@ -327,6 +371,70 @@ class _StudentCard extends StatelessWidget {
             ],
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Education-level filter pill — opens a [PopupMenuButton] menu on tap,
+/// matching the same pill-plus-dropdown pattern used for the status filter
+/// on Driver Management (`_StatusFilterChip`).
+class _LevelFilterChip extends StatelessWidget {
+  final String label;
+  final String selected;
+  final List<String> options;
+  final String Function(String option) displayLabel;
+  final ValueChanged<String> onSelected;
+  const _LevelFilterChip({
+    required this.label,
+    required this.selected,
+    required this.options,
+    required this.displayLabel,
+    required this.onSelected,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return PopupMenuButton<String>(
+      initialValue: selected,
+      onSelected: onSelected,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      itemBuilder: (context) => options
+          .map(
+            (option) => PopupMenuItem<String>(
+              value: option,
+              child: Text(displayLabel(option)),
+            ),
+          )
+          .toList(),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: context.cardBg,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: context.surfaceBorder),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.school_outlined, size: 14, color: AppTheme.studentAmber),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: TextStyle(
+                color: context.textPrimary,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(width: 4),
+            Icon(
+              Icons.unfold_more_rounded,
+              size: 14,
+              color: context.textTertiary,
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -331,26 +331,38 @@ class _AdminDashboardState extends State<AdminDashboard> {
 
     // "Suspended" isn't one unified field across a single `users`
     // collection in this schema — it's `Driver.status ==
-    // DriverStatus.suspended` and `AppUser.isActive == false` for parents
+    // DriverStatus.suspended`, `AppUser.isActive == false` for parents
     // (surfaced elsewhere as "Inactive" — there's no separate
-    // parent-suspension flag). `Student` docs are deliberately excluded
-    // here: they're child profiles linked to a parent via
-    // `Student.parentId`, not primary/root accounts, so a suspended
-    // student would otherwise double-count the same "suspended family"
-    // underneath its own parent's tally. This card counts only primary
-    // accounts — parents and drivers — the same way `watchUsersByRole`
-    // already only returns `AppUser` docs and never reaches into the
-    // separate `students` collection.
+    // parent-suspension flag), and `Student.isTransportSuspended` for
+    // university students specifically. Most `Student` docs are still
+    // excluded: they're dependent child profiles linked to a parent via
+    // `Student.parentId`, and counting them here would double-count the
+    // same "suspended family" underneath its own parent's tally. A
+    // university student is the one exception — old enough to hold and
+    // manage their own account rather than being a dependent monitored by
+    // a parent — so only `instituteType == 'University'` students count as
+    // a primary account here; School/College students stay excluded.
+    final universityStudents =
+        _students?.where((s) => s.instituteType == 'University').toList();
     final suspendedDrivers = _drivers
         ?.where((d) => d.status == DriverStatus.suspended)
         .length;
     final suspendedParents = _parents?.where((p) => !p.isActive).length;
-    final suspendedUsers = (_drivers == null || _parents == null)
+    final suspendedUniversityStudents = universityStudents
+        ?.where((s) => s.isTransportSuspended)
+        .length;
+    final suspendedUsers =
+        (_drivers == null || _parents == null || _students == null)
         ? null
-        : (suspendedDrivers ?? 0) + (suspendedParents ?? 0);
-    final totalUsers = (_drivers == null || _parents == null)
+        : (suspendedDrivers ?? 0) +
+              (suspendedParents ?? 0) +
+              (suspendedUniversityStudents ?? 0);
+    final totalUsers =
+        (_drivers == null || _parents == null || _students == null)
         ? null
-        : _drivers!.length + _parents!.length;
+        : _drivers!.length +
+              _parents!.length +
+              (universityStudents?.length ?? 0);
     final expiredSubs = _students
         ?.where((s) => s.subscriptionStatus == SubscriptionStatus.expired)
         .length;
