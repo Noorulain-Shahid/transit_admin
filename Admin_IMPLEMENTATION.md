@@ -7,7 +7,7 @@
 > - [`README.md`](README.md) — architecture, schema, screen docs (mobile app)
 > - [`../../transit_admin/README.md`](../../transit_admin/README.md) — admin app
 >
-> **Last updated:** 2026-10-06 (dashboard suspended users card)
+> **Last updated:** 2026-10-18 (driver management eligible filter)
 
 ---
 
@@ -725,6 +725,204 @@ its note above — pick a real id whenever you're ready and it can be redone.
 ---
 
 ## 📝 Changelog
+
+### 2026-10-18 (driver management eligible filter) — added an "Eligible" macro-filter to the status dropdown (transit_admin)
+
+**Menu item** (`admin_driver_management.dart`) — `_statusFilters` gained
+`'Eligible'` right after `'All'`:
+```dart
+const _statusFilters = ['All', 'Eligible', 'Pending', 'Online', 'Offline', 'On Trip', 'Suspended'];
+```
+Since `_StatusFilterChip` (added in the earlier dropdown-conversion round)
+already builds its menu items by mapping over `_statusFilters`, this one
+list edit is the entire "add menu item" step — no changes needed to the
+`PopupMenuButton` wiring itself.
+
+**Filter logic** — 'Eligible' is a macro-filter (anyone not suspended), not
+a single `DriverStatus` value, so it's handled as its own case in
+`_matchesFilter`:
+```dart
+bool _matchesFilter(Driver d, String filter) => switch (filter) {
+  'Eligible' => d.status != DriverStatus.suspended,
+  'Pending' => d.status == DriverStatus.pendingVerification,
+  'Online' => d.status == DriverStatus.online,
+  'Offline' => d.status == DriverStatus.offline,
+  'On Trip' => d.status == DriverStatus.onTrip,
+  'Suspended' => d.status == DriverStatus.suspended,
+  _ => true,
+};
+```
+This filters client-side over the already-subscribed `watchDrivers()`
+stream, same as every other filter on this screen — there's no per-filter
+Firestore query today. Added a doc comment on `_filterStatus` recording the
+server-side equivalent queries for if this ever needs to move off watching
+the full collection:
+```dart
+// AdminRepository.instance.watchDrivers(status: DriverStatus.suspended)   // already supported
+// Db.drivers.where('status', isNotEqualTo: DriverStatus.suspended.name)   // 'Eligible' via negation
+// Db.drivers.where('status', whereIn: [pendingVerification, online, offline, onTrip].map((s) => s.name))
+//   // equivalent 'Eligible' via an explicit allow-list — safer than isNotEqualTo
+//   // if a new DriverStatus is added later that shouldn't count as eligible by default
+```
+
+**New dictionary key** (`lib/app/locale_provider.dart`):
+```dart
+// English
+'eligible_status': 'Eligible',
+// Urdu
+'eligible_status': 'اہل',
+```
+
+**UI sync** — no extra wiring needed: the pill's label was already built as
+`'${AppStrings.t('status_prefix')}: ${_filterDisplay(_filterStatus)}'`, and
+`_filterDisplay` now maps `'Eligible'` → `AppStrings.t('eligible_status')`,
+so selecting it correctly updates the pill to "Status: Eligible" (or its
+Urdu equivalent) through the same mechanism every other filter already
+uses.
+
+`flutter analyze` (`lib/app/locale_provider.dart`,
+`lib/screens/admin/admin_driver_management.dart`): **No issues found!**
+
+### 2026-10-06 (dashboard suspended acc abbreviation) — abbreviated the English label to "Suspended Acc" and hardened `_WideStatCard`'s label against wrapping (transit_admin)
+
+**English label** (`lib/app/locale_provider.dart`):
+```dart
+'suspended_accounts_lbl': 'Suspended Acc', // was 'Suspended Accounts'
+```
+**Urdu left unabbreviated** (`'معطل اکاؤنٹس'`, unchanged) — Urdu has no
+equivalent of English's "Acc." truncation convention; cutting a word
+mid-script reads as a typo rather than an abbreviation, so it stays spelled
+out rather than literally mirroring the English shortening. This is a
+deliberate deviation, not an oversight.
+
+**Layout hardening** (`_WideStatCard`, shared by all three cards in this
+row — Suspended Accounts, Expired, Revenue MTD) — added `textAlign:
+TextAlign.center`, `maxLines: 1`, `overflow: TextOverflow.ellipsis` to the
+label `Text`, so the now-shorter English string stays centered and any
+longer string (the unabbreviated Urdu label, or a future longer label on
+any of the other two cards) truncates cleanly instead of wrapping to a
+second line and pushing the subtitle row down:
+```dart
+Text(
+  label,
+  textAlign: TextAlign.center,
+  maxLines: 1,
+  overflow: TextOverflow.ellipsis,
+  style: TextStyle(color: context.textSecondary, fontSize: 11),
+),
+```
+
+`flutter analyze` (`lib/app/locale_provider.dart`,
+`lib/screens/admin/admin_dashboard.dart`): **No issues found!**
+
+### 2026-10-06 (dashboard suspended accounts wording) — simplified "Suspended Primary Accounts" to "Suspended Accounts" (transit_admin)
+
+Pure wording simplification — the query logic from the previous round
+(parents + drivers only, students excluded) was already correct and is
+unchanged.
+
+**Dictionary keys renamed** (single call site — `lib/app/locale_provider.dart`):
+```dart
+// English
+'suspended_accounts_lbl': 'Suspended Accounts',   // was 'suspended_primary_accounts_lbl': 'Suspended Primary Accounts'
+'of_accounts_sub': 'of {count} accounts',         // was 'of_primary_accounts_sub': 'of {count} primary accounts'
+// Urdu
+'suspended_accounts_lbl': 'معطل اکاؤنٹس',
+'of_accounts_sub': 'کل {count} اکاؤنٹس میں سے',
+```
+
+**Widget** — only the two key names changed; `color: AppTheme.error` is
+untouched, so the card's red icon/border/gradient/subtitle tint is intact:
+```dart
+_WideStatCard(
+  icon: Icons.person_off_rounded,
+  label: AppStrings.t('suspended_accounts_lbl'),
+  value: _fmtCount(suspendedUsers),
+  sub: AppStrings.t('of_accounts_sub').replaceFirst('{count}', _fmtCount(totalUsers)),
+  color: AppTheme.error,
+),
+```
+
+**Query logic re-verified, unchanged**: `suspendedUsers`/`totalUsers` are
+still computed from `_drivers` (`DriverStatus.suspended`) and `_parents`
+(`!isActive`) only — `Student` docs stay excluded from this tally, exactly
+as fixed in the previous round. There remains no single `.where('role',
+isEqualTo: 'parent')`/`.where('isParent', isEqualTo: true)` clause to add
+server-side: `watchUsersByRole(UserRole.parent)` already only returns
+`AppUser` docs and structurally never includes anything from the separate
+`students` collection, so the count was already root-account-only before
+this wording change.
+
+`flutter analyze` (`lib/app/locale_provider.dart`,
+`lib/screens/admin/admin_dashboard.dart`): **No issues found!**
+
+### 2026-10-06 (dashboard suspended primary accounts fix) — excluded child (student) profiles from the Suspended Users tally (transit_admin)
+
+**Schema correction worth flagging**: the request assumed a single flat
+`profiles` collection with a `role`/`isChild`/`parentId` shape, where a
+`.where('role', isEqualTo: 'parent')` clause would exclude children. This
+schema is different — students live in their own entirely separate
+`students` collection (each with its own `Student.parentId` pointing at
+the parent's `AppUser` doc), not as child documents inside a `users`
+collection. `AdminRepository.watchUsersByRole(UserRole.parent)` (what
+`_parents` is populated from) already only ever returns `AppUser` docs and
+structurally never reaches into `students` — so there's no Firestore
+`.where()` clause to add; the real fix was removing the `Student`-derived
+count from the client-side sum, since that's what was pulling child
+profiles into the tally.
+
+**Before** (previous round) — summed students + drivers + parents:
+```dart
+final suspendedStudents = _students?.where((s) => s.isTransportSuspended).length;
+final suspendedDrivers = _drivers?.where((d) => d.status == DriverStatus.suspended).length;
+final suspendedParents = _parents?.where((p) => !p.isActive).length;
+final suspendedUsers = ... (suspendedStudents ?? 0) + (suspendedDrivers ?? 0) + (suspendedParents ?? 0);
+```
+
+**After** — `suspendedStudents`/`totalStudents` removed entirely; only
+primary/root accounts (parents + drivers) are counted:
+```dart
+// `Student` docs are deliberately excluded here: they're child profiles
+// linked to a parent via `Student.parentId`, not primary/root accounts,
+// so a suspended student would otherwise double-count the same
+// "suspended family" underneath its own parent's tally.
+final suspendedDrivers = _drivers?.where((d) => d.status == DriverStatus.suspended).length;
+final suspendedParents = _parents?.where((p) => !p.isActive).length;
+final suspendedUsers = (_drivers == null || _parents == null)
+    ? null
+    : (suspendedDrivers ?? 0) + (suspendedParents ?? 0);
+final totalUsers = (_drivers == null || _parents == null)
+    ? null
+    : _drivers!.length + _parents!.length;
+```
+
+**Dictionary keys renamed** (single call site, safe to rename in place —
+`lib/app/locale_provider.dart`):
+```dart
+// English
+'suspended_primary_accounts_lbl': 'Suspended Primary Accounts', // was 'suspended_users_lbl': 'Suspended Users'
+'of_primary_accounts_sub': 'of {count} primary accounts',       // was 'of_total_users_sub': 'of {count} total users'
+// Urdu
+'suspended_primary_accounts_lbl': 'معطل بنیادی اکاؤنٹس',
+'of_primary_accounts_sub': 'کل {count} بنیادی اکاؤنٹس میں سے',
+```
+"Primary Accounts" (rather than "Suspended Parents") was chosen because
+the tally still includes suspended drivers, not only parents — drivers are
+root accounts too, just not the ones under discussion in this request.
+
+**Widget**:
+```dart
+_WideStatCard(
+  icon: Icons.person_off_rounded,
+  label: AppStrings.t('suspended_primary_accounts_lbl'),
+  value: _fmtCount(suspendedUsers),
+  sub: AppStrings.t('of_primary_accounts_sub').replaceFirst('{count}', _fmtCount(totalUsers)),
+  color: AppTheme.error,
+),
+```
+
+`flutter analyze` (`lib/app/locale_provider.dart`,
+`lib/screens/admin/admin_dashboard.dart`): **No issues found!**
 
 ### 2026-10-06 (dashboard suspended users card) — replaced the "Active Subs" metric card with a "Suspended Users" card (transit_admin)
 

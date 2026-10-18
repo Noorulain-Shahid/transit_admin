@@ -315,9 +315,12 @@ class AppStrings {
     'fee_collection_title': 'Fee Collection',
     'view_full_fee_breakdown_action': 'View full fee breakdown',
 
-    // Dashboard — Suspended Users metric card
-    'suspended_users_lbl': 'Suspended Users',
-    'of_total_users_sub': 'of {count} total users',
+    // Dashboard — Suspended Accounts metric card
+    'suspended_accounts_lbl': 'Suspended Acc',
+    'of_accounts_sub': 'of {count} accounts',
+
+    // Driver Management — status filter dropdown
+    'eligible_status': 'Eligible',
   };
 
   static final Map<String, String> _ur = {
@@ -571,8 +574,11 @@ class AppStrings {
     'fee_collection_title': 'فیس وصولی',
     'view_full_fee_breakdown_action': 'مکمل فیس تفصیل دیکھیں',
 
-    // Dashboard — Suspended Users metric card
-    'suspended_users_lbl': 'معطل صارفین',
-    'of_total_users_sub': 'کل {count} صارفین میں سے',
+    // Dashboard — Suspended Accounts metric card
+    'suspended_accounts_lbl': 'معطل اکاؤنٹس',
+    'of_accounts_sub': 'کل {count} اکاؤنٹس میں سے',
+
+    // Driver Management — status filter dropdown
+    'eligible_status': 'اہل',
   };
 }

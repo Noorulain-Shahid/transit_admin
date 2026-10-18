@@ -8,6 +8,7 @@ import '../../widgets/glass_card.dart';
 
 const _statusFilters = [
   'All',
+  'Eligible',
   'Pending',
   'Online',
   'Offline',
@@ -22,13 +23,22 @@ const _statusFilters = [
 // they fall through unchanged.
 String _filterDisplay(String filter) => switch (filter) {
   'All' => AppStrings.t('status_all'),
+  'Eligible' => AppStrings.t('eligible_status'),
   'Pending' => AppStrings.t('pending_lbl'),
   'Offline' => AppStrings.t('offline_status'),
   'Suspended' => AppStrings.t('suspended_status'),
   _ => filter,
 };
 
+// 'Eligible' is a macro-filter over the other statuses (anyone currently
+// allowed to work), not a single `DriverStatus` value of its own — it's
+// evaluated client-side the same way every other filter here is, since
+// this screen already loads the full `watchDrivers()` stream and filters
+// in memory rather than per-filter Firestore queries. See `_filterStatus`'s
+// doc comment below for the equivalent server-side query, if this ever
+// needs to move off watching the full collection.
 bool _matchesFilter(Driver d, String filter) => switch (filter) {
+  'Eligible' => d.status != DriverStatus.suspended,
   'Pending' => d.status == DriverStatus.pendingVerification,
   'Online' => d.status == DriverStatus.online,
   'Offline' => d.status == DriverStatus.offline,
@@ -64,6 +74,22 @@ class AdminDriverManagement extends StatefulWidget {
 
 class _AdminDriverManagementState extends State<AdminDriverManagement> {
   String _search = '';
+  // All filtering (including 'Eligible') runs client-side over the full
+  // `watchDrivers()` stream via `_matchesFilter` — there's no per-filter
+  // Firestore query today. If this ever needs to move server-side instead
+  // (e.g. a very large driver collection), the equivalent queries are:
+  //   AdminRepository.instance.watchDrivers(status: DriverStatus.suspended)
+  //     // already supported — single-status filters
+  //   Db.drivers.where('status', isNotEqualTo: DriverStatus.suspended.name)
+  //     // 'Eligible': everyone except suspended
+  //   Db.drivers.where('status', whereIn: [
+  //     DriverStatus.pendingVerification.name, DriverStatus.online.name,
+  //     DriverStatus.offline.name, DriverStatus.onTrip.name,
+  //   ])
+  //     // equivalent 'Eligible' query using an explicit allow-list instead
+  //     // of a negation — needed if more statuses are added later that
+  //     // should NOT count as eligible by default (isNotEqualTo would
+  //     // silently include any new status; whereIn would not).
   String _filterStatus = 'All';
 
   @override

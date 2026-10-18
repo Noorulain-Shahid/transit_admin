@@ -330,29 +330,27 @@ class _AdminDashboardState extends State<AdminDashboard> {
         .length;
 
     // "Suspended" isn't one unified field across a single `users`
-    // collection in this schema — it's `Student.isTransportSuspended`
-    // (transport-specific), `Driver.status == DriverStatus.suspended`, and
-    // `AppUser.isActive == false` for parents (surfaced elsewhere as
-    // "Inactive" — there's no separate parent-suspension flag). Summed
-    // across all three so the card reflects the whole user base, not just
-    // students.
-    final suspendedStudents = _students
-        ?.where((s) => s.isTransportSuspended)
-        .length;
+    // collection in this schema — it's `Driver.status ==
+    // DriverStatus.suspended` and `AppUser.isActive == false` for parents
+    // (surfaced elsewhere as "Inactive" — there's no separate
+    // parent-suspension flag). `Student` docs are deliberately excluded
+    // here: they're child profiles linked to a parent via
+    // `Student.parentId`, not primary/root accounts, so a suspended
+    // student would otherwise double-count the same "suspended family"
+    // underneath its own parent's tally. This card counts only primary
+    // accounts — parents and drivers — the same way `watchUsersByRole`
+    // already only returns `AppUser` docs and never reaches into the
+    // separate `students` collection.
     final suspendedDrivers = _drivers
         ?.where((d) => d.status == DriverStatus.suspended)
         .length;
     final suspendedParents = _parents?.where((p) => !p.isActive).length;
-    final suspendedUsers =
-        (_students == null || _drivers == null || _parents == null)
+    final suspendedUsers = (_drivers == null || _parents == null)
         ? null
-        : (suspendedStudents ?? 0) +
-              (suspendedDrivers ?? 0) +
-              (suspendedParents ?? 0);
-    final totalUsers =
-        (_students == null || _drivers == null || _parents == null)
+        : (suspendedDrivers ?? 0) + (suspendedParents ?? 0);
+    final totalUsers = (_drivers == null || _parents == null)
         ? null
-        : _students!.length + _drivers!.length + _parents!.length;
+        : _drivers!.length + _parents!.length;
     final expiredSubs = _students
         ?.where((s) => s.subscriptionStatus == SubscriptionStatus.expired)
         .length;
@@ -415,10 +413,10 @@ class _AdminDashboardState extends State<AdminDashboard> {
             Expanded(
               child: _WideStatCard(
                 icon: Icons.person_off_rounded,
-                label: AppStrings.t('suspended_users_lbl'),
+                label: AppStrings.t('suspended_accounts_lbl'),
                 value: _fmtCount(suspendedUsers),
                 sub: AppStrings.t(
-                  'of_total_users_sub',
+                  'of_accounts_sub',
                 ).replaceFirst('{count}', _fmtCount(totalUsers)),
                 color: AppTheme.error,
               ),
@@ -881,6 +879,9 @@ class _WideStatCard extends StatelessWidget {
           ),
           Text(
             label,
+            textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: TextStyle(color: context.textSecondary, fontSize: 11),
           ),
           const SizedBox(height: 4),
