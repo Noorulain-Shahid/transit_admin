@@ -6,6 +6,7 @@ import '../../app/locale_provider.dart';
 import '../../data/admin_repository.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/glass_card.dart';
+import '../../widgets/neumorphic_card.dart';
 
 class AdminFees extends StatefulWidget {
   final VoidCallback? onBack;
@@ -143,8 +144,11 @@ class _AdminFeesState extends State<AdminFees> {
                   child: Column(
                     children: [
                       // ── Revenue overview (neumorphic) ─────────
-                      _NeumorphicCard(
+                      NeumorphicCard(
                         padding: const EdgeInsets.all(20),
+                        borderRadius: 20,
+                        shadowOffset: 6,
+                        blurRadius: 14,
                         child: Column(
                           children: [
                             Row(
@@ -381,43 +385,6 @@ class _FeeStatPill extends StatelessWidget {
   }
 }
 
-/// Soft, elevated card (two opposing shadows) used for the summary card —
-/// deliberately distinct from this screen's `GlassCard` sections, since the
-/// task asked specifically for a neumorphic treatment here.
-class _NeumorphicCard extends StatelessWidget {
-  final EdgeInsetsGeometry padding;
-  final Widget child;
-  const _NeumorphicCard({required this.padding, required this.child});
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = context.isDark;
-    return Container(
-      padding: padding,
-      decoration: BoxDecoration(
-        color: context.cardBg,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: isDark
-                ? Colors.black.withValues(alpha: 0.45)
-                : const Color(0xFFB8BEC8).withValues(alpha: 0.6),
-            offset: const Offset(6, 6),
-            blurRadius: 14,
-          ),
-          BoxShadow(
-            color: isDark
-                ? Colors.white.withValues(alpha: 0.04)
-                : Colors.white.withValues(alpha: 0.9),
-            offset: const Offset(-6, -6),
-            blurRadius: 14,
-          ),
-        ],
-      ),
-      child: child,
-    );
-  }
-}
 
 /// Sleek segmented control replacing the old horizontally-scrolling chip
 /// row — all four filters fit on screen at once, and the active segment

@@ -5,6 +5,7 @@ import 'package:transit_core/transit_core.dart';
 import '../../app/locale_provider.dart';
 import '../../data/admin_repository.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/neumorphic_card.dart';
 
 class AdminVehicles extends StatefulWidget {
   final VoidCallback? onBack;
@@ -158,7 +159,7 @@ class _AdminVehiclesState extends State<AdminVehicles> {
                           final nextService = bus.nextMaintenanceDate;
                           return Padding(
                             padding: const EdgeInsets.only(bottom: 10),
-                            child: _NeumorphicCard(
+                            child: NeumorphicCard(
                               padding: const EdgeInsets.all(16),
                               child: Column(
                                 children: [
@@ -354,44 +355,6 @@ class _Header extends StatelessWidget {
   }
 }
 
-/// Neumorphic shell (two opposing shadows, `context.isDark`-aware) shared by
-/// the stat cards and the vehicle list card — same recipe already used
-/// elsewhere in this app (Fee Management/Route Management summary cards,
-/// the student/driver detail empty states).
-class _NeumorphicCard extends StatelessWidget {
-  final EdgeInsetsGeometry padding;
-  final Widget child;
-  const _NeumorphicCard({required this.padding, required this.child});
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = context.isDark;
-    return Container(
-      padding: padding,
-      decoration: BoxDecoration(
-        color: context.cardBg,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: isDark
-                ? Colors.black.withValues(alpha: 0.45)
-                : const Color(0xFFB8BEC8).withValues(alpha: 0.6),
-            offset: const Offset(5, 5),
-            blurRadius: 12,
-          ),
-          BoxShadow(
-            color: isDark
-                ? Colors.white.withValues(alpha: 0.04)
-                : Colors.white.withValues(alpha: 0.9),
-            offset: const Offset(-5, -5),
-            blurRadius: 12,
-          ),
-        ],
-      ),
-      child: child,
-    );
-  }
-}
 
 class _MiniStat extends StatelessWidget {
   final IconData icon;
@@ -407,7 +370,7 @@ class _MiniStat extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Expanded(
-      child: _NeumorphicCard(
+      child: NeumorphicCard(
         padding: const EdgeInsets.all(12),
         child: Column(
           children: [

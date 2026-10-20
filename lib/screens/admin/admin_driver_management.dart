@@ -5,6 +5,7 @@ import '../../app/locale_provider.dart';
 import '../../data/admin_repository.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/glass_card.dart';
+import '../../widgets/mini_stat.dart';
 
 const _statusFilters = [
   'All',
@@ -74,6 +75,11 @@ class AdminDriverManagement extends StatefulWidget {
 
 class _AdminDriverManagementState extends State<AdminDriverManagement> {
   String _search = '';
+  // Constructed exactly once (not inline in `build()`, which would attach a
+  // brand-new Firestore listener on every `setState()` — e.g. every
+  // keystroke in the search box above).
+  late final Stream<List<Driver>> _driversStream = AdminRepository.instance
+      .watchDrivers();
   // All filtering (including 'Eligible') runs client-side over the full
   // `watchDrivers()` stream via `_matchesFilter` — there's no per-filter
   // Firestore query today. If this ever needs to move server-side instead
@@ -117,7 +123,7 @@ class _AdminDriverManagementState extends State<AdminDriverManagement> {
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<List<Driver>>(
-      stream: AdminRepository.instance.watchDrivers(),
+      stream: _driversStream,
       builder: (context, snap) {
         final drivers = snap.data ?? const <Driver>[];
         final filtered = _filtered(drivers);
@@ -276,14 +282,14 @@ class _AdminDriverManagementState extends State<AdminDriverManagement> {
   Widget _buildStats(BuildContext context, List<Driver> drivers) {
     return Row(
       children: [
-        _MiniStat(
+        MiniStat(
           icon: Icons.people_rounded,
           label: AppStrings.t('total_lbl'),
           value: '${drivers.length}',
           color: AppTheme.driverCyan,
         ),
         const SizedBox(width: 8),
-        _MiniStat(
+        MiniStat(
           icon: Icons.hourglass_top_rounded,
           label: AppStrings.t('pending_lbl'),
           value:
@@ -291,7 +297,7 @@ class _AdminDriverManagementState extends State<AdminDriverManagement> {
           color: const Color(0xFFF59E0B),
         ),
         const SizedBox(width: 8),
-        _MiniStat(
+        MiniStat(
           icon: Icons.wifi_off_rounded,
           label: AppStrings.t('suspended_status'),
           value:
@@ -464,51 +470,6 @@ class _InfoPill extends StatelessWidget {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _MiniStat extends StatelessWidget {
-  final IconData icon;
-  final String label, value;
-  final Color color;
-  const _MiniStat({
-    required this.icon,
-    required this.label,
-    required this.value,
-    required this.color,
-  });
-  @override
-  Widget build(BuildContext context) {
-    return Expanded(
-      child: GlassCard(
-        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
-        gradient: LinearGradient(
-          colors: [
-            color.withValues(alpha: 0.12),
-            color.withValues(alpha: 0.04),
-          ],
-        ),
-        borderColor: color.withValues(alpha: 0.18),
-        child: Column(
-          children: [
-            Icon(icon, color: color, size: 20),
-            const SizedBox(height: 4),
-            Text(
-              value,
-              style: TextStyle(
-                color: context.textPrimary,
-                fontSize: 18,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-            Text(
-              label,
-              style: TextStyle(color: context.textSecondary, fontSize: 10),
-            ),
-          ],
-        ),
       ),
     );
   }

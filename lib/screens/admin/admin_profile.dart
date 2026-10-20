@@ -32,13 +32,6 @@ class _AdminProfileState extends State<AdminProfile> {
   int? _userCount;
 
   StreamSubscription<AppUser?>? _meSub;
-  StreamSubscription<List<Bus>>? _busesSub;
-  StreamSubscription<List<BusRoute>>? _routesSub;
-  StreamSubscription<List<Student>>? _studentsSub;
-  StreamSubscription<List<AppUser>>? _parentsSub;
-  StreamSubscription<List<Driver>>? _driversSub;
-
-  int _students = 0, _parents = 0, _drivers = 0;
 
   void Function(int) get onNavigate => widget.onNavigate;
   VoidCallback get onLogout => widget.onLogout;
@@ -50,24 +43,15 @@ class _AdminProfileState extends State<AdminProfile> {
     if (uid != null) {
       _meSub = _repo.watchUser(uid).listen((v) => setState(() => _me = v));
     }
-    _busesSub = _repo.watchBuses().listen(
-      (v) => setState(() => _busCount = v.length),
-    );
-    _routesSub = _repo.watchRoutes().listen(
-      (v) => setState(() => _routeCount = v.length),
-    );
-    _studentsSub = _repo.watchStudents().listen((v) {
-      _students = v.length;
-      setState(() => _userCount = _students + _parents + _drivers);
-    });
-    _parentsSub = _repo.watchUsersByRole(UserRole.parent).listen((v) {
-      _parents = v.length;
-      setState(() => _userCount = _students + _parents + _drivers);
-    });
-    _driversSub = _repo.watchDrivers().listen((v) {
-      _drivers = v.length;
-      setState(() => _userCount = _students + _parents + _drivers);
-    });
+    // These three badge numbers don't need to be millisecond-live and
+    // nothing else on this screen needs the underlying documents, so
+    // they're one-shot `.count()` aggregation reads (billed as a single
+    // small read each, regardless of collection size) instead of the five
+    // separate live `watchX()` listeners this screen used to open just to
+    // call `.length` on each result — three of which (students/parents/
+    // drivers) duplicated listeners the Dashboard and other screens already
+    // keep open on the exact same collections.
+    _loadCounts();
     // `AppStrings.t()` reads `LocaleProvider` directly rather than through
     // an `InheritedWidget`, so nothing rebuilds this screen automatically
     // when the language changes elsewhere (e.g. the language picker sheet
@@ -76,16 +60,27 @@ class _AdminProfileState extends State<AdminProfile> {
     LocaleProvider.instance.addListener(_onLangChanged);
   }
 
+  Future<void> _loadCounts() async {
+    final results = await Future.wait([
+      _repo.countBuses(),
+      _repo.countRoutes(),
+      _repo.countStudents(),
+      _repo.countParents(),
+      _repo.countDrivers(),
+    ]);
+    if (!mounted) return;
+    setState(() {
+      _busCount = results[0];
+      _routeCount = results[1];
+      _userCount = results[2] + results[3] + results[4];
+    });
+  }
+
   void _onLangChanged() => setState(() {});
 
   @override
   void dispose() {
     _meSub?.cancel();
-    _busesSub?.cancel();
-    _routesSub?.cancel();
-    _studentsSub?.cancel();
-    _parentsSub?.cancel();
-    _driversSub?.cancel();
     LocaleProvider.instance.removeListener(_onLangChanged);
     super.dispose();
   }
@@ -281,8 +276,7 @@ class _AdminProfileState extends State<AdminProfile> {
           _OptionRow(
             icon: Icons.lock_rounded,
             label: AppStrings.t('change_password'),
-            comingSoon: true,
-            onTap: () => _msg(context, 'Change Password — coming soon'),
+            onTap: () => _sendPasswordReset(context),
           ),
           _OptionRow(
             icon: Icons.language_rounded,
@@ -399,8 +393,7 @@ class _AdminProfileState extends State<AdminProfile> {
             label: AppStrings.t('audit_history'),
             detail: AppStrings.t('now_recording_viewer_soon'),
             color: AppTheme.purple,
-            comingSoon: true,
-            onTap: () => _msg(context, 'Audit History viewer — coming soon'),
+            onTap: () => context.push('/admin/audit-history'),
           ),
           _SecurityRow(
             icon: Icons.analytics_rounded,
@@ -478,6 +471,27 @@ class _AdminProfileState extends State<AdminProfile> {
 
   void _msg(BuildContext context, String m) =>
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
+
+  /// Real "Change Password" flow — the admin app has no in-session
+  /// reauthenticate-then-updatePassword form today, so this sends Firebase
+  /// Auth's own password-reset email to the signed-in admin's address
+  /// instead; simpler, and doesn't require the admin to re-type their
+  /// current password inside this screen.
+  Future<void> _sendPasswordReset(BuildContext context) async {
+    final email = _me?.email ?? FirebaseAuth.instance.currentUser?.email;
+    if (email == null || email.isEmpty) {
+      _msg(context, 'No email on this account to send a reset link to.');
+      return;
+    }
+    try {
+      await FirebaseAuth.instance.sendPasswordResetEmail(email: email);
+      if (context.mounted) _msg(context, 'Password reset link sent to $email');
+    } on FirebaseAuthException catch (e) {
+      if (context.mounted) {
+        _msg(context, 'Could not send reset link: ${e.message}');
+      }
+    }
+  }
 
   Future<void> _showLanguagePicker(BuildContext context) {
     return showModalBottomSheet(
@@ -708,12 +722,10 @@ class _OptionRow extends StatelessWidget {
   final IconData icon;
   final String label;
   final VoidCallback onTap;
-  final bool comingSoon;
   const _OptionRow({
     required this.icon,
     required this.label,
     required this.onTap,
-    this.comingSoon = false,
   });
   @override
   Widget build(BuildContext context) {
@@ -724,33 +736,22 @@ class _OptionRow extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         child: Row(
           children: [
-            Icon(
-              icon,
-              color: comingSoon
-                  ? context.textTertiary
-                  : AppTheme.adminAccent,
-              size: 22,
-            ),
+            Icon(icon, color: AppTheme.adminAccent, size: 22),
             const SizedBox(width: 14),
             Expanded(
               child: Text(
                 label,
                 style: TextStyle(
-                  color: comingSoon
-                      ? context.textTertiary
-                      : context.textPrimary,
+                  color: context.textPrimary,
                   fontSize: 14,
                   fontWeight: FontWeight.w500,
                 ),
               ),
             ),
-            if (comingSoon)
-              StatusBadge(label: AppStrings.t('soon_badge'), color: context.textTertiary)
-            else
-              Text(
-                '›',
-                style: TextStyle(color: context.textTertiary, fontSize: 20),
-              ),
+            Text(
+              '›',
+              style: TextStyle(color: context.textTertiary, fontSize: 20),
+            ),
           ],
         ),
       ),

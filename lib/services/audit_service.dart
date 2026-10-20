@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'package:transit_core/transit_core.dart';
 
@@ -81,5 +82,36 @@ class AuditService {
 
   List<AuditLogEntry> getRecentLogs(int count) {
     return _localLogs.reversed.take(count).toList();
+  }
+
+  /// Real Audit History viewer data — reads the `auditLogs` collection this
+  /// service has always been writing to, which [getRecentLogs] never did
+  /// (it only ever returns this *session's* in-memory `_localLogs`, which
+  /// starts empty on every app launch). A one-time fetch rather than a live
+  /// stream: a history log is read-only and doesn't need to update under
+  /// the admin's finger while they're scrolling it.
+  Future<List<AuditLogEntry>> fetchRecentLogs({int limit = 100}) async {
+    final snap = await Db.fs
+        .collection('auditLogs')
+        .orderBy('createdAt', descending: true)
+        .limit(limit)
+        .get();
+    return snap.docs.map((doc) {
+      final m = doc.data();
+      return AuditLogEntry(
+        id: doc.id,
+        timestamp: (m['createdAt'] is Timestamp)
+            ? (m['createdAt'] as Timestamp).toDate()
+            : DateTime.now(),
+        adminId: (m['adminId'] as String?) ?? 'unknown',
+        actionType: AuditActionType.values.firstWhere(
+          (t) => t.name == m['actionType'],
+          orElse: () => AuditActionType.update,
+        ),
+        targetEntityId: (m['targetEntityId'] as String?) ?? '',
+        description: (m['description'] as String?) ?? '',
+        ipAddress: (m['ipAddress'] as String?) ?? 'Unknown',
+      );
+    }).toList();
   }
 }

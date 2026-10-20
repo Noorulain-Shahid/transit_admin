@@ -131,7 +131,7 @@ class AppStrings {
     'system_logs': 'System Logs',
     'audit_history': 'Audit History',
     'admin_activity_tracking': 'Admin Activity Tracking',
-    'now_recording_viewer_soon': 'Now recording — viewer coming soon',
+    'now_recording_viewer_soon': 'Every admin action is logged — tap to view',
     'light_mode': 'Light Mode',
     'dark_mode': 'Dark Mode',
     'sign_out': 'Sign Out',
@@ -326,6 +326,20 @@ class AppStrings {
     'school_type': 'School',
     'all_levels_filter': 'All Levels',
     'level_prefix': 'Level',
+
+    // Delete confirmation (Parent/Student/Driver Detail Controls)
+    'delete_action': 'Delete',
+    'delete_confirm_title': 'Delete this account?',
+    'delete_confirm_body':
+        'This archives the account — it is hidden everywhere in the app and signed out, but its transport and payment history is kept, not erased.',
+    'delete_confirm_action': 'Delete',
+
+    // Create Route form
+    'route_name_lbl': 'Route Name',
+    'route_name_required': 'Route name is required',
+    'stop_name_lbl': 'Stop name',
+    'time_lbl': 'Time',
+    'add_stop_action': 'Add Stop',
   };
 
   static final Map<String, String> _ur = {
@@ -401,7 +415,7 @@ class AppStrings {
     'system_logs': 'سسٹم لاگز',
     'audit_history': 'آڈٹ ہسٹری',
     'admin_activity_tracking': 'ایڈمن سرگرمی ٹریکنگ',
-    'now_recording_viewer_soon': 'ابھی ریکارڈ ہو رہا ہے — ویور جلد آ رہا ہے',
+    'now_recording_viewer_soon': 'ہر ایڈمن کارروائی ریکارڈ ہوتی ہے — دیکھنے کے لیے تھپتھپائیں',
     'light_mode': 'لائٹ موڈ',
     'dark_mode': 'ڈارک موڈ',
     'sign_out': 'لاگ آؤٹ',
@@ -590,5 +604,19 @@ class AppStrings {
     'school_type': 'اسکول',
     'all_levels_filter': 'تمام سطحیں',
     'level_prefix': 'سطح',
+
+    // Delete confirmation (Parent/Student/Driver Detail Controls)
+    'delete_action': 'حذف کریں',
+    'delete_confirm_title': 'کیا یہ اکاؤنٹ حذف کرنا ہے؟',
+    'delete_confirm_body':
+        'یہ اکاؤنٹ آرکائیو ہو جائے گا — یہ ایپ میں ہر جگہ چھپ جائے گا اور سائن آؤٹ ہو جائے گا، لیکن اس کی ٹرانسپورٹ اور ادائیگی کی تاریخ محفوظ رہے گی، مٹائی نہیں جائے گی۔',
+    'delete_confirm_action': 'حذف کریں',
+
+    // Create Route form
+    'route_name_lbl': 'روٹ کا نام',
+    'route_name_required': 'روٹ کا نام درکار ہے',
+    'stop_name_lbl': 'اسٹاپ کا نام',
+    'time_lbl': 'وقت',
+    'add_stop_action': 'اسٹاپ شامل کریں',
   };
 }

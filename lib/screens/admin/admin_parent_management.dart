@@ -5,6 +5,7 @@ import '../../app/locale_provider.dart';
 import '../../data/admin_repository.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/glass_card.dart';
+import '../../widgets/mini_stat.dart';
 
 // Urdu doesn't inflect for count the way English's child/children does, but
 // "1 بچہ" (1 child) still reads oddly with the plain plural, so this keeps
@@ -20,6 +21,12 @@ class AdminParentManagement extends StatefulWidget {
 
 class _AdminParentManagementState extends State<AdminParentManagement> {
   String _search = '';
+  // Constructed once each — see the identical note on
+  // `_AdminDriverManagementState._driversStream`.
+  late final Stream<List<AppUser>> _parentsStream = AdminRepository.instance
+      .watchUsersByRole(UserRole.parent);
+  late final Stream<List<Student>> _studentsStream = AdminRepository.instance
+      .watchStudents();
 
   @override
   void initState() {
@@ -47,12 +54,12 @@ class _AdminParentManagementState extends State<AdminParentManagement> {
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<List<AppUser>>(
-      stream: AdminRepository.instance.watchUsersByRole(UserRole.parent),
+      stream: _parentsStream,
       builder: (context, parentSnap) {
         final parents = parentSnap.data ?? const <AppUser>[];
         final filtered = _filtered(parents);
         return StreamBuilder<List<Student>>(
-          stream: AdminRepository.instance.watchStudents(),
+          stream: _studentsStream,
           builder: (context, studentSnap) {
             final childrenByParent = <String, List<Student>>{};
             for (final s in studentSnap.data ?? const <Student>[]) {
@@ -184,21 +191,21 @@ class _AdminParentManagementState extends State<AdminParentManagement> {
   Widget _buildStats(BuildContext context, List<AppUser> parents) {
     return Row(
       children: [
-        _MiniStat(
+        MiniStat(
           icon: Icons.people_rounded,
           label: AppStrings.t('total_lbl'),
           value: '${parents.length}',
           color: AppTheme.parentPurple,
         ),
         const SizedBox(width: 8),
-        _MiniStat(
+        MiniStat(
           icon: Icons.check_circle_rounded,
           label: AppStrings.t('active_lbl'),
           value: '${parents.where((p) => p.isActive).length}',
           color: AppTheme.success,
         ),
         const SizedBox(width: 8),
-        _MiniStat(
+        MiniStat(
           icon: Icons.pause_circle_rounded,
           label: AppStrings.t('inactive_status'),
           value: '${parents.where((p) => !p.isActive).length}',
@@ -311,47 +318,3 @@ class _ParentCard extends StatelessWidget {
 }
 
 // ─── Sub-widgets ─────────────────────────────────────────────────────────────
-class _MiniStat extends StatelessWidget {
-  final IconData icon;
-  final String label, value;
-  final Color color;
-  const _MiniStat({
-    required this.icon,
-    required this.label,
-    required this.value,
-    required this.color,
-  });
-  @override
-  Widget build(BuildContext context) {
-    return Expanded(
-      child: GlassCard(
-        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
-        gradient: LinearGradient(
-          colors: [
-            color.withValues(alpha: 0.12),
-            color.withValues(alpha: 0.04),
-          ],
-        ),
-        borderColor: color.withValues(alpha: 0.18),
-        child: Column(
-          children: [
-            Icon(icon, color: color, size: 20),
-            const SizedBox(height: 4),
-            Text(
-              value,
-              style: TextStyle(
-                color: context.textPrimary,
-                fontSize: 18,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-            Text(
-              label,
-              style: TextStyle(color: context.textSecondary, fontSize: 10),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}

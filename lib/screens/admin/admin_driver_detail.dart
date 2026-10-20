@@ -7,6 +7,7 @@ import '../../app/locale_provider.dart';
 import '../../data/admin_repository.dart';
 import '../../services/audit_service.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/confirm_delete_dialog.dart';
 import '../../widgets/glass_card.dart';
 import '../../widgets/mini_chart.dart';
 import 'admin_driver_management.dart' show driverStatusLabel, driverStatusColor;
@@ -49,10 +50,21 @@ class _AdminDriverDetailState extends State<AdminDriverDetail>
     with SingleTickerProviderStateMixin {
   late TabController _tabCtrl;
   final _repo = AdminRepository.instance;
+  // Set in `initState` (not a field initializer — `widget` isn't attached
+  // yet at that point) exactly once, so this screen doesn't attach a new
+  // Firestore listener on every rebuild the way an inline
+  // `stream: _repo.watchDriver(widget.driverId)` in `build()` would.
+  late final Stream<Driver?> _driverStream;
+  late final Stream<List<DriverDocument>> _documentsStream;
 
   @override
   void initState() {
     super.initState();
+    _driverStream = _repo.watchDriver(widget.driverId);
+    // `d.id` in the Documents section always equals `widget.driverId` (it's
+    // the same driver from the stream above), so this is hoisted off the
+    // constructor argument rather than the nested snapshot's value.
+    _documentsStream = _repo.watchDriverDocuments(widget.driverId);
     _tabCtrl = TabController(length: 4, vsync: this);
     LocaleProvider.instance.addListener(_onLangChanged);
   }
@@ -98,6 +110,17 @@ class _AdminDriverDetailState extends State<AdminDriverDetail>
       targetEntityId: targetId,
       description: description,
     );
+  }
+
+  /// Soft-delete (archive) a driver — see
+  /// `AdminRepository.deleteDriver`'s doc comment; also reassigns every
+  /// student off this driver's roster as part of the same call.
+  Future<void> _deleteDriver(Driver d) async {
+    final confirmed = await showConfirmDeleteDialog(context);
+    if (!confirmed) return;
+    await _repo.deleteDriver(d.id);
+    await _audit(AuditActionType.delete, d.id, 'Archived driver ${d.name}');
+    if (mounted) context.pop();
   }
 
   Future<void> _message(Driver d) async {
@@ -187,7 +210,7 @@ class _AdminDriverDetailState extends State<AdminDriverDetail>
         decoration: context.scaffoldBg,
         child: SafeArea(
           child: StreamBuilder<Driver?>(
-            stream: _repo.watchDriver(widget.driverId),
+            stream: _driverStream,
             builder: (context, snap) {
               final d = snap.data;
               return Column(
@@ -513,6 +536,16 @@ class _AdminDriverDetailState extends State<AdminDriverDetail>
                       ),
                     ],
                   ),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    width: double.infinity,
+                    child: _ActionBtn(
+                      label: AppStrings.t('delete_action'),
+                      color: AppTheme.error,
+                      icon: Icons.delete_outline_rounded,
+                      onTap: () => _deleteDriver(d),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -534,7 +567,7 @@ class _AdminDriverDetailState extends State<AdminDriverDetail>
                   ),
                   const SizedBox(height: 12),
                   StreamBuilder<List<DriverDocument>>(
-                    stream: _repo.watchDriverDocuments(d.id),
+                    stream: _documentsStream,
                     builder: (context, docSnap) {
                       if (!docSnap.hasData) {
                         return const Padding(

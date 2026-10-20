@@ -9,6 +9,7 @@ import '../../data/admin_repository.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/glass_card.dart';
 import '../../widgets/mini_chart.dart';
+import '../../widgets/responsive.dart';
 import 'admin_user_models.dart' hide DriverStatus, SubscriptionStatus;
 
 class AdminDashboard extends StatefulWidget {
@@ -166,28 +167,37 @@ class _AdminDashboardState extends State<AdminDashboard> {
   Widget build(BuildContext context) {
     return SingleChildScrollView(
       padding: const EdgeInsets.only(bottom: 100),
-      child: Column(
-        children: [
-          _buildHeader(context),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Column(
-              children: [
-                if (_loadError != null) ...[
-                  _buildLoadErrorBanner(context),
+      // No-op on a phone-width viewport (the only size this screen was
+      // ever laid out for) — caps and centers the content column once the
+      // viewport is wider than a small tablet, instead of stretching
+      // every card edge-to-edge across a desktop browser window.
+      child: ResponsiveBody(
+        child: Column(
+          children: [
+            _buildHeader(context),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Column(
+                children: [
+                  if (_loadError != null) ...[
+                    _buildLoadErrorBanner(context),
+                    const SizedBox(height: 14),
+                  ],
+                  LayoutBuilder(
+                    builder: (context, constraints) =>
+                        _buildOverviewCards(context, constraints.maxWidth),
+                  ),
                   const SizedBox(height: 14),
+                  _buildSubscriptionAnalytics(context),
+                  const SizedBox(height: 14),
+                  _buildAlerts(context),
+                  const SizedBox(height: 14),
+                  _buildAnalytics(context),
                 ],
-                _buildOverviewCards(context),
-                const SizedBox(height: 14),
-                _buildSubscriptionAnalytics(context),
-                const SizedBox(height: 14),
-                _buildAlerts(context),
-                const SizedBox(height: 14),
-                _buildAnalytics(context),
-              ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -317,7 +327,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
   }
 
   // ── Overview Cards ──────────────────────────────────────────────────────────
-  Widget _buildOverviewCards(BuildContext context) {
+  Widget _buildOverviewCards(BuildContext context, double availableWidth) {
     final studentCount = _students?.length;
     final parentCount = _parents?.length;
     final driverCount = _drivers?.length;
@@ -375,7 +385,12 @@ class _AdminDashboardState extends State<AdminDashboard> {
         GridView.count(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
-          crossAxisCount: 3,
+          // 3 columns at phone width — identical to this screen's previous
+          // fixed layout — scaling up only once the available width (not
+          // the full device width; this already accounts for
+          // `ResponsiveBody`'s own max-width cap) is actually wider than a
+          // phone.
+          crossAxisCount: gridColumnsFor(availableWidth),
           padding: EdgeInsets.zero,
           mainAxisSpacing: 8,
           crossAxisSpacing: 8,

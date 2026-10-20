@@ -120,15 +120,25 @@ class _AdminNotificationsState extends State<AdminNotifications> {
 /// Verification Queue" list — pending drivers land here and "Review" opens
 /// the same [AdminDriverDetail] screen used for Approve/Reject elsewhere,
 /// instead of re-implementing approval logic in this list item.
-class _PendingDriversSection extends StatelessWidget {
+class _PendingDriversSection extends StatefulWidget {
   const _PendingDriversSection();
+
+  @override
+  State<_PendingDriversSection> createState() =>
+      _PendingDriversSectionState();
+}
+
+class _PendingDriversSectionState extends State<_PendingDriversSection> {
+  // Constructed exactly once per State (not per `build()`, unlike the old
+  // StatelessWidget version, which called `watchDrivers()` — attaching a
+  // brand-new Firestore listener — on every single rebuild of this screen.
+  late final Stream<List<Driver>> _stream = AdminRepository.instance
+      .watchDrivers(status: DriverStatus.pendingVerification);
 
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<List<Driver>>(
-      stream: AdminRepository.instance.watchDrivers(
-        status: DriverStatus.pendingVerification,
-      ),
+      stream: _stream,
       builder: (context, snapshot) {
         final drivers = snapshot.data ?? const <Driver>[];
         if (snapshot.connectionState == ConnectionState.waiting) {
@@ -161,13 +171,22 @@ class _PendingDriversSection extends StatelessWidget {
 
 /// Real, live-Firestore replacement for the old hardcoded "Recent Reviews"
 /// notice — every "Rate the App" submission, newest first.
-class _RecentFeedbackSection extends StatelessWidget {
+class _RecentFeedbackSection extends StatefulWidget {
   const _RecentFeedbackSection();
+
+  @override
+  State<_RecentFeedbackSection> createState() =>
+      _RecentFeedbackSectionState();
+}
+
+class _RecentFeedbackSectionState extends State<_RecentFeedbackSection> {
+  late final Stream<List<AppFeedback>> _stream =
+      AdminRepository.instance.watchRecentFeedback();
 
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<List<AppFeedback>>(
-      stream: AdminRepository.instance.watchRecentFeedback(),
+      stream: _stream,
       builder: (context, snapshot) {
         final feedback = snapshot.data ?? const <AppFeedback>[];
         if (snapshot.connectionState == ConnectionState.waiting) {
@@ -218,8 +237,17 @@ String _timeAgo(DateTime? t) {
 
 /// Real, live-Firestore replacement for the old hardcoded "New Account
 /// Activity" list — the 5 most recently created accounts across every role.
-class _RecentAccountsSection extends StatelessWidget {
+class _RecentAccountsSection extends StatefulWidget {
   const _RecentAccountsSection();
+
+  @override
+  State<_RecentAccountsSection> createState() =>
+      _RecentAccountsSectionState();
+}
+
+class _RecentAccountsSectionState extends State<_RecentAccountsSection> {
+  late final Stream<List<AppUser>> _stream =
+      AdminRepository.instance.watchRecentUsers();
 
   static const _roleIcons = {
     UserRole.driver: Icons.drive_eta_rounded,
@@ -261,7 +289,7 @@ class _RecentAccountsSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<List<AppUser>>(
-      stream: AdminRepository.instance.watchRecentUsers(),
+      stream: _stream,
       builder: (context, snapshot) {
         final users = snapshot.data ?? const <AppUser>[];
         if (snapshot.connectionState == ConnectionState.waiting) {

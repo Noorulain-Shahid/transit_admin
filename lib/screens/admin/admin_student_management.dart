@@ -5,6 +5,7 @@ import '../../app/locale_provider.dart';
 import '../../data/admin_repository.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/glass_card.dart';
+import '../../widgets/mini_stat.dart';
 
 // `student.instituteType`/`student.grade` are free-text data fields (a
 // school can type anything into the signup form), not a fixed Dart enum —
@@ -43,6 +44,12 @@ bool _matchesLevel(Student s, String level) => switch (level) {
   _ => true,
 };
 
+// An active student with no driver needs admin attention (nobody will pick
+// them up); a suspended student with no driver is expected, not a problem —
+// so only the active+unassigned combination is flagged.
+bool _needsDriverAttention(Student s) =>
+    (s.driverId ?? '').isEmpty && !s.isTransportSuspended;
+
 String subscriptionStatusLabel(SubscriptionStatus s) => switch (s) {
   SubscriptionStatus.active => 'Active',
   SubscriptionStatus.trial => 'Trial',
@@ -70,6 +77,10 @@ class AdminStudentManagement extends StatefulWidget {
 class _AdminStudentManagementState extends State<AdminStudentManagement> {
   String _search = '';
   String _levelFilter = 'All';
+  // Constructed once — see the identical note on
+  // `_AdminDriverManagementState._driversStream`.
+  late final Stream<List<Student>> _studentsStream = AdminRepository.instance
+      .watchStudents();
 
   @override
   void initState() {
@@ -97,7 +108,7 @@ class _AdminStudentManagementState extends State<AdminStudentManagement> {
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<List<Student>>(
-      stream: AdminRepository.instance.watchStudents(),
+      stream: _studentsStream,
       builder: (context, snap) {
         final students = snap.data ?? const <Student>[];
         final filtered = _filtered(students);
@@ -240,14 +251,14 @@ class _AdminStudentManagementState extends State<AdminStudentManagement> {
   Widget _buildStats(BuildContext context, List<Student> students) {
     return Row(
       children: [
-        _MiniStat(
+        MiniStat(
           icon: Icons.people_rounded,
           label: AppStrings.t('total_lbl'),
           value: '${students.length}',
           color: AppTheme.studentAmber,
         ),
         const SizedBox(width: 8),
-        _MiniStat(
+        MiniStat(
           icon: Icons.directions_bus_rounded,
           label: AppStrings.t('with_driver_status'),
           value:
@@ -255,7 +266,7 @@ class _AdminStudentManagementState extends State<AdminStudentManagement> {
           color: AppTheme.success,
         ),
         const SizedBox(width: 8),
-        _MiniStat(
+        MiniStat(
           icon: Icons.block_rounded,
           label: AppStrings.t('suspended_status'),
           value: '${students.where((s) => s.isTransportSuspended).length}',
@@ -342,11 +353,15 @@ class _StudentCard extends StatelessWidget {
           Row(
             children: [
               _InfoPill(
-                icon: Icons.directions_bus_rounded,
+                icon: _needsDriverAttention(student)
+                    ? Icons.warning_amber_rounded
+                    : Icons.directions_bus_rounded,
                 label: (student.driverId ?? '').isEmpty
                     ? AppStrings.t('no_driver_status')
                     : 'Assigned', // not in the requested term list
-                color: AppTheme.driverCyan,
+                color: _needsDriverAttention(student)
+                    ? AppTheme.warning
+                    : AppTheme.driverCyan,
               ),
               const Spacer(),
               StatusBadge(
@@ -477,47 +492,3 @@ class _InfoPill extends StatelessWidget {
   }
 }
 
-class _MiniStat extends StatelessWidget {
-  final IconData icon;
-  final String label, value;
-  final Color color;
-  const _MiniStat({
-    required this.icon,
-    required this.label,
-    required this.value,
-    required this.color,
-  });
-  @override
-  Widget build(BuildContext context) {
-    return Expanded(
-      child: GlassCard(
-        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
-        gradient: LinearGradient(
-          colors: [
-            color.withValues(alpha: 0.12),
-            color.withValues(alpha: 0.04),
-          ],
-        ),
-        borderColor: color.withValues(alpha: 0.18),
-        child: Column(
-          children: [
-            Icon(icon, color: color, size: 20),
-            const SizedBox(height: 4),
-            Text(
-              value,
-              style: TextStyle(
-                color: context.textPrimary,
-                fontSize: 18,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-            Text(
-              label,
-              style: TextStyle(color: context.textSecondary, fontSize: 10),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}

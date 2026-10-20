@@ -10,6 +10,8 @@ import '../screens/admin/admin_subscription.dart';
 import '../screens/admin/admin_fees.dart';
 import '../screens/admin/admin_routes.dart';
 import '../screens/admin/admin_vehicles.dart';
+import '../screens/admin/admin_audit_history.dart';
+import '../screens/admin/admin_create_route.dart';
 import '../screens/admin/admin_student_detail.dart';
 import '../screens/admin/admin_parent_detail.dart';
 import '../screens/admin/admin_driver_detail.dart';
@@ -34,6 +36,13 @@ class _AuthRefresh extends ChangeNotifier {
 }
 
 const _publicRoutes = {'/', '/login', '/forgot-password'};
+
+/// Safely reads a detail route's id out of `state.extra` (an untyped
+/// `Object?` in go_router) — never throws on a null/wrong-type `extra`,
+/// unlike a bare `as String` cast.
+String _idExtra(GoRouterState state) => state.extra is String
+    ? state.extra as String
+    : '';
 
 /// Blocks reaching any `/admin*` route without a verified admin session.
 ///
@@ -91,27 +100,37 @@ final appRouter = GoRouter(
       path: '/admin/vehicles',
       builder: (context, state) => const AdminVehicles(),
     ),
+    GoRoute(
+      path: '/admin/audit-history',
+      builder: (context, state) => const AdminAuditHistory(),
+    ),
+    GoRoute(
+      path: '/admin/create-route',
+      builder: (context, state) => const AdminCreateRoute(),
+    ),
     // Entity detail pages — keyed by Firestore id, the screen loads its
     // own live data rather than being handed a snapshot object.
+    // `state.extra` is untyped (`Object?`) — a bad `context.push(...)` call
+    // site (wrong type, or forgetting `extra:` entirely) used to throw an
+    // unchecked-cast error here instead of failing gracefully. `_idExtra`
+    // degrades to an empty id instead, which every one of these detail
+    // screens already renders as a "not found" state rather than crashing.
     GoRoute(
       path: '/admin/student-detail',
       builder: (context, state) {
-        final studentId = state.extra as String;
-        return AdminStudentDetail(studentId: studentId);
+        return AdminStudentDetail(studentId: _idExtra(state));
       },
     ),
     GoRoute(
       path: '/admin/parent-detail',
       builder: (context, state) {
-        final parentId = state.extra as String;
-        return AdminParentDetail(parentId: parentId);
+        return AdminParentDetail(parentId: _idExtra(state));
       },
     ),
     GoRoute(
       path: '/admin/driver-detail',
       builder: (context, state) {
-        final driverId = state.extra as String;
-        return AdminDriverDetail(driverId: driverId);
+        return AdminDriverDetail(driverId: _idExtra(state));
       },
     ),
   ],

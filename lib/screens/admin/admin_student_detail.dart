@@ -1,9 +1,12 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:transit_core/transit_core.dart';
 import '../../app/locale_provider.dart';
 import '../../data/admin_repository.dart';
+import '../../services/audit_service.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/confirm_delete_dialog.dart';
 import '../../widgets/glass_card.dart';
 import 'admin_student_management.dart'
     show subscriptionStatusLabel, subscriptionStatusColor;
@@ -25,10 +28,15 @@ class _AdminStudentDetailState extends State<AdminStudentDetail>
   final _schoolCtrl = TextEditingController();
   final _medicalCtrl = TextEditingController();
   bool _saving = false;
+  // Set in `initState` (not a field initializer — `widget` isn't attached
+  // yet at that point) exactly once, same fix applied across every other
+  // screen in this app that built its stream inline inside `build()`.
+  late final Stream<Student?> _studentStream;
 
   @override
   void initState() {
     super.initState();
+    _studentStream = _repo.watchStudent(widget.studentId);
     _tabCtrl = TabController(length: 4, vsync: this);
     LocaleProvider.instance.addListener(_onLangChanged);
   }
@@ -83,6 +91,23 @@ class _AdminStudentDetailState extends State<AdminStudentDetail>
     }
   }
 
+  /// Soft-delete (archive) a single student — see
+  /// `AdminRepository.deleteStudent`'s doc comment. Does not touch the
+  /// parent's own account (removing the parent instead cascades to every
+  /// one of their students via `deleteParent`).
+  Future<void> _deleteStudent(Student s) async {
+    final confirmed = await showConfirmDeleteDialog(context);
+    if (!confirmed) return;
+    await _repo.deleteStudent(s.id);
+    await AuditService.instance.logAction(
+      adminId: FirebaseAuth.instance.currentUser?.uid ?? 'unknown',
+      actionType: AuditActionType.delete,
+      targetEntityId: s.id,
+      description: 'Archived student ${s.name}',
+    );
+    if (mounted) context.pop();
+  }
+
   Future<void> _message(Student s) async {
     final ctrl = TextEditingController();
     final text = await showDialog<String>(
@@ -131,7 +156,7 @@ class _AdminStudentDetailState extends State<AdminStudentDetail>
         decoration: context.scaffoldBg,
         child: SafeArea(
           child: StreamBuilder<Student?>(
-            stream: _repo.watchStudent(widget.studentId),
+            stream: _studentStream,
             builder: (context, snap) {
               final s = snap.data;
               return Column(
@@ -439,6 +464,16 @@ class _AdminStudentDetailState extends State<AdminStudentDetail>
                         ),
                       ),
                     ],
+                  ),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    width: double.infinity,
+                    child: _ActionBtn(
+                      label: AppStrings.t('delete_action'),
+                      color: AppTheme.error,
+                      icon: Icons.delete_outline_rounded,
+                      onTap: () => _deleteStudent(s),
+                    ),
                   ),
                 ],
               ),

@@ -1,9 +1,12 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:transit_core/transit_core.dart';
 import '../../app/locale_provider.dart';
 import '../../data/admin_repository.dart';
+import '../../services/audit_service.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/confirm_delete_dialog.dart';
 import '../../widgets/glass_card.dart';
 
 class AdminParentDetail extends StatefulWidget {
@@ -21,10 +24,17 @@ class _AdminParentDetailState extends State<AdminParentDetail> {
   final _phoneCtrl = TextEditingController();
   final _emailCtrl = TextEditingController();
   bool _saving = false;
+  // Set in `initState` (not a field initializer — `widget` isn't attached
+  // yet at that point) exactly once, same fix applied across every other
+  // screen in this app that built its stream inline inside `build()`.
+  late final Stream<AppUser?> _parentStream;
+  late final Stream<List<Student>> _studentsStream;
 
   @override
   void initState() {
     super.initState();
+    _parentStream = _repo.watchUser(widget.parentId);
+    _studentsStream = _repo.watchStudents();
     LocaleProvider.instance.addListener(_onLangChanged);
   }
 
@@ -66,6 +76,23 @@ class _AdminParentDetailState extends State<AdminParentDetail> {
   Future<void> _toggleActive(AppUser p) async {
     await _repo.updateUser(p.uid, {'isActive': !p.isActive});
     if (mounted) _msg(p.isActive ? 'Account deactivated' : 'Account activated');
+  }
+
+  /// Soft-delete (archive) — see `AdminRepository.deleteParent`'s doc
+  /// comment. Cascades to the parent's own students, so pops back to the
+  /// list rather than leaving the admin on a detail screen for an account
+  /// that has just disappeared from it.
+  Future<void> _deleteParent(AppUser p) async {
+    final confirmed = await showConfirmDeleteDialog(context);
+    if (!confirmed) return;
+    await _repo.deleteParent(p.uid);
+    await AuditService.instance.logAction(
+      adminId: FirebaseAuth.instance.currentUser?.uid ?? 'unknown',
+      actionType: AuditActionType.delete,
+      targetEntityId: p.uid,
+      description: 'Archived parent ${p.name}',
+    );
+    if (mounted) context.pop();
   }
 
   Future<void> _message(AppUser p) async {
@@ -118,7 +145,7 @@ class _AdminParentDetailState extends State<AdminParentDetail> {
         decoration: context.scaffoldBg,
         child: SafeArea(
           child: StreamBuilder<AppUser?>(
-            stream: _repo.watchUser(widget.parentId),
+            stream: _parentStream,
             builder: (context, snap) {
               final p = snap.data;
               return Column(
@@ -337,7 +364,7 @@ class _AdminParentDetailState extends State<AdminParentDetail> {
           ),
           const SizedBox(height: 12),
           StreamBuilder<List<Student>>(
-            stream: _repo.watchStudents(),
+            stream: _studentsStream,
             builder: (context, snap) {
               final children = (snap.data ?? const <Student>[])
                   .where((s) => s.parentId == p.uid)
@@ -491,6 +518,16 @@ class _AdminParentDetailState extends State<AdminParentDetail> {
                 ),
               ),
             ],
+          ),
+          const SizedBox(height: 8),
+          SizedBox(
+            width: double.infinity,
+            child: _ActionBtn(
+              label: AppStrings.t('delete_action'),
+              color: AppTheme.error,
+              icon: Icons.delete_outline_rounded,
+              onTap: () => _deleteParent(p),
+            ),
           ),
         ],
       ),

@@ -6,6 +6,7 @@ import '../../app/locale_provider.dart';
 import '../../data/admin_repository.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/glass_card.dart';
+import '../../widgets/neumorphic_card.dart';
 
 class AdminRoutes extends StatefulWidget {
   final VoidCallback? onBack;
@@ -124,13 +125,8 @@ class _AdminRoutesState extends State<AdminRoutes> {
                         )
                       else if (routes.isEmpty)
                         _EmptyState(
-                          onCreateRoute: () => ScaffoldMessenger.of(
-                            context,
-                          ).showSnackBar(
-                            const SnackBar(
-                              content: Text('Route creation — coming soon'),
-                            ),
-                          ),
+                          onCreateRoute: () =>
+                              context.push('/admin/create-route'),
                         )
                       else
                   ...routes.asMap().entries.map((entry) {
@@ -277,6 +273,19 @@ class _AdminRoutesState extends State<AdminRoutes> {
           ),
         ),
       ),
+      // Only the empty state had a "Create Route" CTA before — once at
+      // least one route exists there was no way to reach the form at all.
+      floatingActionButton: (routes != null && routes.isNotEmpty)
+          ? FloatingActionButton.extended(
+              backgroundColor: AppTheme.adminAccent,
+              onPressed: () => context.push('/admin/create-route'),
+              icon: const Icon(Icons.add_rounded, color: Colors.white),
+              label: Text(
+                AppStrings.t('create_route_action'),
+                style: const TextStyle(color: Colors.white),
+              ),
+            )
+          : null,
     );
   }
 }
@@ -320,44 +329,6 @@ class _Header extends StatelessWidget {
   }
 }
 
-/// Neumorphic shell shared by the stat cards and the "Create Route" CTA —
-/// two opposing shadows, `context.isDark`-aware, matching the recipe already
-/// used elsewhere in this app (student/driver detail empty states, the Fee
-/// Management summary card).
-class _NeumorphicCard extends StatelessWidget {
-  final EdgeInsetsGeometry padding;
-  final Widget child;
-  const _NeumorphicCard({required this.padding, required this.child});
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = context.isDark;
-    return Container(
-      padding: padding,
-      decoration: BoxDecoration(
-        color: context.cardBg,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: isDark
-                ? Colors.black.withValues(alpha: 0.45)
-                : const Color(0xFFB8BEC8).withValues(alpha: 0.6),
-            offset: const Offset(5, 5),
-            blurRadius: 12,
-          ),
-          BoxShadow(
-            color: isDark
-                ? Colors.white.withValues(alpha: 0.04)
-                : Colors.white.withValues(alpha: 0.9),
-            offset: const Offset(-5, -5),
-            blurRadius: 12,
-          ),
-        ],
-      ),
-      child: child,
-    );
-  }
-}
 
 class _MiniStat extends StatelessWidget {
   final IconData icon;
@@ -372,7 +343,7 @@ class _MiniStat extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Expanded(
-      child: _NeumorphicCard(
+      child: NeumorphicCard(
         padding: const EdgeInsets.all(12),
         child: Column(
           children: [
@@ -426,7 +397,7 @@ class _EmptyState extends StatelessWidget {
           const SizedBox(height: 20),
           GestureDetector(
             onTap: onCreateRoute,
-            child: _NeumorphicCard(
+            child: NeumorphicCard(
               padding: const EdgeInsets.symmetric(
                 horizontal: 20,
                 vertical: 12,

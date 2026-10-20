@@ -7,7 +7,7 @@
 > - [`README.md`](README.md) — architecture, schema, screen docs (mobile app)
 > - [`../../transit_admin/README.md`](../../transit_admin/README.md) — admin app
 >
-> **Last updated:** 2026-10-18 (dashboard suspended accounts — include university students)
+> **Last updated:** 2026-10-20 (production-readiness pass: soft delete, stream/count fixes, stub features, widget dedup, responsive layout)
 
 ---
 
@@ -725,6 +725,202 @@ its note above — pick a real id whenever you're ready and it can be redone.
 ---
 
 ## 📝 Changelog
+
+### 2026-10-20 (production-readiness pass) — soft delete, stream/count fixes, three real stub features, widget dedup, responsive layout (transit_admin + transit_pro + transit_core)
+
+Full pass following an 11-point architecture/security/UI review conducted
+earlier this session. Executed via an approved plan
+(`temporal-soaring-pancake.md`); touches all three repos sharing the
+`transitpro-db` Firebase project. `flutter analyze` is clean on all three
+(`transit_admin`, `transit_pro`, `transit_core`) after every step below.
+
+**1. Soft delete for Parent / Student / Driver**
+- `transit_core`: `AppUser`, `Student`, `Driver` each gained `bool
+  isDeleted` (default `false`) and `DateTime? deletedAt`, following the
+  existing field-addition pattern (constructor/`fromMap`/`toMap`/`copyWith`).
+- `AdminRepository`: `deleteParent(uid)`, `deleteStudent(id)`,
+  `deleteDriver(id)` — each sets `isDeleted`/`deletedAt` rather than
+  physically removing the document (see reasoning below). `deleteParent`
+  cascades to every one of the parent's own `Student` docs (dependent
+  profiles, archived alongside their parent). `deleteDriver` archives both
+  the `drivers/{uid}` **and** `users/{uid}` docs in one `WriteBatch` (a
+  driver has two documents sharing one uid — missing either one would let
+  the driver still sign in to the mobile app despite showing "removed" in
+  the admin app) and calls `reassignStudentsOffDriver(driverId)` (a
+  `WriteBatch` clearing `driverId`/`routeId`/`scheduleId`/`busId` on every
+  affected student — the first batch-write precedent in this repository).
+- `watchDrivers()`, `watchUsersByRole()`, `watchStudents()` all filter
+  `!isDeleted` client-side (consistent with this app's existing all-client-
+  side filtering) so archived records vanish from every admin list
+  immediately.
+- **UI**: a new shared `showConfirmDeleteDialog()`
+  (`lib/widgets/confirm_delete_dialog.dart`) — the first delete-confirmation
+  dialog in this app — wired to a "Delete" `_ActionBtn` in the Controls
+  section of `admin_parent_detail.dart`, `admin_student_detail.dart`, and
+  `admin_driver_detail.dart`. Each delete also writes an `AuditService`
+  entry.
+- **Why soft delete, not a hard delete**: Firebase Auth accounts are
+  separate from Firestore documents, and the client SDK can only delete
+  the *currently signed-in* user's own Auth account — an admin cannot
+  delete another user's Auth account without the Admin SDK (a Cloud
+  Function). So a client-only "permanent delete" could never actually free
+  the deleted account's email for reuse regardless of what it did to
+  Firestore. Soft delete is immediately real and working; true
+  email-freeing deletion is the new Cloud Function below.
+- **Sign-in gate, `transit_pro`**: `lib/app/auth_service.dart`'s two sign-in
+  paths (`signIn`, `signInWithGoogle`) now also check `profile.isDeleted`
+  (alongside the existing `isActive` check) and sign the session back out
+  with a clear message — without this, a soft-deleted account's existing
+  Firebase Auth session could keep using the mobile app indefinitely.
+
+**2. Prepared Cloud Function for true account deletion (not deployed)**
+- New `exports.adminDeleteAccountPermanently` in
+  `transit_Pro/transit_pro/functions/index.js` — an admin-only callable
+  (`onCall`) that cascades the same Firestore cleanup as the client-side
+  soft delete, then calls `admin.auth().deleteUser(targetUid)` — the one
+  step only the Admin SDK can do, and what actually frees the email.
+  Verified with `node --check` (valid syntax); **not deployed**, and not
+  yet wired into any Flutter UI (would need the `cloud_functions` package
+  added to `transit_admin`'s `pubspec.yaml` and a second "Permanently
+  Delete" control — a deliberate fast-follow, not shipped against an
+  undeployed function).
+- Deploy command (from `transit_Pro/transit_pro/functions`):
+  `firebase deploy --only functions:adminDeleteAccountPermanently`
+
+**3. Security rules — verified, not changed**
+- Checked `transit_Pro/transit_pro/firestore.rules` (the live rules for the
+  shared `transitpro-db` project — `transit_admin` has no rules file of its
+  own) against every write this pass introduces. The `update` rule for
+  `users/{userId}`, `students/{studentId}`, and `drivers/{driverId}` each
+  already has an unrestricted `|| isAdmin()` branch (no field allow-list),
+  so the new `isDeleted`/`deletedAt` writes — and the student-reassignment
+  batch writes — already pass under the existing rules with **no changes
+  needed**. Confirmed this directly rather than writing an unnecessary
+  rules diff.
+
+**4. Fixed `StreamBuilder` stream-recreated-every-build bug**
+- 7 screens (`admin_student_management.dart`, `admin_driver_management.dart`,
+  `admin_parent_management.dart`, `admin_notifications.dart`,
+  `admin_driver_detail.dart`, `admin_parent_detail.dart`,
+  `admin_student_detail.dart`) previously called `AdminRepository.instance
+  .watchX()` directly inside `build()`'s `stream:` parameter — constructing
+  a brand-new `Stream`/Firestore listener on every rebuild (e.g. every
+  keystroke in a search box). Each now holds its stream in a `late final`
+  field, set once in `initState` (or the field initializer, where no
+  `widget.xxx` constructor argument is needed). `admin_notifications.dart`'s
+  three section widgets (`_PendingDriversSection`, `_RecentFeedbackSection`,
+  `_RecentAccountsSection`) were `const` `StatelessWidget`s whose `build()`
+  still re-ran on every parent rebuild despite being `const` — converted to
+  `StatefulWidget` so each holds its own stable `late final` stream.
+
+**5. Firestore `.count()` aggregation for pure counts**
+- `AdminRepository`: added `countStudents()`, `countDrivers()`,
+  `countParents()`, `countBuses()`, `countRoutes()` using `.count().get()`.
+- `admin_profile.dart`'s badge counter (previously 5 separate live
+  `watchX()` listeners opened just to call `.length`) now does one
+  `Future.wait` of the five one-shot counts — these numbers don't need to
+  be millisecond-live, and three of the five duplicated listeners the
+  Dashboard already keeps open on the same collections.
+- `admin_dashboard.dart` deliberately **not** migrated to `.count()` — its
+  `_students`/`_parents`/`_drivers` lists are also used for several derived
+  per-document stats (suspended counts, subscription analytics) on the same
+  screen, so switching the headline counts to `.count()` would mean loading
+  the full lists anyway for the other cards — no net read reduction.
+
+**6. De-duplicated shared widgets**
+- New `lib/widgets/mini_stat.dart` (`MiniStat`) — replaces three
+  byte-identical private `_MiniStat` classes
+  (`admin_driver_management.dart`, `admin_student_management.dart`,
+  `admin_parent_management.dart`).
+- New `lib/widgets/neumorphic_card.dart` (`NeumorphicCard`, with
+  `borderRadius`/`shadowOffset`/`blurRadius` parameters) — replaces three
+  `_NeumorphicCard` classes (`admin_vehicles.dart`, `admin_routes.dart`
+  byte-identical to each other; `admin_fees.dart`'s slightly larger variant
+  reproduced via the new parameters rather than forcing one fixed size).
+- The remaining duplicated private widgets noted in the original review
+  (`_Header`, `_InfoRow`/`_InfoPill`, `_EditField`, `_ActionBtn`, `_LogRow`,
+  the 8 tab-specific empty-state classes) were left alone — each has small
+  per-screen differences, and forcing them into one shared abstraction
+  would cost more than the duplication itself, per this project's own
+  "no premature abstraction" convention.
+
+**7. Reduced redundant overlapping subscriptions**
+- `AdminRepository.watchStudents()`, `watchDrivers()` (no-status case), and
+  `watchUsersByRole()` are now memoized `.asBroadcastStream()`s (a
+  `Stream<...>?` cache field, `Map<UserRole, Stream<...>>` for the
+  per-role case) — every screen calling one of these now shares one
+  underlying Firestore listener instead of opening its own. Previously
+  Dashboard, Vehicles, and (before step 5) Profile each independently
+  streamed the same collections.
+
+**8. Typed route arguments**
+- `router.dart`: the three bare `state.extra as String` casts (for
+  `/admin/student-detail`, `/admin/parent-detail`, `/admin/driver-detail`)
+  replaced with a new `_idExtra(GoRouterState state)` helper that returns
+  `''` instead of throwing on a null/wrong-type `extra` — every one of
+  these detail screens already renders a "not found" state for an unknown
+  id, so this degrades gracefully instead of crashing.
+
+**9. `firestore.indexes.json` — audited, no changes needed**
+- Every `.where()` clause added in this pass (`driverId`, `parentId`,
+  `role`, the `.count()` queries, `auditLogs`' `orderBy('createdAt')` with
+  no `where`) is single-field — Firestore auto-indexes those. No new
+  composite index is required for anything introduced here.
+
+**10. Responsive/tablet layout**
+- New `lib/widgets/responsive.dart`: `ResponsiveBody` (a `LayoutBuilder`
+  that's a complete no-op below `maxWidth`, centering a width-capped column
+  above it) and `gridColumnsFor(width)` (3 columns below ~700px, up to 6 on
+  a wide desktop window). Applied to `admin_dashboard.dart`'s content
+  column and its 6-card stat `GridView` — the highest-traffic screen, per
+  the plan. Deliberately **not** applied to `AdminLayout`'s outer
+  `IndexedStack` shell (every screen in the app) after reconsidering the
+  blast radius — an unverified layout change there risks the one viewport
+  (phone-width) this app was actually built and tested for, for a benefit
+  (wide-screen centering) that's lower priority than correctness. Scoped to
+  the Dashboard only, which is provably a no-op below 900px wide.
+
+**11. Flagged active students with no driver**
+- `admin_student_management.dart`'s `_StudentCard`: the "No driver"
+  `_InfoPill` now shows a warning icon/color (`Icons.warning_amber_rounded`,
+  `AppTheme.warning`) specifically when the student is **active** and
+  unassigned — a suspended student with no driver is expected, not a
+  problem, so that case keeps the neutral cyan treatment.
+
+**Also fixed along the way (stub features, not fabricated data):**
+- **Change Password** (`admin_profile.dart`): now calls
+  `FirebaseAuth.instance.sendPasswordResetEmail()` for real, replacing the
+  "coming soon" `SnackBar`. `_OptionRow`'s now-fully-unused `comingSoon`
+  parameter was removed.
+- **Audit History viewer**: new `admin_audit_history.dart` +
+  `AuditService.fetchRecentLogs()` (a one-time Firestore read — the
+  `auditLogs` collection was already being written by every
+  approve/suspend/archive action in this app, just never displayed).
+  Wired to Profile's "Audit History" row (`/admin/audit-history` route).
+- **Create Route form**: new `admin_create_route.dart` + new
+  `AdminRepository.createRoute()`, replacing Route Management's
+  "Route creation — coming soon" stub. A name field plus a dynamic list of
+  stop name/time rows, writing a real `BusRoute` document. A
+  `FloatingActionButton` was also added so Create Route is reachable even
+  when the route list isn't empty (previously only the empty state had a
+  way to reach it). **Scope note**: this admin app has no map picker
+  anywhere, so each stop's `location` is written as the deliberately
+  obvious placeholder `GeoCoord(0, 0)` with a `note` flagging it as needing
+  a real pin — not a plausible-looking fake coordinate, and documented as a
+  real gap rather than silently faked.
+- Session History / Active Devices / Logout All Sessions / System Logs /
+  Admin Activity Tracking were **not** built out — they'd need a
+  device/session-tracking schema and (for "logout all sessions") a
+  server-side Auth token-revocation function this project doesn't have.
+  Left as their existing honest "Soon" badge rather than inventing backing
+  data for them, consistent with this app's "no dummy data" rule.
+
+**Manual steps still needed** (cannot be done from here):
+- `firebase deploy --only functions:adminDeleteAccountPermanently` (from
+  `transit_Pro/transit_pro/functions`) — only if/when the permanent-delete
+  path is wanted; nothing in the shipped UI depends on it yet.
+- No `firestore.rules`/`firestore.indexes.json` deploy needed — both were
+  audited and already cover everything this pass added.
 
 ### 2026-10-18 (dashboard suspended accounts — include university students) — expanded the primary-accounts tally to include university students as their own account holders (transit_admin)
 
