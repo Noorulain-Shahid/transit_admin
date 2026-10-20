@@ -914,6 +914,9 @@ class _WideStatCard extends StatelessWidget {
           const SizedBox(height: 4),
           Text(
             sub,
+            textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: TextStyle(
               color: color,
               fontSize: 10,
