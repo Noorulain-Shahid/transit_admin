@@ -32,6 +32,18 @@ class AuditLogEntry {
   });
 }
 
+class LoginSessionEntry {
+  final String id;
+  final DateTime timestamp;
+  final String platform;
+
+  LoginSessionEntry({
+    required this.id,
+    required this.timestamp,
+    required this.platform,
+  });
+}
+
 /// Service responsible for logging all critical administrative actions.
 /// Writes append-only to the `auditLogs` Firestore collection — admin-only,
 /// so it lives here rather than in the shared `transit_core` package.
@@ -82,6 +94,45 @@ class AuditService {
 
   List<AuditLogEntry> getRecentLogs(int count) {
     return _localLogs.reversed.take(count).toList();
+  }
+
+  /// Logs a successful admin sign-in to the `loginSessions` collection —
+  /// called right after [AuthService.signInWithEmail] confirms the account
+  /// is an admin. Best-effort, same as [logAction]: a failed write here must
+  /// never block the sign-in itself.
+  Future<void> logLogin(String adminId) async {
+    try {
+      await Db.fs.collection('loginSessions').add({
+        'adminId': adminId,
+        'platform': defaultTargetPlatform.name,
+        'createdAt': Db.now,
+      });
+    } catch (e) {
+      if (kDebugMode) debugPrint('[AUDIT] Login session write failed: $e');
+    }
+  }
+
+  /// Session History viewer data for the signed-in admin.
+  Future<List<LoginSessionEntry>> fetchLoginSessions({
+    required String adminId,
+    int limit = 50,
+  }) async {
+    final snap = await Db.fs
+        .collection('loginSessions')
+        .where('adminId', isEqualTo: adminId)
+        .orderBy('createdAt', descending: true)
+        .limit(limit)
+        .get();
+    return snap.docs.map((doc) {
+      final m = doc.data();
+      return LoginSessionEntry(
+        id: doc.id,
+        timestamp: (m['createdAt'] is Timestamp)
+            ? (m['createdAt'] as Timestamp).toDate()
+            : DateTime.now(),
+        platform: (m['platform'] as String?) ?? 'Unknown',
+      );
+    }).toList();
   }
 
   /// Real Audit History viewer data — reads the `auditLogs` collection this

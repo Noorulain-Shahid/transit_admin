@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:transit_core/transit_core.dart';
+import '../services/audit_service.dart';
 import '../theme/theme_provider.dart';
 import 'locale_provider.dart';
 
@@ -135,6 +136,7 @@ class AuthService {
       await _firebaseAuth.signOut();
       throw const NotAnAdminException();
     }
+    await AuditService.instance.logLogin(uid!);
   }
 
   Future<void> signOut() async {

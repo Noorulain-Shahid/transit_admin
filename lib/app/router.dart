@@ -11,6 +11,8 @@ import '../screens/admin/admin_fees.dart';
 import '../screens/admin/admin_routes.dart';
 import '../screens/admin/admin_vehicles.dart';
 import '../screens/admin/admin_audit_history.dart';
+import '../screens/admin/admin_session_history.dart';
+import '../screens/admin/admin_activity_tracking.dart';
 import '../screens/admin/admin_create_route.dart';
 import '../screens/admin/admin_student_detail.dart';
 import '../screens/admin/admin_parent_detail.dart';
@@ -107,6 +109,14 @@ final appRouter = GoRouter(
     GoRoute(
       path: '/admin/create-route',
       builder: (context, state) => const AdminCreateRoute(),
+    ),
+    GoRoute(
+      path: '/admin/session-history',
+      builder: (context, state) => const AdminSessionHistory(),
+    ),
+    GoRoute(
+      path: '/admin/activity-tracking',
+      builder: (context, state) => const AdminActivityTracking(),
     ),
     // Entity detail pages — keyed by Firestore id, the screen loads its
     // own live data rather than being handed a snapshot object.

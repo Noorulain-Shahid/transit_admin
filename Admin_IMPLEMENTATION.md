@@ -7,7 +7,7 @@
 > - [`README.md`](README.md) — architecture, schema, screen docs (mobile app)
 > - [`../../transit_admin/README.md`](../../transit_admin/README.md) — admin app
 >
-> **Last updated:** 2026-10-20 (production-readiness pass: soft delete, stream/count fixes, stub features, widget dedup, responsive layout)
+> **Last updated:** 2026-10-20 (later: Session History + Activity Tracking made real, Role-Based Permissions stub removed)
 
 ---
 
@@ -725,6 +725,48 @@ its note above — pick a real id whenever you're ready and it can be redone.
 ---
 
 ## 📝 Changelog
+
+### 2026-10-20 (later) — three more real features replacing Profile "Soon" stubs; removed the inapplicable Role-Based Permissions stub (transit_admin + transit_pro)
+
+Follow-up to the production-readiness pass below. Of the six remaining
+"coming soon" rows on the Profile screen's Security/System Controls sections,
+resolved each on its actual feasibility rather than leaving all six labeled
+identically:
+
+- **Removed "Role-Based Permissions"** entirely — not a stub anymore, just
+  gone. This app is confirmed single-admin going forward, so a row promising
+  a feature that will never exist was actively misleading rather than
+  honestly pending.
+- **Made "Login Session History" real.** `AuthService.signInWithEmail`
+  (`lib/app/auth_service.dart`) now calls a new `AuditService.logLogin(uid)`
+  after the admin-role check passes, writing one document per successful
+  sign-in to a new `loginSessions` Firestore collection (`adminId`,
+  `platform`, `createdAt`). New `AdminSessionHistory` screen
+  (`lib/screens/admin/admin_session_history.dart`, routed at
+  `/admin/session-history`) lists them newest-first, tagging the most recent
+  as "Current".
+- **Made "Admin Activity Tracking" real.** Since this app has exactly one
+  admin, "my activity" and "the audit log" are the same data — new
+  `AdminActivityTracking` screen (`lib/screens/admin/admin_activity_tracking.dart`,
+  routed at `/admin/activity-tracking`) reuses `AuditService.fetchRecentLogs()`
+  and summarizes it (total actions, today's count, a breakdown by action
+  type) instead of duplicating the Audit History list view.
+- **Left stubbed, honestly:** Active Devices and Logout All Sessions (need
+  per-device session tracking and server-side token revocation this app has
+  no infrastructure for) and System Logs (means app error/crash logs, which
+  needs a crash-reporting pipeline like Crashlytics, not the admin-action
+  audit log that already exists under a different name). No fake data was
+  invented for any of the three.
+- **Firestore rules:** added a `loginSessions/{sessionId}` match block to
+  `transit_pro/firestore.rules` (admin-only read and create, no update/delete
+  — same shape as the existing `auditLogs` rule) since the collection had no
+  rule at all and would otherwise be denied by the default-deny fallback.
+  **Not deployed** — needs `firebase deploy --only firestore:rules` from
+  `transit_pro`, same manual step already pending from the prior entry below.
+- New locale keys (English + Urdu) for both new screens and their updated
+  Security-row subtitles; removed the now-unused `role_based_permissions`/
+  `single_admin_role_desc` keys.
+- `flutter analyze`: clean on `transit_admin`.
 
 ### 2026-10-20 (production-readiness pass) — soft delete, stream/count fixes, three real stub features, widget dedup, responsive layout (transit_admin + transit_pro + transit_core)
 
