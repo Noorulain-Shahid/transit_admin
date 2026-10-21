@@ -197,23 +197,42 @@ class _RecentFeedbackSectionState extends State<_RecentFeedbackSection> {
           subtitle: feedback.isEmpty
               ? 'No one has rated the app yet.'
               : 'Ratings and comments submitted from "Rate the App".',
-          children: feedback
-              .map(
-                (f) => _NotificationItem(
-                  title: '${'⭐' * f.rating}${'☆' * (5 - f.rating)} rating',
-                  subtitle: (f.comment == null || f.comment!.isEmpty)
-                      ? 'No comment left.'
-                      : f.comment!,
-                  time: _timeAgo(f.timestamp),
-                  icon: Icons.star_rounded,
-                  color: f.rating >= 4
-                      ? AppTheme.success
-                      : f.rating == 3
-                      ? AppTheme.warning
-                      : AppTheme.error,
-                ),
-              )
-              .toList(),
+          children: feedback.map((f) => _FeedbackCard(feedback: f)).toList(),
+        );
+      },
+    );
+  }
+}
+
+/// One "Recent Feedback" card. A `FutureBuilder` of its own, separate from
+/// the section's feedback list stream: `AppFeedback` only carries `userId`
+/// (see its doc comment in `transit_core`), so the submitter's name needs a
+/// one-shot lookup against `users/{uid}` — `AdminRepository.fetchUserName`
+/// caches that per uid, so scrolling back to an already-resolved card never
+/// re-fetches it.
+class _FeedbackCard extends StatelessWidget {
+  final AppFeedback feedback;
+  const _FeedbackCard({required this.feedback});
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<String?>(
+      future: AdminRepository.instance.fetchUserName(feedback.userId),
+      builder: (context, snap) {
+        final name = snap.data ?? 'Anonymous User';
+        return _NotificationItem(
+          header: name,
+          title: '${'⭐' * feedback.rating}${'☆' * (5 - feedback.rating)} rating',
+          subtitle: (feedback.comment == null || feedback.comment!.isEmpty)
+              ? 'No comment left.'
+              : feedback.comment!,
+          time: _timeAgo(feedback.timestamp),
+          icon: Icons.star_rounded,
+          color: feedback.rating >= 4
+              ? AppTheme.success
+              : feedback.rating == 3
+              ? AppTheme.warning
+              : AppTheme.error,
         );
       },
     );
@@ -365,6 +384,11 @@ class _NotificationItem extends StatelessWidget {
   final String? actionLabel;
   final VoidCallback? onAction;
 
+  /// Optional bold line shown above [title] — e.g. the feedback submitter's
+  /// name on "Recent Feedback" cards. `null` (the default) renders exactly
+  /// as before for every other section using this widget.
+  final String? header;
+
   const _NotificationItem({
     required this.title,
     required this.subtitle,
@@ -373,6 +397,7 @@ class _NotificationItem extends StatelessWidget {
     required this.color,
     this.actionLabel,
     this.onAction,
+    this.header,
   });
 
   @override
@@ -402,6 +427,17 @@ class _NotificationItem extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  if (header != null) ...[
+                    Text(
+                      header!,
+                      style: TextStyle(
+                        color: context.textPrimary,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                  ],
                   Text(
                     title,
                     style: TextStyle(

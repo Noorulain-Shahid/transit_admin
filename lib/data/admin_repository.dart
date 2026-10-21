@@ -321,6 +321,28 @@ class AdminRepository {
       .snapshots()
       .docsList;
 
+  // `AppFeedback` only stores `userId` (see its doc comment — there's no
+  // denormalized name field on the feedback document itself), so showing a
+  // submitter's name on the Notifications screen means a lookup against
+  // `users/{uid}`. Cached in memory and keyed by uid: the "Recent Feedback"
+  // list re-fetches every name on each rebuild otherwise, and the same admin
+  // or driver showing up across several feedback entries would mean a
+  // repeated read for a name that never changes mid-session.
+  final Map<String, String?> _userNameCache = {};
+
+  /// Resolves a feedback submitter's display name, or `null` if the account
+  /// no longer exists (e.g. hard-deleted before soft delete existed) — the
+  /// caller decides the "Anonymous User" fallback text, this just reports
+  /// what's actually in Firestore.
+  Future<String?> fetchUserName(String uid) async {
+    if (_userNameCache.containsKey(uid)) return _userNameCache[uid];
+    final user = await Db.users.doc(uid).get();
+    final name = user.data()?.name;
+    final resolved = (name == null || name.isEmpty) ? null : name;
+    _userNameCache[uid] = resolved;
+    return resolved;
+  }
+
   // ── Live Chat support inbox ──────────────────────────────────────────────
 
   /// Every "Live Chat" support thread, most recently active first — the
