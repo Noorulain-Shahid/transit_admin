@@ -121,7 +121,7 @@ class AppStrings {
     'view_sign_in_history': 'Tap to view your sign-in history',
     'current_session_badge': 'Current',
     'no_sessions_recorded': 'No sign-ins recorded yet.',
-    'active_devices': 'Active Devices',
+    'last_sign_in_lbl': 'Last Sign-In',
     'logout_all_sessions': 'Logout All Sessions',
     'system_controls': 'System Controls',
     'soon_badge': 'Soon',
@@ -129,7 +129,6 @@ class AppStrings {
     'not_available_yet': 'Not available yet',
 
     // System Controls rows, theme toggle, sign out
-    'system_logs': 'System Logs',
     'audit_history': 'Audit History',
     'admin_activity_tracking': 'Admin Activity Tracking',
     'view_activity_summary': 'Tap to view a summary of your actions',
@@ -410,7 +409,7 @@ class AppStrings {
     'view_sign_in_history': 'اپنی سائن اِن تاریخ دیکھنے کے لیے تھپتھپائیں',
     'current_session_badge': 'موجودہ',
     'no_sessions_recorded': 'ابھی تک کوئی سائن اِن ریکارڈ نہیں ہوا۔',
-    'active_devices': 'فعال آلات',
+    'last_sign_in_lbl': 'آخری سائن اِن',
     'logout_all_sessions': 'تمام سیشنز سے لاگ آؤٹ کریں',
     'system_controls': 'سسٹم کنٹرولز',
     'soon_badge': 'جلد',
@@ -418,7 +417,6 @@ class AppStrings {
     'not_available_yet': 'ابھی دستیاب نہیں',
 
     // System Controls rows, theme toggle, sign out
-    'system_logs': 'سسٹم لاگز',
     'audit_history': 'آڈٹ ہسٹری',
     'admin_activity_tracking': 'ایڈمن سرگرمی ٹریکنگ',
     'view_activity_summary': 'اپنی کارروائیوں کا خلاصہ دیکھنے کے لیے تھپتھپائیں',

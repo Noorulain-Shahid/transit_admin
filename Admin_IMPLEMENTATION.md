@@ -7,7 +7,7 @@
 > - [`README.md`](README.md) — architecture, schema, screen docs (mobile app)
 > - [`../../transit_admin/README.md`](../../transit_admin/README.md) — admin app
 >
-> **Last updated:** 2026-10-20 (later: Session History + Activity Tracking made real, Role-Based Permissions stub removed)
+> **Last updated:** 2026-10-22 (System Logs removed, Active Devices replaced by real Last Sign-In, Logout All Sessions left honestly stubbed)
 
 ---
 
@@ -725,6 +725,36 @@ its note above — pick a real id whenever you're ready and it can be redone.
 ---
 
 ## 📝 Changelog
+
+### 2026-10-22 — resolved the remaining three "Soon" stubs per feasibility review (transit_admin)
+
+Reviewed System Logs, Active Devices, and Logout All Sessions for actual
+build cost (device-session infra, `revokeRefreshTokens`/Admin SDK, a
+crash-reporting pipeline) and decided per-item rather than building all
+three just because they were stubbed:
+
+- **Removed "System Logs" entirely.** It was redundant with Audit History
+  and Admin Activity Tracking, which already cover "what did the admin do" —
+  the only meaning of "logs" this single-admin app actually needs. A
+  separate app-crash/error log (the other possible meaning) would need
+  Crashlytics, genuinely new infrastructure not worth adding speculatively.
+- **Replaced "Active Devices" with a real "Last Sign-In" row.** A full
+  device registry (device fingerprinting, heartbeat writes, stale-session
+  pruning) was overkill for a single admin; `AuditService.fetchLoginSessions`
+  already exists from the Session History work, so this row now shows the
+  actual most recent sign-in's platform and timestamp — zero new
+  infrastructure — and taps through to the full Session History list.
+  `_AdminProfileState` gained `_loadLastSignIn`/`_lastSignInDetail`
+  (`lib/screens/admin/admin_profile.dart`).
+- **Left "Logout All Sessions" stubbed, deliberately.** A real implementation
+  needs `admin.auth().revokeRefreshTokens()` (Admin SDK / Cloud Function) —
+  a half-built client-only version (just calling local `signOut()`) would
+  look like it revoked other sessions without actually doing so, which is
+  worse than an honest "not available yet." Build it for real if/when there's
+  an actual incident-response need, not speculatively.
+- Removed the now-unused `active_devices`/`system_logs` locale keys, added
+  `last_sign_in_lbl` (English + Urdu).
+- `flutter analyze`: clean.
 
 ### 2026-10-20 (later) — three more real features replacing Profile "Soon" stubs; removed the inapplicable Role-Based Permissions stub (transit_admin + transit_pro)
 

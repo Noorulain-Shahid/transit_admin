@@ -113,6 +113,14 @@ class AuditService {
   }
 
   /// Session History viewer data for the signed-in admin.
+  ///
+  /// Deliberately filters on `adminId` only and sorts in Dart afterwards,
+  /// rather than adding `.orderBy('createdAt')` to the query — combined with
+  /// the `.where('adminId', ...)` filter, that would need a Firestore
+  /// composite index that was never deployed, which crashed this screen on
+  /// a real device (`failed-precondition`, no index exists) the first time
+  /// this shipped. This app has exactly one admin, so `limit` only needs to
+  /// cap what's sorted, not what's fetched — fine at this app's scale.
   Future<List<LoginSessionEntry>> fetchLoginSessions({
     required String adminId,
     int limit = 50,
@@ -120,10 +128,8 @@ class AuditService {
     final snap = await Db.fs
         .collection('loginSessions')
         .where('adminId', isEqualTo: adminId)
-        .orderBy('createdAt', descending: true)
-        .limit(limit)
         .get();
-    return snap.docs.map((doc) {
+    final entries = snap.docs.map((doc) {
       final m = doc.data();
       return LoginSessionEntry(
         id: doc.id,
@@ -133,6 +139,8 @@ class AuditService {
         platform: (m['platform'] as String?) ?? 'Unknown',
       );
     }).toList();
+    entries.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+    return entries.take(limit).toList();
   }
 
   /// Real Audit History viewer data — reads the `auditLogs` collection this

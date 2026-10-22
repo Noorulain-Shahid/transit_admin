@@ -6,6 +6,7 @@ import 'package:transit_core/transit_core.dart';
 import '../../app/auth_service.dart';
 import '../../app/locale_provider.dart';
 import '../../data/admin_repository.dart';
+import '../../services/audit_service.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/theme_provider.dart';
 import '../../widgets/glass_card.dart';
@@ -30,6 +31,8 @@ class _AdminProfileState extends State<AdminProfile> {
   int? _busCount;
   int? _routeCount;
   int? _userCount;
+  LoginSessionEntry? _lastSignIn;
+  bool _lastSignInLoaded = false;
 
   StreamSubscription<AppUser?>? _meSub;
 
@@ -52,6 +55,7 @@ class _AdminProfileState extends State<AdminProfile> {
     // drivers) duplicated listeners the Dashboard and other screens already
     // keep open on the exact same collections.
     _loadCounts();
+    _loadLastSignIn(uid);
     // `AppStrings.t()` reads `LocaleProvider` directly rather than through
     // an `InheritedWidget`, so nothing rebuilds this screen automatically
     // when the language changes elsewhere (e.g. the language picker sheet
@@ -74,6 +78,39 @@ class _AdminProfileState extends State<AdminProfile> {
       _routeCount = results[1];
       _userCount = results[2] + results[3] + results[4];
     });
+  }
+
+  Future<void> _loadLastSignIn(String? uid) async {
+    if (uid == null) return;
+    try {
+      final sessions = await AuditService.instance.fetchLoginSessions(
+        adminId: uid,
+        limit: 1,
+      );
+      if (!mounted) return;
+      setState(() {
+        _lastSignIn = sessions.isEmpty ? null : sessions.first;
+        _lastSignInLoaded = true;
+      });
+    } catch (e) {
+      // This screen builds immediately on login (it's one of AdminLayout's
+      // IndexedStack tabs, not lazily on first visit), so an uncaught
+      // Firestore error here fires right after sign-in — exactly the crash
+      // pattern `main.dart`'s `runZonedGuarded` comment warns an unhandled
+      // Firestore error has caused on a real device before. This row simply
+      // shows "not available" instead, same as a genuinely empty result.
+      if (!mounted) return;
+      setState(() => _lastSignInLoaded = true);
+    }
+  }
+
+  String _lastSignInDetail() {
+    if (!_lastSignInLoaded) return '…';
+    final s = _lastSignIn;
+    if (s == null) return AppStrings.t('not_available_yet');
+    final t = s.timestamp.toLocal();
+    String two(int n) => n.toString().padLeft(2, '0');
+    return '${s.platform} • ${two(t.hour)}:${two(t.minute)}, ${two(t.day)}/${two(t.month)}';
   }
 
   void _onLangChanged() => setState(() {});
@@ -321,12 +358,11 @@ class _AdminProfileState extends State<AdminProfile> {
             onTap: () => context.push('/admin/session-history'),
           ),
           _SecurityRow(
-            icon: Icons.devices_rounded,
-            label: AppStrings.t('active_devices'),
-            detail: AppStrings.t('not_available_yet'),
+            icon: Icons.schedule_rounded,
+            label: AppStrings.t('last_sign_in_lbl'),
+            detail: _lastSignInDetail(),
             color: AppTheme.adminEmerald,
-            comingSoon: true,
-            onTap: () => _msg(context, 'Active Devices — coming soon'),
+            onTap: () => context.push('/admin/session-history'),
           ),
           _SecurityRow(
             icon: Icons.logout_rounded,
@@ -371,14 +407,6 @@ class _AdminProfileState extends State<AdminProfile> {
             ],
           ),
           const SizedBox(height: 12),
-          _SecurityRow(
-            icon: Icons.article_rounded,
-            label: AppStrings.t('system_logs'),
-            detail: AppStrings.t('not_available_yet'),
-            color: AppTheme.info,
-            comingSoon: true,
-            onTap: () => _msg(context, 'System Logs — coming soon'),
-          ),
           _SecurityRow(
             icon: Icons.history_edu_rounded,
             label: AppStrings.t('audit_history'),
