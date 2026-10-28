@@ -7,7 +7,7 @@
 > - [`README.md`](README.md) — architecture, schema, screen docs (mobile app)
 > - [`../../transit_admin/README.md`](../../transit_admin/README.md) — admin app
 >
-> **Last updated:** 2026-10-22 (System Logs removed, Active Devices replaced by real Last Sign-In, Logout All Sessions left honestly stubbed)
+> **Last updated:** 2026-10-22 (later: fixed Subscription Management's infinite-loading bug + made shared stream caches self-healing)
 
 ---
 
@@ -725,6 +725,35 @@ its note above — pick a real id whenever you're ready and it can be redone.
 ---
 
 ## 📝 Changelog
+
+### 2026-10-22 (later) — fixed Subscription Management's infinite-loading bug; self-healing shared stream caches (transit_admin)
+
+Reported symptom: the Subscription Management screen's "Students" section
+spun forever and the Fee Collection pills stayed on "…" indefinitely,
+whenever the underlying Firestore stream errored.
+
+- **Root cause #1 (the screen itself):** `_AdminSubscriptionState`'s
+  `watchStudents()`/`watchAllPayments()` subscriptions had an `onError` that
+  only `debugPrint`ed — `_students`/`_payments` stayed `null` forever, which
+  `build()` reads as "still loading" with no way out. Fixed: both are now
+  tracked with a separate `_studentsError`/`_paymentsError`, each section
+  shows a real error row (`_InlineError`, new) with a **Retry** button
+  instead of spinning forever, independently — one stream failing no longer
+  hides data the other one successfully delivered.
+- **Root cause #2 (the shared repository, more serious):** `watchStudents()`,
+  `watchDrivers()`, and `watchUsersByRole()` memoize a `.asBroadcastStream()`
+  per app lifetime (`_studentsCache`/`_allDriversCache`/`_usersByRoleCache`
+  in `AdminRepository`, added in the earlier production-readiness pass to
+  dedupe listeners). A broadcast stream only replays while its source is
+  alive — once Firestore's stream delivers *any* error, it also closes, and
+  the cached field keeps pointing at that now-finished stream forever. Every
+  future caller across the whole app (not just this screen, and not just
+  this session — same `AdminRepository` singleton) would get an immediate
+  `onDone` and no data, permanently, with no way to recover short of
+  restarting the app. New `AdminRepository._selfHealing()` wraps each cached
+  stream so the first error clears its cache field, letting the *next*
+  caller get a fresh stream instead of the dead one.
+- `flutter analyze`: clean.
 
 ### 2026-10-22 — resolved the remaining three "Soon" stubs per feasibility review (transit_admin)
 

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:transit_core/transit_core.dart';
@@ -22,15 +23,43 @@ class AdminRepository {
   // query. Memoizing the stream here — and making it a broadcast stream so
   // more than one `StreamBuilder`/`StreamSubscription` can attach to it —
   // means every caller shares one underlying listener instead of one each.
+  //
+  // A plain `.asBroadcastStream()` only replays to subscribers while its
+  // source is still alive — once Firestore's underlying stream delivers an
+  // error (a permission hiccup, a dropped connection, a missing index) it
+  // also *closes* the stream, and the `??=` cache above keeps pointing at
+  // that now-finished stream forever. Every screen that opens this same
+  // cached stream afterwards — even a brand new screen instance, even after
+  // a full navigation away and back — gets an immediate `onDone` and no
+  // data: the "stuck on the loading spinner forever" bug, except it never
+  // recovers, because there's no live listener left to ever emit again.
+  // [_selfHealing] clears the cache field the moment an error happens, so
+  // the *next* caller gets a fresh stream instead of the dead one — this is
+  // what actually fixes the Subscription Management screen rather than
+  // merely surfacing the error on the one screen already open when it hit.
   Stream<List<Driver>>? _allDriversCache;
   Stream<List<Student>>? _studentsCache;
   final Map<UserRole, Stream<List<AppUser>>> _usersByRoleCache = {};
+
+  Stream<T> _selfHealing<T>(Stream<T> stream, void Function() clearCache) {
+    return stream.transform(
+      StreamTransformer<T, T>.fromHandlers(
+        handleError: (error, stackTrace, sink) {
+          clearCache();
+          sink.addError(error, stackTrace);
+        },
+      ),
+    );
+  }
 
   // ── Drivers ───────────────────────────────────────────────────────────────
 
   Stream<List<Driver>> watchDrivers({DriverStatus? status}) {
     if (status == null) {
-      return _allDriversCache ??= _watchDriversUncached(null);
+      return _allDriversCache ??= _selfHealing(
+        _watchDriversUncached(null),
+        () => _allDriversCache = null,
+      );
     }
     // Status-filtered variants are used by far fewer call sites and each
     // wants a different status, so they aren't worth caching individually —
@@ -131,12 +160,15 @@ class AdminRepository {
   // ── Users (parents & students share the `users` role field) ─────────────────
 
   Stream<List<AppUser>> watchUsersByRole(UserRole role) =>
-      _usersByRoleCache[role] ??= Db.users
-          .where('role', isEqualTo: role.name)
-          .snapshots()
-          .docsList
-          .map((users) => users.where((u) => !u.isDeleted).toList())
-          .asBroadcastStream();
+      _usersByRoleCache[role] ??= _selfHealing(
+        Db.users
+            .where('role', isEqualTo: role.name)
+            .snapshots()
+            .docsList
+            .map((users) => users.where((u) => !u.isDeleted).toList())
+            .asBroadcastStream(),
+        () => _usersByRoleCache.remove(role),
+      );
 
   Stream<AppUser?> watchUser(String uid) =>
       Db.users.doc(uid).snapshots().map((s) => s.data());
@@ -179,12 +211,14 @@ class AdminRepository {
 
   // ── Students ──────────────────────────────────────────────────────────────
 
-  Stream<List<Student>> watchStudents() =>
-      _studentsCache ??= Db.students
-          .snapshots()
-          .docsList
-          .map((students) => students.where((s) => !s.isDeleted).toList())
-          .asBroadcastStream();
+  Stream<List<Student>> watchStudents() => _studentsCache ??= _selfHealing(
+    Db.students
+        .snapshots()
+        .docsList
+        .map((students) => students.where((s) => !s.isDeleted).toList())
+        .asBroadcastStream(),
+    () => _studentsCache = null,
+  );
 
   Stream<Student?> watchStudent(String studentId) =>
       Db.students.doc(studentId).snapshots().map((s) => s.data());

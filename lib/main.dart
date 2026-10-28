@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -27,6 +29,25 @@ void main() {
         );
       } catch (e) {
         debugPrint('Firebase initialization skipped (front-end mode): $e');
+      }
+
+      // DIAGNOSTIC ONLY — ruling out a corrupted local Firestore cache as the
+      // cause of every `.snapshots()` stream silently hanging (no data, no
+      // error, just a timeout). Must run before any other Firestore call —
+      // it throws `failed-precondition` if a listener is already attached,
+      // which is exactly why it's placed immediately after
+      // `Firebase.initializeApp()` and before anything else touches
+      // Firestore. `kDebugMode`-gated so a release build never pays the cost
+      // of wiping offline persistence (and its resulting slower first
+      // reads/no offline support) on every single cold start — remove this
+      // block entirely once the hang is confirmed fixed or ruled out.
+      if (kDebugMode) {
+        try {
+          await FirebaseFirestore.instance.clearPersistence();
+          debugPrint('[main] Firestore persistence cleared.');
+        } catch (e) {
+          debugPrint('[main] clearPersistence failed (non-fatal): $e');
+        }
       }
 
       // Preload auth and theme settings
