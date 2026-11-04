@@ -14,11 +14,27 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
+  /// The account this build expects. Printed on screen, so there is nothing
+  /// secret about it — and the setup panel below needs the same two values,
+  /// which is why they are not typed out twice.
+  static const _adminEmail = 'admin@transitpro.com';
+  static const _adminPassword = 'TransitAdmin@2026';
+
   final _emailCtrl = TextEditingController();
   final _passCtrl = TextEditingController();
   bool _loading = false;
   bool _showPass = false;
   String _error = '';
+
+  /// Set when sign-in finds no `users/{uid}` record, which is what a
+  /// cleared database looks like. Switches the panel below from "here are
+  /// your credentials" to "here is how to put the account back".
+  bool _recordMissing = false;
+
+  /// The uid the admin document has to be filed under, once the repair has
+  /// run. Null until then.
+  String? _preparedUid;
+  bool _preparing = false;
 
   Future<void> _login() async {
     if (_emailCtrl.text.isEmpty || _passCtrl.text.isEmpty) {
@@ -27,6 +43,7 @@ class _LoginScreenState extends State<LoginScreen> {
     }
     setState(() {
       _error = '';
+      _recordMissing = false;
       _loading = true;
     });
     try {
@@ -38,13 +55,39 @@ class _LoginScreenState extends State<LoginScreen> {
       await AuthService.instance.saveRole('admin');
       if (!mounted) return;
       context.go('/admin');
+    } on AdminRecordMissingException catch (e) {
+      if (mounted) {
+        setState(() {
+          _recordMissing = true;
+          _preparedUid = e.uid;
+          _error =
+              'The password is right, but this account has no admin record '
+              'in the database. Use the panel below to put it back.';
+        });
+      }
     } on NotAnAdminException {
       if (mounted) {
-        setState(() => _error = 'This account is not an admin account.');
+        setState(
+          () => _error =
+              'That account exists but is not an admin. Sign in with the '
+              'admin address, or promote this one in the console.',
+        );
       }
     } on FirebaseAuthException catch (e) {
       if (mounted) {
-        setState(() => _error = _friendlyAuthError(e));
+        setState(() {
+          _error = _friendlyAuthError(e);
+          // No such account at all is the other shape a cleared backend
+          // takes, so the repair panel belongs here too — the message
+          // points at it, and without this it would not be on screen.
+          // Modern Firebase Auth reports this as 'invalid-credential'
+          // rather than 'user-not-found', to avoid confirming which part
+          // was wrong — so a missing account looks identical to a bad
+          // password unless both codes open the panel.
+          if (e.code == 'user-not-found' || e.code == 'invalid-credential') {
+            _recordMissing = true;
+          }
+        });
       }
     } catch (e) {
       if (mounted) setState(() => _error = 'Sign-in failed: $e');
@@ -57,10 +100,19 @@ class _LoginScreenState extends State<LoginScreen> {
   String _friendlyAuthError(FirebaseAuthException e) {
     switch (e.code) {
       case 'invalid-credential':
+        // Firebase uses this single code for both "wrong password" and "no
+        // such account", so the message has to cover both — the panel
+        // below is what actually resolves the second case.
+        return 'Incorrect email or password. If the database was cleared, '
+            'use the setup panel below instead.';
       case 'invalid-email':
       case 'wrong-password':
-      case 'user-not-found':
         return 'Incorrect email or password. Please try again.';
+      case 'user-not-found':
+        // Distinct from a wrong password: there is no such account at all,
+        // which after a database wipe is the likely state.
+        return 'No account exists for that address. If the database was '
+            'cleared, use the setup panel below.';
       case 'user-disabled':
         return 'This account has been disabled. Contact support.';
       case 'too-many-requests':
@@ -69,6 +121,38 @@ class _LoginScreenState extends State<LoginScreen> {
         return 'Network error. Check your connection and try again.';
       default:
         return 'Sign-in failed. Please check your details and try again.';
+    }
+  }
+
+  /// Rebuilds the Auth user and the `users/{uid}` document, then shows the
+  /// uid so the role can be set where the rules insist it is set.
+  Future<void> _prepareAccount() async {
+    setState(() {
+      _preparing = true;
+      _error = '';
+    });
+    try {
+      final uid = await AuthService.instance.prepareAdminAccount(
+        _adminEmail,
+        _adminPassword,
+      );
+      if (!mounted) return;
+      setState(() {
+        _preparedUid = uid;
+        _recordMissing = true;
+      });
+    } on FirebaseAuthException catch (e) {
+      if (!mounted) return;
+      setState(
+        () => _error = e.code == 'email-already-in-use'
+            ? 'That address already has an account under a different '
+                  'password. Reset it from the Firebase console.'
+            : 'Could not prepare the account: ${e.code}',
+      );
+    } catch (e) {
+      if (mounted) setState(() => _error = 'Could not prepare the account: $e');
+    } finally {
+      if (mounted) setState(() => _preparing = false);
     }
   }
 
@@ -87,8 +171,10 @@ class _LoginScreenState extends State<LoginScreen> {
   // account itself lives in Firebase, not in this code, so deleting this
   // widget doesn't affect the account, only its visibility here.
   Widget _buildAdminCredentials(BuildContext context) {
-    const email = 'admin@transitpro.com';
-    const password = 'TransitAdmin@2026';
+    if (_recordMissing) return _buildRepairPanel(context);
+
+    const email = _adminEmail;
+    const password = _adminPassword;
 
     return Container(
       width: double.infinity,
@@ -123,6 +209,100 @@ class _LoginScreenState extends State<LoginScreen> {
             value: password,
             onCopy: () => _copyToClipboard(context, 'Password', password),
           ),
+        ],
+      ),
+    );
+  }
+
+  /// What to do when the account's database record is gone.
+  ///
+  /// Two steps, because exactly one of them is something a client is
+  /// allowed to do. The app can create the login and the user document;
+  /// it cannot set `role: 'admin'`, and the rule that stops it is the same
+  /// rule that stops anyone else's installed copy from doing so.
+  Widget _buildRepairPanel(BuildContext context) {
+    final uid = _preparedUid;
+    final hasUid = uid != null && uid.isNotEmpty;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: context.isDark
+            ? const Color(0xFFF59E0B).withValues(alpha: 0.10)
+            : const Color(0xFFFFFBEB),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: const Color(0xFFF59E0B).withValues(alpha: 0.35),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '\u{1F6E0} Put the admin account back',
+            style: TextStyle(
+              color: context.textPrimary,
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'An admin account is two records: a sign-in, and a user document '
+            'carrying the admin role. Clearing the database removed the '
+            'second one.',
+            style: TextStyle(
+              color: context.textSecondary,
+              fontSize: 11.5,
+              height: 1.4,
+            ),
+          ),
+          const SizedBox(height: 12),
+          if (!hasUid)
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton(
+                onPressed: _preparing ? null : _prepareAccount,
+                child: Text(
+                  _preparing ? 'Working\u2026' : 'Step 1 \u2014 rebuild what I can',
+                ),
+              ),
+            )
+          else ...[
+            Text(
+              'Step 1 done. The sign-in and the user document exist.',
+              style: TextStyle(
+                color: const Color(0xFF16A34A),
+                fontSize: 11.5,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              'Step 2 \u2014 in the Firebase console, open Firestore \u2192 '
+              'users \u2192 this document and change its "role" field from '
+              '"parent" to "admin". The app is not allowed to do this, and '
+              'that rule is what stops any installed copy from granting '
+              'itself your data.',
+              style: TextStyle(
+                color: context.textSecondary,
+                fontSize: 11.5,
+                height: 1.4,
+              ),
+            ),
+            const SizedBox(height: 8),
+            _CredentialRow(
+              label: 'Document',
+              value: 'users/$uid',
+              onCopy: () => _copyToClipboard(context, 'Path', 'users/$uid'),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              'Then come back and sign in with the address above.',
+              style: TextStyle(color: context.textTertiary, fontSize: 11),
+            ),
+          ],
         ],
       ),
     );

@@ -14,6 +14,20 @@ class NotAnAdminException implements Exception {
   const NotAnAdminException();
 }
 
+/// The password was right and the Firebase Auth user exists, but there is
+/// no `users/{uid}` document behind it at all.
+///
+/// Distinct from [NotAnAdminException], which means a document exists and
+/// names some other role. This one is what a cleared database looks like,
+/// and the fix is different: create the record rather than use a different
+/// account. Carries the uid, because that is what the record has to be
+/// filed under and there is no other way to find it.
+class AdminRecordMissingException implements Exception {
+  final String uid;
+  final String email;
+  const AdminRecordMissingException(this.uid, this.email);
+}
+
 /// Persists the logged-in role and theme preference across app restarts.
 ///
 /// Call [saveRole] right after a successful login.
@@ -130,13 +144,72 @@ class AuthService {
       password: password,
     );
     final uid = credential.user?.uid;
-    final user = uid == null ? null : await Db.users.doc(uid).get();
-    final role = user?.data()?.role;
-    if (role != UserRole.admin) {
+    final snap = uid == null ? null : await Db.users.doc(uid).get();
+    final user = snap?.data();
+    if (user == null) {
+      // No record at all. Reporting this as "not an admin account" sent
+      // you looking for the wrong problem; it is a missing document, and
+      // the uid is the only thing that can file it.
+      await _firebaseAuth.signOut();
+      throw AdminRecordMissingException(uid ?? '', email.trim());
+    }
+    if (user.role != UserRole.admin) {
       await _firebaseAuth.signOut();
       throw const NotAnAdminException();
     }
     await AuditService.instance.logLogin(uid!);
+  }
+
+  /// Rebuilds everything about the admin account that a client is allowed
+  /// to rebuild, and returns the uid so the rest can be filed by hand.
+  ///
+  /// Creates the Firebase Auth user when it is missing, then a `users/{uid}`
+  /// document when *that* is missing. The document is written with
+  /// `role: 'parent'` because `firestore.rules` admits only
+  /// `['parent', 'student', 'driver']` on create — promoting it to `admin`
+  /// is a console edit on purpose, since a client that could grant itself
+  /// that role would make every other rule in the file decorative.
+  ///
+  /// Signs back out before returning: this is a repair, not a login.
+  Future<String> prepareAdminAccount(String email, String password) async {
+    final address = email.trim();
+    String uid;
+    try {
+      final existing = await _firebaseAuth.signInWithEmailAndPassword(
+        email: address,
+        password: password,
+      );
+      uid = existing.user!.uid;
+    } on FirebaseAuthException catch (e) {
+      if (e.code != 'user-not-found' && e.code != 'invalid-credential') {
+        rethrow;
+      }
+      // Either there is no such user, or there is one under a different
+      // password — `invalid-credential` covers both and does not say which.
+      // Creating resolves the ambiguity: it succeeds in the first case and
+      // reports `email-already-in-use` in the second, which is a different
+      // problem with a different fix.
+      final created = await _firebaseAuth.createUserWithEmailAndPassword(
+        email: address,
+        password: password,
+      );
+      uid = created.user!.uid;
+    }
+
+    final doc = Db.users.doc(uid);
+    if (!(await doc.get()).exists) {
+      await doc.set(
+        AppUser(
+          uid: uid,
+          role: UserRole.parent,
+          name: 'Administrator',
+          email: address,
+          profileComplete: true,
+        ),
+      );
+    }
+    await _firebaseAuth.signOut();
+    return uid;
   }
 
   Future<void> signOut() async {
