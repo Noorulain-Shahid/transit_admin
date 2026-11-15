@@ -2,12 +2,17 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:transit_core/transit_core.dart';
+import '../../app/admin_format.dart';
 import '../../app/locale_provider.dart';
 import '../../data/admin_repository.dart';
 import '../../services/audit_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/confirm_delete_dialog.dart';
+import '../../widgets/entity_widgets.dart';
 import '../../widgets/glass_card.dart';
+import 'admin_history_tabs.dart';
+import 'admin_links.dart';
+import '../../widgets/responsive.dart';
 
 class AdminParentDetail extends StatefulWidget {
   final String parentId;
@@ -27,14 +32,23 @@ class _AdminParentDetailState extends State<AdminParentDetail> {
   // Set in `initState` (not a field initializer — `widget` isn't attached
   // yet at that point) exactly once, same fix applied across every other
   // screen in this app that built its stream inline inside `build()`.
-  late final Stream<AppUser?> _parentStream;
-  late final Stream<List<Student>> _studentsStream;
+  late final Stream<({AppUser user, String deletedBy})?> _parentStream;
+
+  /// This parent's children, queried directly (`parentId == uid`). It used
+  /// to filter the shared all-students stream, which — being a cached
+  /// broadcast stream — never re-delivered its data to this late
+  /// subscriber, so "Children" spun forever.
+  late final Stream<List<Student>> _childrenStream;
+
+  final _historyKey = GlobalKey();
 
   @override
   void initState() {
     super.initState();
-    _parentStream = _repo.watchUser(widget.parentId);
-    _studentsStream = _repo.watchStudents();
+    _parentStream = _repo.watchUserRecord(widget.parentId);
+    _childrenStream = widget.parentId.isEmpty
+        ? Stream.value(const <Student>[])
+        : _repo.watchStudentsOfParent(widget.parentId);
     LocaleProvider.instance.addListener(_onLangChanged);
   }
 
@@ -81,7 +95,7 @@ class _AdminParentDetailState extends State<AdminParentDetail> {
   /// Soft-delete (archive) — see `AdminRepository.deleteParent`'s doc
   /// comment. Cascades to the parent's own students, so pops back to the
   /// list rather than leaving the admin on a detail screen for an account
-  /// that has just disappeared from it.
+  /// that has just been archived.
   Future<void> _deleteParent(AppUser p) async {
     final confirmed = await showConfirmDeleteDialog(context);
     if (!confirmed) return;
@@ -129,56 +143,39 @@ class _AdminParentDetailState extends State<AdminParentDetail> {
   void _msg(String m) =>
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
 
-  // Only the two known institute-type values are translated — any other
-  // grade value (e.g. a school grade like "Grade 5") passes through
-  // untouched, same fallback rule used by Student Management's mapper.
-  String _childTypeLabel(String grade) => switch (grade) {
-    'University' => AppStrings.t('university_type'),
-    'College' => AppStrings.t('college_type'),
-    _ => grade,
-  };
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: Container(
         decoration: context.scaffoldBg,
         child: SafeArea(
-          child: StreamBuilder<AppUser?>(
+          child: StreamBuilder<({AppUser user, String deletedBy})?>(
             stream: _parentStream,
             builder: (context, snap) {
-              final p = snap.data;
+              final record = snap.data;
+              final Widget body;
+              if (snap.hasError) {
+                body = Center(
+                  child: LoadErrorView(error: snap.error, what: 'this parent'),
+                );
+              } else if (snap.connectionState == ConnectionState.waiting &&
+                  !snap.hasData) {
+                body = const Center(child: CircularProgressIndicator());
+              } else if (record == null) {
+                body = Center(
+                  child: Text(
+                    'Parent not found.',
+                    style: TextStyle(color: context.textSecondary),
+                  ),
+                );
+              } else {
+                body = _buildBody(context, record.user, record.deletedBy);
+              }
               return Column(
                 children: [
                   _buildHeader(context),
-                  Expanded(
-                    child: !snap.hasData
-                        ? const Center(child: CircularProgressIndicator())
-                        : p == null
-                        ? Center(
-                            child: Text(
-                              'Parent not found.',
-                              style: TextStyle(color: context.textSecondary),
-                            ),
-                          )
-                        : SingleChildScrollView(
-                            padding: const EdgeInsets.only(bottom: 40),
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                              ),
-                              child: Column(
-                                children: [
-                                  _buildProfileCard(context, p),
-                                  const SizedBox(height: 12),
-                                  _buildChildrenSection(context, p),
-                                  const SizedBox(height: 12),
-                                  _buildControls(context, p),
-                                ],
-                              ),
-                            ),
-                          ),
-                  ),
+                  const SizedBox(height: 12),
+                  Expanded(child: body),
                 ],
               );
             },
@@ -188,12 +185,47 @@ class _AdminParentDetailState extends State<AdminParentDetail> {
     );
   }
 
+  Widget _buildBody(BuildContext context, AppUser p, String deletedBy) {
+    return StreamBuilder<List<Student>>(
+      stream: _childrenStream,
+      builder: (context, childSnap) {
+        final children = childSnap.data ?? const <Student>[];
+        // One column on a phone; on a wide window the account sits left,
+        // the children and their history right.
+        return SingleChildScrollView(
+          padding: const EdgeInsets.only(bottom: 40),
+          child: ResponsiveBody(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: TwoPane(
+                primary: [
+                  _buildProfileCard(context, p, deletedBy),
+                  _buildContactCard(context, p, children),
+                  _buildControls(context, p),
+                ],
+                secondary: [
+                  _buildChildrenSection(context, childSnap),
+                  // Keyed so a resize across the breakpoint keeps the open
+                  // tab and loaded history.
+                  KeyedSubtree(
+                    key: _historyKey,
+                    child: _buildHistory(context, p, childSnap),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   Widget _buildHeader(BuildContext context) {
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
       child: Row(
         children: [
-          GestureDetector(
+          Clickable(
             onTap: () => context.pop(),
             child: Container(
               width: 38,
@@ -228,27 +260,21 @@ class _AdminParentDetailState extends State<AdminParentDetail> {
     );
   }
 
-  Widget _buildProfileCard(BuildContext context, AppUser p) {
+  Widget _buildProfileCard(BuildContext context, AppUser p, String deletedBy) {
+    final deactivated = isAccountDeactivated(p);
     return GlassCard(
       padding: const EdgeInsets.all(18),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                width: 56,
-                height: 56,
-                decoration: BoxDecoration(
-                  color: AppTheme.parentPurple.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(18),
-                  border: Border.all(
-                    color: AppTheme.parentPurple.withValues(alpha: 0.25),
-                  ),
-                ),
-                child: const Center(
-                  child: Text('👨‍👩‍👧', style: TextStyle(fontSize: 24)),
-                ),
+              EntityAvatar(
+                photoUrl: p.photoUrl,
+                color: AppTheme.parentPurple,
+                fallbackEmoji: '👨‍👩‍👧',
+                size: 60,
               ),
               const SizedBox(width: 14),
               Expanded(
@@ -256,7 +282,7 @@ class _AdminParentDetailState extends State<AdminParentDetail> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      p.name,
+                      p.name.isEmpty ? 'Unnamed parent' : p.name,
                       style: TextStyle(
                         color: context.textPrimary,
                         fontSize: 18,
@@ -264,24 +290,50 @@ class _AdminParentDetailState extends State<AdminParentDetail> {
                       ),
                     ),
                     const SizedBox(height: 6),
-                    StatusBadge(
-                      label: p.isActive
-                          ? AppStrings.t('active_lbl')
-                          : AppStrings.t('inactive_status'),
-                      color: p.isActive ? AppTheme.success : AppTheme.error,
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: [
+                        AccountStatusBadge(user: p),
+                        PresenceBadge(user: p),
+                      ],
                     ),
                   ],
                 ),
               ),
-              if (!_editing)
+              if (!_editing && !p.isDeleted)
                 IconButton(
                   onPressed: () => _startEditing(p),
                   icon: Icon(Icons.edit_rounded, color: context.textSecondary),
                 ),
             ],
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 12),
+          LastSeenLine(user: p, fontSize: 12),
+          if (deactivated) ...[
+            const SizedBox(height: 8),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: AppTheme.error.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: AppTheme.error.withValues(alpha: 0.2),
+                ),
+              ),
+              child: Text(
+                deactivationReason(p, deletedBy: deletedBy),
+                style: const TextStyle(
+                  color: AppTheme.error,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
           if (_editing) ...[
+            const SizedBox(height: 14),
             _EditField(label: AppStrings.t('name_lbl'), controller: _nameCtrl),
             const SizedBox(height: 8),
             _EditField(
@@ -321,165 +373,194 @@ class _AdminParentDetailState extends State<AdminParentDetail> {
                 ),
               ],
             ),
-          ] else ...[
-            _DetailRow(
-              icon: Icons.phone_rounded,
-              label: AppStrings.t('phone_lbl'),
-              value: p.phone.isEmpty ? '—' : p.phone,
-            ),
-            _DetailRow(
-              icon: Icons.email_rounded,
-              label: AppStrings.t('email_lbl'),
-              value: p.email.isEmpty ? '—' : p.email,
-            ),
           ],
         ],
       ),
     );
   }
 
-  Widget _buildChildrenSection(BuildContext context, AppUser p) {
-    return GlassCard(
-      padding: const EdgeInsets.all(18),
+  /// Contact details, the family home (the children's pickup pin — a parent
+  /// account has no address of its own), and the account's emergency
+  /// contacts.
+  Widget _buildContactCard(
+    BuildContext context,
+    AppUser p,
+    List<Student> children,
+  ) {
+    // One "Home" block per distinct pin: siblings usually share one.
+    final seen = <GeoCoord>{};
+    final distinctHomes = [
+      for (final c in children)
+        if (c.pickupLocation != null && seen.add(c.pickupLocation!)) c,
+    ];
+    return SectionCard(
+      title: 'Contact & home',
+      icon: Icons.contact_phone_rounded,
+      color: AppTheme.parentPurple,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              const Icon(
-                Icons.child_care_rounded,
-                color: AppTheme.parentPurple,
-                size: 20,
-              ),
-              const SizedBox(width: 8),
-              Text(
-                AppStrings.t('children_section_title'),
-                style: TextStyle(
-                  color: context.textPrimary,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ],
+          InfoLine(
+            icon: Icons.phone_rounded,
+            label: AppStrings.t('phone_lbl'),
+            value: p.phone.isEmpty ? '—' : p.phone,
+            color: AppTheme.adminEmerald,
           ),
-          const SizedBox(height: 12),
-          StreamBuilder<List<Student>>(
-            stream: _studentsStream,
-            builder: (context, snap) {
-              final children = (snap.data ?? const <Student>[])
-                  .where((s) => s.parentId == p.uid)
-                  .toList();
-              if (!snap.hasData) {
-                return const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 16),
-                  child: Center(child: CircularProgressIndicator()),
-                );
-              }
-              if (children.isEmpty) {
-                return Text(
-                  'No linked children.',
-                  style: TextStyle(color: context.textSecondary, fontSize: 12),
-                );
-              }
-              return Column(
-                children: children
-                    .map(
-                      (child) => Padding(
-                        padding: const EdgeInsets.only(bottom: 8),
-                        child: GestureDetector(
-                          onTap: () => context.push(
-                            '/admin/student-detail',
-                            extra: child.id,
-                          ),
-                          child: Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: AppTheme.parentPurple.withValues(
-                                alpha: 0.05,
-                              ),
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(
-                                color: AppTheme.parentPurple.withValues(
-                                  alpha: 0.12,
-                                ),
-                              ),
-                            ),
-                            child: Row(
-                              children: [
-                                Container(
-                                  width: 40,
-                                  height: 40,
-                                  decoration: BoxDecoration(
-                                    color: AppTheme.parentPurple.withValues(
-                                      alpha: 0.15,
-                                    ),
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  child: const Icon(
-                                    Icons.menu_book_rounded,
-                                    color: AppTheme.parentPurple,
-                                    size: 18,
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        child.name,
-                                        style: TextStyle(
-                                          color: context.textPrimary,
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.w700,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 2),
-                                      Text(
-                                        // '{type} • {name}' — only the known
-                                        // grade/type values are translated
-                                        // (mirrors _instituteTypeLabel on
-                                        // Student Management); the school
-                                        // name is a proper noun and is never
-                                        // translated. Under RTL, the neutral
-                                        // '•' between an Urdu word (کالج)
-                                        // and a Latin run scrambles because
-                                        // it has no strong-direction anchor
-                                        // of its own — isolateLtr() wraps
-                                        // the Latin run in Unicode First
-                                        // Strong Isolate marks so it (and
-                                        // the '•' beside it) resolve in the
-                                        // correct logical order.
-                                        '${_childTypeLabel(child.grade)} • ${AppStrings.isolateLtr(child.school)}',
-                                        style: TextStyle(
-                                          color: context.textSecondary,
-                                          fontSize: 11,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                Icon(
-                                  Icons.chevron_right_rounded,
-                                  color: context.textTertiary,
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    )
-                    .toList(),
-              );
-            },
+          InfoLine(
+            icon: Icons.email_rounded,
+            label: AppStrings.t('email_lbl'),
+            value: p.email.isEmpty ? '—' : p.email,
+            color: AppTheme.driverCyan,
+          ),
+          InfoLine(
+            icon: Icons.workspace_premium_rounded,
+            label: 'Subscription',
+            value: _accountSubscription(p),
+            color: p.isSubscriptionActive ? AppTheme.success : AppTheme.warning,
+          ),
+          if (p.createdAt != null)
+            InfoLine(
+              icon: Icons.event_rounded,
+              label: 'Member since',
+              value: formatDate(p.createdAt!),
+              color: AppTheme.info,
+            ),
+          const SizedBox(height: 4),
+          if (distinctHomes.isEmpty)
+            const LocationBlock(
+              title: 'Home',
+              coord: null,
+              icon: Icons.home_rounded,
+              color: AppTheme.parentPurple,
+              note: 'Set when a child\'s pickup point is pinned.',
+            )
+          else
+            ...distinctHomes.map(
+              (c) => LocationBlock(
+                title: distinctHomes.length == 1
+                    ? 'Home (pickup point)'
+                    : 'Home — ${c.name}\'s pickup point',
+                coord: c.pickupLocation,
+                icon: Icons.home_rounded,
+                color: AppTheme.parentPurple,
+              ),
+            ),
+          const SizedBox(height: 8),
+          EmergencyContactsBlock(
+            title: 'Emergency contacts',
+            contacts: p.emergencyContacts,
           ),
         ],
       ),
     );
   }
 
+  String _accountSubscription(AppUser p) {
+    if (p.isSubscriptionActive) return 'Active (purchased)';
+    if (p.subscriptionStatus == 'trial') {
+      final end = p.trialEndDate;
+      if (end == null) return 'Trial';
+      return p.isTrialExpired
+          ? 'Trial ended ${formatDate(end)}'
+          : 'Trial until ${formatDate(end)}';
+    }
+    final s = p.subscriptionStatus;
+    return s.isEmpty ? 'None' : '${s[0].toUpperCase()}${s.substring(1)}';
+  }
+
+  Widget _buildChildrenSection(
+    BuildContext context,
+    AsyncSnapshot<List<Student>> snap,
+  ) {
+    return SectionCard(
+      title: AppStrings.t('children_section_title'),
+      icon: Icons.child_care_rounded,
+      color: AppTheme.parentPurple,
+      trailing: snap.hasData
+          ? StatusBadge(
+              label: '${snap.data!.length}',
+              color: AppTheme.parentPurple,
+            )
+          : null,
+      child: snapshotView<List<Student>>(
+        snap,
+        what: 'children',
+        builder: (children) {
+          if (children.isEmpty) {
+            return Text(
+              'No linked children.',
+              style: TextStyle(color: context.textSecondary, fontSize: 12),
+            );
+          }
+          return Column(
+            children: [
+              for (final c in children) StudentSummaryCard(student: c),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  /// Attendance, missed-bus requests and sign-ins for this family. The
+  /// first two are per child (the child is who rides); access is the
+  /// parent's own account.
+  Widget _buildHistory(
+    BuildContext context,
+    AppUser p,
+    AsyncSnapshot<List<Student>> childSnap,
+  ) {
+    if (!childSnap.hasData) {
+      return SectionCard(
+        title: 'History',
+        icon: Icons.history_rounded,
+        color: AppTheme.parentPurple,
+        child: snapshotView<List<Student>>(
+          childSnap,
+          what: 'children',
+          builder: (_) => const SizedBox.shrink(),
+        ),
+      );
+    }
+    final children = childSnap.data!;
+    final ids = [for (final c in children) c.id]..sort();
+    final names = {for (final c in children) c.id: c.name};
+    return HistoryTabs(
+      color: AppTheme.parentPurple,
+      tabs: [
+        (
+          'Attendance trips',
+          AttendanceHistoryList(
+            studentIds: ids,
+            names: names,
+            showStudent: true,
+          ),
+        ),
+        (
+          AppStrings.t('missed_logs_tab'),
+          MissedBusHistoryList(studentIds: ids, showStudent: true),
+        ),
+        (AppStrings.t('access_tab'), AccessLogList(uid: p.uid)),
+      ],
+    );
+  }
+
   Widget _buildControls(BuildContext context, AppUser p) {
+    // A deleted account is a tombstone: there is nothing to switch back on
+    // (the user's sign-in is gone, or an admin archived it), so the
+    // activate/delete actions would only mislead.
+    if (p.isDeleted) {
+      return SectionCard(
+        title: AppStrings.t('controls_title'),
+        icon: Icons.tune_rounded,
+        color: AppTheme.parentPurple,
+        child: Text(
+          'This account has been deleted. Its history stays on record; it '
+          'can no longer be activated or messaged.',
+          style: TextStyle(color: context.textSecondary, fontSize: 12),
+        ),
+      );
+    }
     return GlassCard(
       padding: const EdgeInsets.all(18),
       child: Column(
@@ -560,45 +641,6 @@ class _EditField extends StatelessWidget {
   }
 }
 
-class _DetailRow extends StatelessWidget {
-  final IconData icon;
-  final String label, value;
-  const _DetailRow({
-    required this.icon,
-    required this.label,
-    required this.value,
-  });
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Row(
-        children: [
-          Icon(icon, color: context.textTertiary, size: 16),
-          const SizedBox(width: 8),
-          SizedBox(
-            width: 60,
-            child: Text(
-              label,
-              style: TextStyle(color: context.textSecondary, fontSize: 12),
-            ),
-          ),
-          Expanded(
-            child: Text(
-              value,
-              style: TextStyle(
-                color: context.textPrimary,
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _ActionBtn extends StatelessWidget {
   final String label;
   final Color color;
@@ -613,7 +655,7 @@ class _ActionBtn extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final disabled = onTap == null;
-    return GestureDetector(
+    return Clickable(
       onTap: onTap,
       child: Opacity(
         opacity: disabled ? 0.5 : 1,

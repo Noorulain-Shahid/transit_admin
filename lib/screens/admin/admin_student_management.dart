@@ -1,35 +1,37 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:transit_core/transit_core.dart';
+import '../../app/admin_format.dart';
 import '../../app/locale_provider.dart';
 import '../../data/admin_repository.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/entity_widgets.dart';
 import '../../widgets/glass_card.dart';
 import '../../widgets/mini_stat.dart';
+import '../../widgets/responsive.dart';
 
 // `student.instituteType`/`student.grade` are free-text data fields (a
 // school can type anything into the signup form), not a fixed Dart enum —
 // only the two known common values this task named get translated; anything
 // else (the default 'School', or a custom grade like 'Grade 5') passes
 // through unchanged, exactly like a student's own name is never translated.
-String _instituteTypeLabel(String type) => switch (type) {
+String instituteTypeLabel(String type) => switch (type) {
   'University' => AppStrings.t('university_type'),
   'College' => AppStrings.t('college_type'),
+  'Academy' => AppStrings.t('academy_type'),
+  'School' => AppStrings.t('school_type'),
   _ => type,
 };
 
-// Education-level filter dropdown — distinct from `_instituteTypeLabel`
+// Education-level filter dropdown — distinct from `instituteTypeLabel`
 // above (which displays whatever free-text value a student's own record
-// happens to hold) because the filter only ever offers these four fixed
+// happens to hold) because the filter only ever offers these fixed
 // options, regardless of what custom values exist in the data.
-const _levelFilters = ['All', 'School', 'College', 'University'];
+const _levelFilters = ['All', ...instituteLevels];
 
 String _levelFilterDisplay(String level) => switch (level) {
   'All' => AppStrings.t('all_levels_filter'),
-  'School' => AppStrings.t('school_type'),
-  'College' => AppStrings.t('college_type'),
-  'University' => AppStrings.t('university_type'),
-  _ => level,
+  _ => instituteTypeLabel(level),
 };
 
 // `Student.instituteType` is a free-text field (a school can type anything
@@ -37,12 +39,8 @@ String _levelFilterDisplay(String level) => switch (level) {
 // rather than literally storing 'School' — so the 'School' filter matches
 // both the empty default and an explicit 'School' value, the same
 // either-or already used for the institute label shown on each card.
-bool _matchesLevel(Student s, String level) => switch (level) {
-  'School' => s.instituteType.isEmpty || s.instituteType == 'School',
-  'College' => s.instituteType == 'College',
-  'University' => s.instituteType == 'University',
-  _ => true,
-};
+bool _matchesLevel(Student s, String level) =>
+    level == 'All' || studentLevel(s) == level;
 
 // An active student with no driver needs admin attention (nobody will pick
 // them up); a suspended student with no driver is expected, not a problem —
@@ -82,6 +80,16 @@ class _AdminStudentManagementState extends State<AdminStudentManagement> {
   late final Stream<List<Student>> _studentsStream = AdminRepository.instance
       .watchStudents();
 
+  // The accounts behind the students — a self-registered student's own
+  // `users` doc, a child's parent's — for presence and the subscription
+  // chip. Deleted accounts are kept: a child of a parent who deleted their
+  // account must read "Inactive", not fall back to looking fine.
+  late final Stream<List<AppUser>> _studentUsersStream = AdminRepository
+      .instance
+      .watchUsersByRole(UserRole.student, includeDeleted: true);
+  late final Stream<List<AppUser>> _parentUsersStream = AdminRepository.instance
+      .watchUsersByRole(UserRole.parent, includeDeleted: true);
+
   @override
   void initState() {
     super.initState();
@@ -96,17 +104,45 @@ class _AdminStudentManagementState extends State<AdminStudentManagement> {
     super.dispose();
   }
 
-  List<Student> _filtered(List<Student> students) => students
-      .where(
-        (s) =>
-            (_search.isEmpty ||
-                s.name.toLowerCase().contains(_search.toLowerCase())) &&
-            _matchesLevel(s, _levelFilter),
-      )
-      .toList();
+  List<Student> _filtered(List<Student> students) {
+    final q = _search.trim().toLowerCase();
+    return students
+        .where(
+          (s) =>
+              (q.isEmpty ||
+                  s.name.toLowerCase().contains(q) ||
+                  s.school.toLowerCase().contains(q) ||
+                  s.displayCode.toLowerCase().contains(q)) &&
+              _matchesLevel(s, _levelFilter),
+        )
+        .toList();
+  }
 
   @override
   Widget build(BuildContext context) {
+    return StreamBuilder<List<AppUser>>(
+      stream: _studentUsersStream,
+      builder: (context, studentUsersSnap) => StreamBuilder<List<AppUser>>(
+        stream: _parentUsersStream,
+        builder: (context, parentUsersSnap) {
+          final accounts = <String, AppUser>{
+            for (final u in parentUsersSnap.data ?? const <AppUser>[]) u.uid: u,
+            for (final u in studentUsersSnap.data ?? const <AppUser>[])
+              u.uid: u,
+          };
+          final accountsLoaded =
+              studentUsersSnap.hasData && parentUsersSnap.hasData;
+          return _buildList(context, accounts, accountsLoaded);
+        },
+      ),
+    );
+  }
+
+  Widget _buildList(
+    BuildContext context,
+    Map<String, AppUser> accounts,
+    bool accountsLoaded,
+  ) {
     return StreamBuilder<List<Student>>(
       stream: _studentsStream,
       builder: (context, snap) {
@@ -114,43 +150,49 @@ class _AdminStudentManagementState extends State<AdminStudentManagement> {
         final filtered = _filtered(students);
         return SingleChildScrollView(
           padding: const EdgeInsets.only(bottom: 120),
-          child: Column(
-            children: [
-              _buildHeader(context, students.length),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Column(
-                  children: [
-                    _buildSearch(context),
-                    const SizedBox(height: 10),
-                    _buildLevelFilter(context),
-                    const SizedBox(height: 10),
-                    _buildStats(context, students),
-                    const SizedBox(height: 14),
-                    if (!snap.hasData)
-                      const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 40),
-                        child: Center(child: CircularProgressIndicator()),
-                      )
-                    else ...[
-                      ...filtered.map(
-                        (s) => Padding(
-                          padding: const EdgeInsets.only(bottom: 10),
-                          child: _StudentCard(
-                            student: s,
-                            onTap: () => context.push(
-                              '/admin/student-detail',
-                              extra: s.id,
-                            ),
-                          ),
+          child: ResponsiveBody(
+            child: Column(
+              children: [
+                _buildHeader(context, students.length),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Column(
+                    children: [
+                      _buildSearch(context),
+                      const SizedBox(height: 10),
+                      _buildLevelFilter(context),
+                      const SizedBox(height: 10),
+                      _buildStats(context, students),
+                      const SizedBox(height: 14),
+                      if (snap.hasError)
+                        LoadErrorView(error: snap.error, what: 'students')
+                      else if (!snap.hasData)
+                        const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 40),
+                          child: Center(child: CircularProgressIndicator()),
+                        )
+                      else ...[
+                        ResponsiveGrid(
+                          children: [
+                            for (final s in filtered)
+                              _StudentCard(
+                                student: s,
+                                account: accounts[primaryAccountIdFor(s)],
+                                accountLoaded: accountsLoaded,
+                                onTap: () => context.push(
+                                  '/admin/student-detail',
+                                  extra: s.id,
+                                ),
+                              ),
+                          ],
                         ),
-                      ),
-                      if (filtered.isEmpty) _buildEmpty(context),
+                        if (filtered.isEmpty) _buildEmpty(context),
+                      ],
                     ],
-                  ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         );
       },
@@ -296,31 +338,39 @@ class _AdminStudentManagementState extends State<AdminStudentManagement> {
 // ─── Student Card ────────────────────────────────────────────────────────────
 class _StudentCard extends StatelessWidget {
   final Student student;
+
+  /// The account that uses the app for this student: their own when
+  /// self-registered, otherwise their parent's (see [primaryAccountIdFor]).
+  final AppUser? account;
+  final bool accountLoaded;
   final VoidCallback onTap;
-  const _StudentCard({required this.student, required this.onTap});
+  const _StudentCard({
+    required this.student,
+    required this.account,
+    required this.accountLoaded,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
+    final subActive = isStudentSubscriptionActive(account);
+    final sub = [
+      instituteTypeLabel(studentLevel(student)),
+      if (student.school.isNotEmpty) student.school,
+      if (student.grade.isNotEmpty) student.grade,
+    ].join(' • ');
     return GlassCard(
       onTap: onTap,
       padding: const EdgeInsets.all(14),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Container(
-                width: 46,
-                height: 46,
-                decoration: BoxDecoration(
-                  color: AppTheme.studentAmber.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(
-                    color: AppTheme.studentAmber.withValues(alpha: 0.2),
-                  ),
-                ),
-                child: const Center(
-                  child: Text('🎓', style: TextStyle(fontSize: 22)),
-                ),
+              EntityAvatar(
+                photoUrl: student.photoUrl,
+                color: AppTheme.studentAmber,
+                fallbackEmoji: '🎓',
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -337,7 +387,7 @@ class _StudentCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      '${_instituteTypeLabel(student.grade.isEmpty ? student.instituteType : student.grade)} • ${student.school}',
+                      sub,
                       style: TextStyle(
                         color: context.textSecondary,
                         fontSize: 12,
@@ -350,7 +400,10 @@ class _StudentCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 10),
-          Row(
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               _InfoPill(
                 icon: _needsDriverAttention(student)
@@ -363,7 +416,7 @@ class _StudentCard extends StatelessWidget {
                     ? AppTheme.warning
                     : AppTheme.driverCyan,
               ),
-              const Spacer(),
+              // Transport on/off for this student (an admin can suspend it).
               StatusBadge(
                 label: student.isTransportSuspended
                     ? AppStrings.t('suspended_status')
@@ -372,17 +425,25 @@ class _StudentCard extends StatelessWidget {
                     ? AppTheme.warning
                     : AppTheme.success,
               ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          Row(
-            children: [
-              const Spacer(),
-              StatusBadge(
-                label:
-                    '💳 ${subscriptionStatusLabel(student.subscriptionStatus)}',
-                color: subscriptionStatusColor(student.subscriptionStatus),
+              // Purchased subscription on the account that pays.
+              Tooltip(
+                message: isSelfRegistered(student)
+                    ? "Subscription on the student's own account"
+                    : "Subscription on the parent's account",
+                child: StatusBadge(
+                  label: !accountLoaded
+                      ? '💳 …'
+                      : '💳 ${subActive ? 'Active' : 'Inactive'}',
+                  color: !accountLoaded
+                      ? const Color(0xFF94A3B8)
+                      : (subActive ? AppTheme.success : AppTheme.error),
+                ),
               ),
+              if (accountLoaded)
+                PresenceBadge(
+                  user: account,
+                  prefix: isSelfRegistered(student) ? null : 'Parent',
+                ),
             ],
           ),
         ],
@@ -491,4 +552,3 @@ class _InfoPill extends StatelessWidget {
     );
   }
 }
-

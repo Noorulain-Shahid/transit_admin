@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../theme/app_theme.dart';
 import '../widgets/glass_card.dart';
 import '../app/auth_service.dart';
+import '../widgets/responsive.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -265,7 +266,9 @@ class _LoginScreenState extends State<LoginScreen> {
               child: FilledButton(
                 onPressed: _preparing ? null : _prepareAccount,
                 child: Text(
-                  _preparing ? 'Working\u2026' : 'Step 1 \u2014 rebuild what I can',
+                  _preparing
+                      ? 'Working\u2026'
+                      : 'Step 1 \u2014 rebuild what I can',
                 ),
               ),
             )
@@ -346,239 +349,250 @@ class _LoginScreenState extends State<LoginScreen> {
             SafeArea(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.symmetric(horizontal: 24),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const SizedBox(height: 16),
-                    // Back button for non-nav screens
-                    if (Navigator.of(context).canPop()) ...[
-                      GestureDetector(
-                        onTap: () => context.pop(),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 9,
-                          ),
-                          decoration: BoxDecoration(
-                            color: context.cardBgElevated,
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: context.inputBorder),
-                          ),
-                          child: Text(
-                            '← Back',
-                            style: TextStyle(
-                              color: context.textSecondary,
-                              fontSize: 14,
+                child: ResponsiveBody(
+                  maxWidth: 480,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const SizedBox(height: 16),
+                      // Back button for non-nav screens
+                      if (Navigator.of(context).canPop()) ...[
+                        Clickable(
+                          onTap: () => context.pop(),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 9,
+                            ),
+                            decoration: BoxDecoration(
+                              color: context.cardBgElevated,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: context.inputBorder),
+                            ),
+                            child: Text(
+                              '← Back',
+                              style: TextStyle(
+                                color: context.textSecondary,
+                                fontSize: 14,
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                      const SizedBox(height: 28),
-                    ] else ...[
-                      const SizedBox(height: 44),
-                    ],
+                        const SizedBox(height: 28),
+                      ] else ...[
+                        const SizedBox(height: 44),
+                      ],
 
-                    // Role icon
-                    Center(
-                      child: Column(
-                        children: [
-                          Container(
-                            width: 72,
-                            height: 72,
-                            decoration: BoxDecoration(
-                              gradient: AppTheme.adminGradient,
-                              borderRadius: BorderRadius.circular(22),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: AppTheme.adminEmerald.withValues(
-                                    alpha: 0.45,
-                                  ),
-                                  blurRadius: 28,
-                                  offset: const Offset(0, 12),
-                                ),
-                              ],
-                            ),
-                            child: Center(
-                              child: Image.asset(
-                                'assets/images/splash_screen/bus_splash_icon.png',
-                                width: 40,
-                                height: 40,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 20),
-
-                          Text(
-                            'Admin Login',
-                            style: TextStyle(
-                              color: context.textPrimary,
-                              fontSize: 28,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            'Manage your fleet & operations',
-                            style: TextStyle(
-                              color: context.textSecondary,
-                              fontSize: 14,
-                            ),
-                          ),
-                          const SizedBox(height: 28),
-                        ],
-                      ),
-                    ),
-
-                    // Form card
-                    GlassCard(
-                      padding: const EdgeInsets.all(24),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          // Email
-                          _FieldLabel('EMAIL ADDRESS'),
-                          const SizedBox(height: 8),
-                          TextField(
-                            controller: _emailCtrl,
-                            keyboardType: TextInputType.emailAddress,
-                            style: TextStyle(
-                              color: context.textPrimary,
-                              fontSize: 15,
-                            ),
-                            decoration: const InputDecoration(
-                              hintText: 'Enter your email',
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-
-                          // Password
-                          _FieldLabel('PASSWORD'),
-                          const SizedBox(height: 8),
-                          TextField(
-                            controller: _passCtrl,
-                            obscureText: !_showPass,
-                            style: TextStyle(
-                              color: context.textPrimary,
-                              fontSize: 15,
-                            ),
-                            onSubmitted: (_) => _login(),
-                            decoration: InputDecoration(
-                              hintText: 'Enter your password',
-                              suffixIcon: GestureDetector(
-                                onTap: () =>
-                                    setState(() => _showPass = !_showPass),
-                                child: Icon(
-                                  _showPass
-                                      ? Icons.visibility_off
-                                      : Icons.visibility,
-                                  color: context.textTertiary,
-                                  size: 20,
-                                ),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-
-                          // Forgot password
-                          Align(
-                            alignment: Alignment.centerRight,
-                            child: GestureDetector(
-                              onTap: () => context.push('/forgot-password'),
-                              child: Text(
-                                'Forgot password?',
-                                style: TextStyle(
-                                  color: AppTheme.adminAccent,
-                                  fontSize: 13,
-                                ),
-                              ),
-                            ),
-                          ),
-
-                          // Error
-                          if (_error.isNotEmpty) ...[
-                            const SizedBox(height: 12),
+                      // Role icon
+                      Center(
+                        child: Column(
+                          children: [
                             Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 14,
-                                vertical: 10,
-                              ),
+                              width: 72,
+                              height: 72,
                               decoration: BoxDecoration(
-                                color: AppTheme.error.withValues(alpha: 0.1),
-                                borderRadius: BorderRadius.circular(10),
-                                border: Border.all(
-                                  color: AppTheme.error.withValues(alpha: 0.3),
-                                ),
-                              ),
-                              child: Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Text(
-                                    '⚠️  ',
-                                    style: TextStyle(fontSize: 13),
-                                  ),
-                                  Expanded(
-                                    child: Text(
-                                      _error,
-                                      style: const TextStyle(
-                                        color: Color(0xFFFCA5A5),
-                                        fontSize: 13,
-                                      ),
+                                gradient: AppTheme.adminGradient,
+                                borderRadius: BorderRadius.circular(22),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: AppTheme.adminEmerald.withValues(
+                                      alpha: 0.45,
                                     ),
+                                    blurRadius: 28,
+                                    offset: const Offset(0, 12),
                                   ),
                                 ],
                               ),
-                            ),
-                          ],
-                          const SizedBox(height: 20),
-
-                          // Login button
-                          GradientButton(
-                            label: 'Sign In as Admin →',
-                            gradient: AppTheme.adminGradient,
-                            glowColor: AppTheme.adminEmerald,
-                            isLoading: _loading,
-                            onTap: _login,
-                          ),
-                          const SizedBox(height: 16),
-
-                          // Sign up prompt
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Text(
-                                "Don't have an account? ",
-                                style: TextStyle(
-                                  color: context.textSecondary,
-                                  fontSize: 13,
+                              child: Center(
+                                child: Image.asset(
+                                  'assets/images/splash_screen/bus_splash_icon.png',
+                                  width: 40,
+                                  height: 40,
                                 ),
                               ),
-                              GestureDetector(
-                                onTap: () => context.push('/signup'),
-                                child: const Text(
-                                  'Sign up',
-                                  style: TextStyle(
-                                    color: AppTheme.adminEmerald,
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w700,
+                            ),
+                            const SizedBox(height: 20),
+
+                            Text(
+                              'Admin Login',
+                              style: TextStyle(
+                                color: context.textPrimary,
+                                fontSize: 28,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              'Manage your fleet & operations',
+                              style: TextStyle(
+                                color: context.textSecondary,
+                                fontSize: 14,
+                              ),
+                            ),
+                            const SizedBox(height: 28),
+                          ],
+                        ),
+                      ),
+
+                      // Form card
+                      GlassCard(
+                        padding: const EdgeInsets.all(24),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // Email
+                            _FieldLabel('EMAIL ADDRESS'),
+                            const SizedBox(height: 8),
+                            TextField(
+                              controller: _emailCtrl,
+                              keyboardType: TextInputType.emailAddress,
+                              // Enter moves to the password field (or signs
+                              // in, if it's already filled).
+                              textInputAction: TextInputAction.next,
+                              autofillHints: const [AutofillHints.email],
+                              // `onEditingComplete` replaces the default "next" handling,
+                              // so focus moves exactly once.
+                              onEditingComplete: () {
+                                if (_passCtrl.text.isEmpty) {
+                                  FocusScope.of(context).nextFocus();
+                                } else {
+                                  _login();
+                                }
+                              },
+                              style: TextStyle(
+                                color: context.textPrimary,
+                                fontSize: 15,
+                              ),
+                              decoration: const InputDecoration(
+                                hintText: 'Enter your email',
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+
+                            // Password
+                            _FieldLabel('PASSWORD'),
+                            const SizedBox(height: 8),
+                            TextField(
+                              controller: _passCtrl,
+                              obscureText: !_showPass,
+                              style: TextStyle(
+                                color: context.textPrimary,
+                                fontSize: 15,
+                              ),
+                              textInputAction: TextInputAction.done,
+                              onSubmitted: (_) => _login(),
+                              decoration: InputDecoration(
+                                hintText: 'Enter your password',
+                                suffixIcon: Clickable(
+                                  onTap: () =>
+                                      setState(() => _showPass = !_showPass),
+                                  child: Icon(
+                                    _showPass
+                                        ? Icons.visibility_off
+                                        : Icons.visibility,
+                                    color: context.textTertiary,
+                                    size: 20,
                                   ),
                                 ),
                               ),
+                            ),
+                            const SizedBox(height: 12),
+
+                            // Forgot password
+                            Align(
+                              alignment: Alignment.centerRight,
+                              child: Clickable(
+                                onTap: () => context.push('/forgot-password'),
+                                child: Text(
+                                  'Forgot password?',
+                                  style: TextStyle(
+                                    color: AppTheme.adminAccent,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ),
+                            ),
+
+                            // Error
+                            if (_error.isNotEmpty) ...[
+                              const SizedBox(height: 12),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 14,
+                                  vertical: 10,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: AppTheme.error.withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(
+                                    color: AppTheme.error.withValues(
+                                      alpha: 0.3,
+                                    ),
+                                  ),
+                                ),
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text(
+                                      '⚠️  ',
+                                      style: TextStyle(fontSize: 13),
+                                    ),
+                                    Expanded(
+                                      child: Text(
+                                        _error,
+                                        style: const TextStyle(
+                                          color: Color(0xFFFCA5A5),
+                                          fontSize: 13,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
                             ],
+                            const SizedBox(height: 20),
+
+                            // Login button
+                            GradientButton(
+                              label: 'Sign In as Admin →',
+                              gradient: AppTheme.adminGradient,
+                              glowColor: AppTheme.adminEmerald,
+                              isLoading: _loading,
+                              onTap: _login,
+                            ),
+                            const SizedBox(height: 16),
+
+                            // Admin accounts cannot sign themselves up — the
+                            // rules only let a client create parent, student
+                            // or driver accounts — so there is no sign-up
+                            // link here (it used to lead to a missing route).
+                            Text(
+                              'Admin accounts are created by the system '
+                              'owner.',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                color: context.textSecondary,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                      _buildAdminCredentials(context),
+                      const SizedBox(height: 24),
+                      Center(
+                        child: Text(
+                          '🔒  256-bit encrypted · GDPR compliant',
+                          style: TextStyle(
+                            color: context.textHint,
+                            fontSize: 12,
                           ),
-                        ],
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 24),
-                    _buildAdminCredentials(context),
-                    const SizedBox(height: 24),
-                    Center(
-                      child: Text(
-                        '🔒  256-bit encrypted · GDPR compliant',
-                        style: TextStyle(color: context.textHint, fontSize: 12),
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                  ],
+                      const SizedBox(height: 24),
+                    ],
+                  ),
                 ),
               ),
             ),

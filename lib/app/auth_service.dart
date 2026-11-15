@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -50,7 +51,21 @@ class AuthService {
   // the router is built. Deferring to per-call access, with isSignedIn/
   // authStateChanges below catching the failure, keeps both cases working.
   FirebaseAuth get _firebaseAuth => FirebaseAuth.instance;
-  final GoogleSignIn _googleSignIn = GoogleSignIn();
+
+  /// google_sign_in 6.2.1 ships no Windows (or Linux) implementation: on
+  /// those platforms every `GoogleSignIn` call throws a
+  /// `MissingPluginException`. Nothing may touch it there — not even
+  /// sign-out — so the instance only exists where the plugin does.
+  static bool get googleSignInSupported =>
+      kIsWeb ||
+      defaultTargetPlatform == TargetPlatform.android ||
+      defaultTargetPlatform == TargetPlatform.iOS ||
+      defaultTargetPlatform == TargetPlatform.macOS;
+
+  GoogleSignIn? _googleSignInInstance;
+  GoogleSignIn? get _googleSignIn => googleSignInSupported
+      ? (_googleSignInInstance ??= GoogleSignIn())
+      : null;
 
   /// In-memory cache populated by [preload] before runApp().
   String? _cachedRole;
@@ -104,8 +119,14 @@ class AuthService {
   /// Returns false if the user cancelled.
   /// Throws on other errors.
   Future<bool> signInWithGoogle() async {
+    final googleSignIn = _googleSignIn;
+    if (googleSignIn == null) {
+      throw UnsupportedError(
+        'Google sign-in is not available on this platform.',
+      );
+    }
     try {
-      final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
+      final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
       if (googleUser == null) return false; // The user canceled the sign-in
 
       final GoogleSignInAuthentication googleAuth =
@@ -214,7 +235,16 @@ class AuthService {
 
   Future<void> signOut() async {
     await _firebaseAuth.signOut();
-    await _googleSignIn.signOut();
+    final googleSignIn = _googleSignIn;
+    if (googleSignIn != null) {
+      try {
+        await googleSignIn.signOut();
+      } catch (e) {
+        // An email/password admin was never signed in to Google; a failure
+        // here must not stop the rest of sign-out.
+        debugPrint('Google sign-out skipped: $e');
+      }
+    }
     await clearRole();
   }
 

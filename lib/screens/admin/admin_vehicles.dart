@@ -6,6 +6,7 @@ import '../../app/locale_provider.dart';
 import '../../data/admin_repository.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/neumorphic_card.dart';
+import '../../widgets/responsive.dart';
 
 class AdminVehicles extends StatefulWidget {
   final VoidCallback? onBack;
@@ -56,19 +57,13 @@ class _AdminVehiclesState extends State<AdminVehicles> {
 
   String _routeNameFor(String? routeId) {
     if (routeId == null) return AppStrings.t('unassigned_route');
-    final match = (_routes ?? const <BusRoute>[]).where(
-      (r) => r.id == routeId,
-    );
-    return match.isEmpty
-        ? AppStrings.t('unassigned_route')
-        : match.first.name;
+    final match = (_routes ?? const <BusRoute>[]).where((r) => r.id == routeId);
+    return match.isEmpty ? AppStrings.t('unassigned_route') : match.first.name;
   }
 
   String _driverNameFor(String? driverId) {
     if (driverId == null) return 'No driver';
-    final match = (_drivers ?? const <Driver>[]).where(
-      (d) => d.id == driverId,
-    );
+    final match = (_drivers ?? const <Driver>[]).where((d) => d.id == driverId);
     return match.isEmpty ? 'No driver' : match.first.name;
   }
 
@@ -101,214 +96,221 @@ class _AdminVehiclesState extends State<AdminVehicles> {
         child: SafeArea(
           child: SingleChildScrollView(
             padding: const EdgeInsets.only(bottom: 100),
-            child: Column(
-              children: [
-                // ── Header ──────────────────────────────────────
-                _Header(
-                  title: AppStrings.t('vehicle_management'),
-                  onBack: widget.onBack,
-                ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Column(
-                    children: [
-                      // ── Summary cards (neumorphic) ─────────────
-                      Row(
-                        children: [
-                          _MiniStat(
-                            icon: Icons.directions_bus_rounded,
-                            label: AppStrings.t('total_lbl'),
-                            value: loading ? '…' : '${buses.length}',
-                            color: AppTheme.adminEmerald,
-                          ),
-                          const SizedBox(width: 10),
-                          _MiniStat(
-                            icon: Icons.check_circle_rounded,
-                            label: AppStrings.t('active_lbl'),
-                            value: loading ? '…' : '$activeCount',
-                            color: AppTheme.success,
-                          ),
-                          const SizedBox(width: 10),
-                          _MiniStat(
-                            icon: Icons.build_circle_rounded,
-                            label: AppStrings.t('service_lbl'),
-                            value: loading ? '…' : '$serviceCount',
-                            color: AppTheme.warning,
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
+            child: ResponsiveBody(
+              maxWidth: 1280,
+              child: Column(
+                children: [
+                  // ── Header ──────────────────────────────────────
+                  _Header(
+                    title: AppStrings.t('vehicle_management'),
+                    onBack: widget.onBack,
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Column(
+                      children: [
+                        // ── Summary cards (neumorphic) ─────────────
+                        Row(
+                          children: [
+                            _MiniStat(
+                              icon: Icons.directions_bus_rounded,
+                              label: AppStrings.t('total_lbl'),
+                              value: loading ? '…' : '${buses.length}',
+                              color: AppTheme.adminEmerald,
+                            ),
+                            const SizedBox(width: 10),
+                            _MiniStat(
+                              icon: Icons.check_circle_rounded,
+                              label: AppStrings.t('active_lbl'),
+                              value: loading ? '…' : '$activeCount',
+                              color: AppTheme.success,
+                            ),
+                            const SizedBox(width: 10),
+                            _MiniStat(
+                              icon: Icons.build_circle_rounded,
+                              label: AppStrings.t('service_lbl'),
+                              value: loading ? '…' : '$serviceCount',
+                              color: AppTheme.warning,
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
 
-                      // ── Vehicle list ────────────────────────────
-                      if (loading)
-                        const Padding(
-                          padding: EdgeInsets.symmetric(vertical: 24),
-                          child: Center(child: CircularProgressIndicator()),
-                        )
-                      else if (buses.isEmpty)
-                        Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 24),
-                          child: Text(
-                            'No vehicles have been registered yet.',
-                            style: TextStyle(color: context.textSecondary),
-                          ),
-                        )
-                      else
-                        ...buses.map((bus) {
-                          final (health, healthColor) = _healthOf(bus);
-                          final nextService = bus.nextMaintenanceDate;
-                          return Padding(
-                            padding: const EdgeInsets.only(bottom: 10),
-                            child: NeumorphicCard(
-                              padding: const EdgeInsets.all(16),
-                              child: Column(
-                                children: [
-                                  Row(
+                        // ── Vehicle list ────────────────────────────
+                        if (loading)
+                          const Padding(
+                            padding: EdgeInsets.symmetric(vertical: 24),
+                            child: Center(child: CircularProgressIndicator()),
+                          )
+                        else if (buses.isEmpty)
+                          Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 24),
+                            child: Text(
+                              'No vehicles have been registered yet.',
+                              style: TextStyle(color: context.textSecondary),
+                            ),
+                          )
+                        else
+                          ResponsiveGrid(
+                            minItemWidth: 380,
+                            runSpacing: 0,
+                            children: buses.map((bus) {
+                              final (health, healthColor) = _healthOf(bus);
+                              final nextService = bus.nextMaintenanceDate;
+                              return Padding(
+                                padding: const EdgeInsets.only(bottom: 10),
+                                child: NeumorphicCard(
+                                  padding: const EdgeInsets.all(16),
+                                  child: Column(
                                     children: [
-                                      Container(
-                                        width: 48,
-                                        height: 48,
-                                        decoration: BoxDecoration(
-                                          color: healthColor.withValues(
-                                            alpha: 0.15,
-                                          ),
-                                          borderRadius: BorderRadius.circular(
-                                            14,
-                                          ),
-                                          border: Border.all(
-                                            color: healthColor.withValues(
-                                              alpha: 0.3,
+                                      Row(
+                                        children: [
+                                          Container(
+                                            width: 48,
+                                            height: 48,
+                                            decoration: BoxDecoration(
+                                              color: healthColor.withValues(
+                                                alpha: 0.15,
+                                              ),
+                                              borderRadius:
+                                                  BorderRadius.circular(14),
+                                              border: Border.all(
+                                                color: healthColor.withValues(
+                                                  alpha: 0.3,
+                                                ),
+                                              ),
+                                            ),
+                                            child: const Center(
+                                              child: Text(
+                                                '🚌',
+                                                style: TextStyle(fontSize: 24),
+                                              ),
                                             ),
                                           ),
-                                        ),
-                                        child: const Center(
-                                          child: Text(
-                                            '🚌',
-                                            style: TextStyle(fontSize: 24),
-                                          ),
-                                        ),
-                                      ),
-                                      const SizedBox(width: 14),
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            Row(
+                                          const SizedBox(width: 14),
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
                                               children: [
-                                                Flexible(
-                                                  child: Text(
-                                                    bus.busNumber,
-                                                    style: TextStyle(
-                                                      color:
-                                                          context.textPrimary,
-                                                      fontSize: 15,
-                                                      fontWeight:
-                                                          FontWeight.w700,
+                                                Row(
+                                                  children: [
+                                                    Flexible(
+                                                      child: Text(
+                                                        bus.busNumber,
+                                                        style: TextStyle(
+                                                          color: context
+                                                              .textPrimary,
+                                                          fontSize: 15,
+                                                          fontWeight:
+                                                              FontWeight.w700,
+                                                        ),
+                                                        overflow: TextOverflow
+                                                            .ellipsis,
+                                                      ),
                                                     ),
-                                                    overflow:
-                                                        TextOverflow.ellipsis,
-                                                  ),
+                                                    const SizedBox(width: 8),
+                                                    _HealthChip(
+                                                      label: health,
+                                                      color: healthColor,
+                                                    ),
+                                                  ],
                                                 ),
-                                                const SizedBox(width: 8),
-                                                _HealthChip(
-                                                  label: health,
-                                                  color: healthColor,
+                                                const SizedBox(height: 3),
+                                                Text(
+                                                  _routeNameFor(bus.routeId),
+                                                  style: TextStyle(
+                                                    color:
+                                                        context.textSecondary,
+                                                    fontSize: 12,
+                                                  ),
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                ),
+                                                Text(
+                                                  // The driver's name is a proper
+                                                  // noun (often Latin script) —
+                                                  // isolateLtr() keeps it a
+                                                  // self-contained LTR unit so it
+                                                  // doesn't scramble against the
+                                                  // Urdu label/colon under RTL,
+                                                  // same fix used for the child
+                                                  // subtitle on Parent Detail.
+                                                  AppStrings.t(
+                                                    'driver_prefix',
+                                                  ).replaceFirst(
+                                                    '{name}',
+                                                    AppStrings.isolateLtr(
+                                                      _driverNameFor(
+                                                        bus.driverId,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                  style: TextStyle(
+                                                    color: context.textTertiary,
+                                                    fontSize: 11,
+                                                  ),
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
                                                 ),
                                               ],
                                             ),
-                                            const SizedBox(height: 3),
-                                            Text(
-                                              _routeNameFor(bus.routeId),
-                                              style: TextStyle(
-                                                color: context.textSecondary,
-                                                fontSize: 12,
-                                              ),
-                                              overflow: TextOverflow.ellipsis,
-                                            ),
-                                            Text(
-                                              // The driver's name is a proper
-                                              // noun (often Latin script) —
-                                              // isolateLtr() keeps it a
-                                              // self-contained LTR unit so it
-                                              // doesn't scramble against the
-                                              // Urdu label/colon under RTL,
-                                              // same fix used for the child
-                                              // subtitle on Parent Detail.
-                                              AppStrings.t(
-                                                'driver_prefix',
-                                              ).replaceFirst(
-                                                '{name}',
-                                                AppStrings.isolateLtr(
-                                                  _driverNameFor(
-                                                    bus.driverId,
-                                                  ),
-                                                ),
-                                              ),
-                                              style: TextStyle(
-                                                color: context.textTertiary,
-                                                fontSize: 11,
-                                              ),
-                                              overflow: TextOverflow.ellipsis,
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 14),
-                                  Row(
-                                    mainAxisAlignment:
-                                        MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      _VehicleInfo(
-                                        icon: Icons.calendar_today_rounded,
-                                        label: AppStrings.t(
-                                          'next_service_lbl',
-                                        ),
-                                        value: nextService == null
-                                            ? AppStrings.t(
-                                                'not_scheduled_status',
-                                              )
-                                            : '${nextService.day}/${nextService.month}/${nextService.year}',
-                                      ),
-                                      _VehicleInfo(
-                                        icon: Icons.speed_rounded,
-                                        label: AppStrings.t('mileage_lbl'),
-                                        // 'km' has no strong direction of its
-                                        // own (all-Latin, neutral run) — under
-                                        // RTL it would flip to "km 0" the same
-                                        // way "1 yrs" flipped to "yrs 1" on
-                                        // Driver Detail. Translating the unit
-                                        // itself ('کلومیٹر', a real RTL
-                                        // string) fixes it at the source
-                                        // instead of isolating it.
-                                        value: AppStrings.t(
-                                          'mileage_value',
-                                        ).replaceFirst(
-                                          '{value}',
-                                          bus.currentMileage.toStringAsFixed(
-                                            0,
                                           ),
-                                        ),
+                                        ],
                                       ),
-                                      _VehicleInfo(
-                                        icon: Icons
-                                            .airline_seat_recline_normal_rounded,
-                                        label: AppStrings.t('capacity_lbl'),
-                                        value: '${bus.capacity}',
+                                      const SizedBox(height: 14),
+                                      Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.spaceBetween,
+                                        children: [
+                                          _VehicleInfo(
+                                            icon: Icons.calendar_today_rounded,
+                                            label: AppStrings.t(
+                                              'next_service_lbl',
+                                            ),
+                                            value: nextService == null
+                                                ? AppStrings.t(
+                                                    'not_scheduled_status',
+                                                  )
+                                                : '${nextService.day}/${nextService.month}/${nextService.year}',
+                                          ),
+                                          _VehicleInfo(
+                                            icon: Icons.speed_rounded,
+                                            label: AppStrings.t('mileage_lbl'),
+                                            // 'km' has no strong direction of its
+                                            // own (all-Latin, neutral run) — under
+                                            // RTL it would flip to "km 0" the same
+                                            // way "1 yrs" flipped to "yrs 1" on
+                                            // Driver Detail. Translating the unit
+                                            // itself ('کلومیٹر', a real RTL
+                                            // string) fixes it at the source
+                                            // instead of isolating it.
+                                            value: AppStrings.t('mileage_value')
+                                                .replaceFirst(
+                                                  '{value}',
+                                                  bus.currentMileage
+                                                      .toStringAsFixed(0),
+                                                ),
+                                          ),
+                                          _VehicleInfo(
+                                            icon: Icons
+                                                .airline_seat_recline_normal_rounded,
+                                            label: AppStrings.t('capacity_lbl'),
+                                            value: '${bus.capacity}',
+                                          ),
+                                        ],
                                       ),
                                     ],
                                   ),
-                                ],
-                              ),
-                            ),
-                          );
-                        }),
-                    ],
+                                ),
+                              );
+                            }).toList(),
+                          ),
+                      ],
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
@@ -354,7 +356,6 @@ class _Header extends StatelessWidget {
     );
   }
 }
-
 
 class _MiniStat extends StatelessWidget {
   final IconData icon;

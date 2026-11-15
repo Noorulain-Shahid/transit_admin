@@ -18,7 +18,8 @@ extension AppColors on BuildContext {
   Color get textHint => isDark ? Colors.white24 : const Color(0xFFCBD5E1);
 
   // Surfaces / cards
-  Color get cardBg => isDark ? Colors.white.withValues(alpha: 0.06) : Colors.white;
+  Color get cardBg =>
+      isDark ? Colors.white.withValues(alpha: 0.06) : Colors.white;
   Color get cardBgElevated =>
       isDark ? Colors.white.withValues(alpha: 0.10) : const Color(0xFFF1F5F9);
   Color get surfaceBorder =>
@@ -154,6 +155,14 @@ class AppTheme {
   static ThemeData get darkTheme {
     return ThemeData(
       useMaterial3: true,
+      // Dialogs and sheets keep a readable width on a desktop window
+      // instead of stretching across it.
+      dialogTheme: const DialogThemeData(
+        constraints: BoxConstraints(minWidth: 280, maxWidth: 560),
+      ),
+      bottomSheetTheme: const BottomSheetThemeData(
+        constraints: BoxConstraints(maxWidth: 640),
+      ),
       brightness: Brightness.dark,
       scaffoldBackgroundColor: bgDarkest,
       colorScheme: const ColorScheme.dark(
@@ -245,6 +254,14 @@ class AppTheme {
 
     return ThemeData(
       useMaterial3: true,
+      // Dialogs and sheets keep a readable width on a desktop window
+      // instead of stretching across it.
+      dialogTheme: const DialogThemeData(
+        constraints: BoxConstraints(minWidth: 280, maxWidth: 560),
+      ),
+      bottomSheetTheme: const BottomSheetThemeData(
+        constraints: BoxConstraints(maxWidth: 640),
+      ),
       brightness: Brightness.light,
       scaffoldBackgroundColor: surface,
       colorScheme: const ColorScheme.light(

@@ -1,8 +1,20 @@
 #include "flutter_window.h"
 
+#include <flutter_windows.h>
+
 #include <optional>
 
 #include "flutter/generated_plugin_registrant.h"
+
+namespace {
+
+// Smallest usable client area, in logical pixels: the admin panel's medium
+// (navigation rail) layout starts at 600 wide, and below roughly this size
+// the side navigation and two-column screens stop being usable.
+constexpr int kMinClientWidth = 800;
+constexpr int kMinClientHeight = 600;
+
+}  // namespace
 
 FlutterWindow::FlutterWindow(const flutter::DartProject& project)
     : project_(project) {}
@@ -65,6 +77,20 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
     case WM_FONTCHANGE:
       flutter_controller_->engine()->ReloadSystemFonts();
       break;
+    case WM_GETMINMAXINFO: {
+      // Enforce a minimum window size, scaled for this window's DPI and
+      // grown by the frame so the *client* area is at least the minimum.
+      const double scale = FlutterDesktopGetDpiForHWND(hwnd) / 96.0;
+      RECT rect{0, 0, static_cast<LONG>(kMinClientWidth * scale),
+                static_cast<LONG>(kMinClientHeight * scale)};
+      ::AdjustWindowRectEx(
+          &rect, static_cast<DWORD>(::GetWindowLongPtr(hwnd, GWL_STYLE)),
+          FALSE, static_cast<DWORD>(::GetWindowLongPtr(hwnd, GWL_EXSTYLE)));
+      auto* info = reinterpret_cast<MINMAXINFO*>(lparam);
+      info->ptMinTrackSize.x = rect.right - rect.left;
+      info->ptMinTrackSize.y = rect.bottom - rect.top;
+      return 0;
+    }
   }
 
   return Win32Window::MessageHandler(hwnd, message, wparam, lparam);

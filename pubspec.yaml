@@ -13,6 +13,9 @@ dependencies:
     sdk: flutter
   go_router: ^14.0.0
   url_launcher: ^6.3.0
+  # REST read of the Realtime Database (live van location) — pure Dart,
+  # so it builds for Windows, unlike the firebase_database plugin.
+  http: ^1.6.0
   shared_preferences: ^2.3.0
   firebase_core: ^4.7.0
   cloud_firestore: ^6.3.0
@@ -20,6 +23,19 @@ dependencies:
   google_sign_in: 6.2.1
   transit_core:
     path: ../transit_core
+
+
+# TRANSIT ADMIN PATCH — Windows crash fix (0xc0000409).
+# Local copies of these FlutterFire plugins whose Windows code routes all
+# Firebase SDK-thread traffic back to the platform thread (see
+# third_party/*/windows/platform_thread_messenger.h). Same versions as on
+# pub.dev; Android/iOS/web behaviour is unchanged. Remove once FlutterFire
+# ships an upstream fix (flutter/flutter#134346, flutterfire#18210/#18226).
+dependency_overrides:
+  firebase_auth:
+    path: third_party/firebase_auth
+  cloud_firestore:
+    path: third_party/cloud_firestore
 
 dev_dependencies:
   flutter_test:

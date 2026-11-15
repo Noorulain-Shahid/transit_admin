@@ -7,6 +7,7 @@ import '../../data/admin_repository.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/glass_card.dart';
 import '../../widgets/neumorphic_card.dart';
+import '../../widgets/responsive.dart';
 
 class AdminFees extends StatefulWidget {
   final VoidCallback? onBack;
@@ -111,18 +112,18 @@ class _AdminFeesState extends State<AdminFees> {
     final collected = loading
         ? 0
         : payments
-            .where((p) => p.status == PaymentStatus.paid)
-            .fold<int>(0, (s, p) => s + p.amountPaisa);
+              .where((p) => p.status == PaymentStatus.paid)
+              .fold<int>(0, (s, p) => s + p.amountPaisa);
     final pending = loading
         ? 0
         : payments
-            .where((p) => p.status == PaymentStatus.pending)
-            .fold<int>(0, (s, p) => s + p.amountPaisa);
+              .where((p) => p.status == PaymentStatus.pending)
+              .fold<int>(0, (s, p) => s + p.amountPaisa);
     final overdue = loading
         ? 0
         : payments
-            .where((p) => p.status == PaymentStatus.overdue)
-            .fold<int>(0, (s, p) => s + p.amountPaisa);
+              .where((p) => p.status == PaymentStatus.overdue)
+              .fold<int>(0, (s, p) => s + p.amountPaisa);
     final overduePayments = loading
         ? const <Payment>[]
         : payments.where((p) => p.status == PaymentStatus.overdue).toList();
@@ -133,158 +134,175 @@ class _AdminFeesState extends State<AdminFees> {
         child: SafeArea(
           child: SingleChildScrollView(
             padding: const EdgeInsets.only(bottom: 100),
-            child: Column(
-              children: [
-                _Header(
-                  title: AppStrings.t('fee_management'),
-                  onBack: widget.onBack,
-                ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Column(
-                    children: [
-                      // ── Revenue overview (neumorphic) ─────────
-                      NeumorphicCard(
-                        padding: const EdgeInsets.all(20),
-                        borderRadius: 20,
-                        shadowOffset: 6,
-                        blurRadius: 14,
-                        child: Column(
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      AppStrings.t('total_collected_lbl'),
-                                      style: TextStyle(
-                                        color: context.textSecondary,
-                                        fontSize: 12,
+            child: ResponsiveBody(
+              maxWidth: 1280,
+              child: Column(
+                children: [
+                  _Header(
+                    title: AppStrings.t('fee_management'),
+                    onBack: widget.onBack,
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Column(
+                      children: [
+                        // ── Revenue overview (neumorphic) ─────────
+                        NeumorphicCard(
+                          padding: const EdgeInsets.all(20),
+                          borderRadius: 20,
+                          shadowOffset: 6,
+                          blurRadius: 14,
+                          child: Column(
+                            children: [
+                              Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        AppStrings.t('total_collected_lbl'),
+                                        style: TextStyle(
+                                          color: context.textSecondary,
+                                          fontSize: 12,
+                                        ),
                                       ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        loading ? '…' : _fmtPaisa(collected),
+                                        style: TextStyle(
+                                          color: context.textPrimary,
+                                          fontSize: 28,
+                                          fontWeight: FontWeight.w800,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 16),
+                              Row(
+                                children: [
+                                  _FeeStatPill(
+                                    label: AppStrings.t('collected_lbl'),
+                                    value: loading ? '…' : _fmtPaisa(collected),
+                                    color: AppTheme.success,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  _FeeStatPill(
+                                    label: AppStrings.t('pending_lbl'),
+                                    value: loading ? '…' : _fmtPaisa(pending),
+                                    color: AppTheme.warning,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  _FeeStatPill(
+                                    label: AppStrings.t('overdue_lbl'),
+                                    value: loading ? '…' : _fmtPaisa(overdue),
+                                    color: AppTheme.error,
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+
+                        // ── Filters (segmented control) ───────────
+                        _FilterSegmentedControl(
+                          labels: [
+                            AppStrings.t('all_filter'),
+                            AppStrings.t('paid_status'),
+                            AppStrings.t('pending_lbl'),
+                            AppStrings.t('overdue_lbl'),
+                          ],
+                          selected: _filter,
+                          onChanged: (i) => setState(() => _filter = i),
+                        ),
+                        const SizedBox(height: 14),
+
+                        // ── Payment records ───────────────────────
+                        if (loading)
+                          const Padding(
+                            padding: EdgeInsets.symmetric(vertical: 24),
+                            child: Center(child: CircularProgressIndicator()),
+                          )
+                        else if (_getFiltered().isEmpty)
+                          _EmptyState(
+                            message: AppStrings.t('no_payments_found'),
+                          )
+                        else
+                          ResponsiveGrid(
+                            minItemWidth: 380,
+                            runSpacing: 0,
+                            children: _getFiltered()
+                                .map(
+                                  (p) => Padding(
+                                    padding: const EdgeInsets.only(bottom: 8),
+                                    child: _FeeCard(
+                                      payment: p,
+                                      studentName: _studentName(p.studentId),
                                     ),
-                                    const SizedBox(height: 4),
+                                  ),
+                                )
+                                .toList(),
+                          ),
+
+                        const SizedBox(height: 12),
+
+                        // ── Payment reminders ─────────────────────
+                        if (overduePayments.isNotEmpty)
+                          GlassCard(
+                            padding: const EdgeInsets.all(18),
+                            gradient: LinearGradient(
+                              colors: [
+                                AppTheme.warning.withValues(alpha: 0.1),
+                                Colors.transparent,
+                              ],
+                            ),
+                            borderColor: AppTheme.warning.withValues(
+                              alpha: 0.2,
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    const Text(
+                                      '🔔',
+                                      style: TextStyle(fontSize: 18),
+                                    ),
+                                    const SizedBox(width: 8),
                                     Text(
-                                      loading ? '…' : _fmtPaisa(collected),
+                                      'Payment Reminders',
                                       style: TextStyle(
                                         color: context.textPrimary,
-                                        fontSize: 28,
-                                        fontWeight: FontWeight.w800,
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.w700,
                                       ),
                                     ),
                                   ],
                                 ),
-                              ],
-                            ),
-                            const SizedBox(height: 16),
-                            Row(
-                              children: [
-                                _FeeStatPill(
-                                  label: AppStrings.t('collected_lbl'),
-                                  value: loading ? '…' : _fmtPaisa(collected),
-                                  color: AppTheme.success,
-                                ),
-                                const SizedBox(width: 8),
-                                _FeeStatPill(
-                                  label: AppStrings.t('pending_lbl'),
-                                  value: loading ? '…' : _fmtPaisa(pending),
-                                  color: AppTheme.warning,
-                                ),
-                                const SizedBox(width: 8),
-                                _FeeStatPill(
-                                  label: AppStrings.t('overdue_lbl'),
-                                  value: loading ? '…' : _fmtPaisa(overdue),
-                                  color: AppTheme.error,
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 14),
-
-                      // ── Filters (segmented control) ───────────
-                      _FilterSegmentedControl(
-                        labels: [
-                          AppStrings.t('all_filter'),
-                          AppStrings.t('paid_status'),
-                          AppStrings.t('pending_lbl'),
-                          AppStrings.t('overdue_lbl'),
-                        ],
-                        selected: _filter,
-                        onChanged: (i) => setState(() => _filter = i),
-                      ),
-                      const SizedBox(height: 14),
-
-                      // ── Payment records ───────────────────────
-                      if (loading)
-                        const Padding(
-                          padding: EdgeInsets.symmetric(vertical: 24),
-                          child: Center(child: CircularProgressIndicator()),
-                        )
-                      else if (_getFiltered().isEmpty)
-                        _EmptyState(message: AppStrings.t('no_payments_found'))
-                      else
-                        ..._getFiltered().map(
-                          (p) => Padding(
-                            padding: const EdgeInsets.only(bottom: 8),
-                            child: _FeeCard(
-                              payment: p,
-                              studentName: _studentName(p.studentId),
-                            ),
-                          ),
-                        ),
-
-                      const SizedBox(height: 12),
-
-                      // ── Payment reminders ─────────────────────
-                      if (overduePayments.isNotEmpty)
-                        GlassCard(
-                          padding: const EdgeInsets.all(18),
-                          gradient: LinearGradient(
-                            colors: [
-                              AppTheme.warning.withValues(alpha: 0.1),
-                              Colors.transparent,
-                            ],
-                          ),
-                          borderColor: AppTheme.warning.withValues(alpha: 0.2),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  const Text(
-                                    '🔔',
-                                    style: TextStyle(fontSize: 18),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    'Payment Reminders',
-                                    style: TextStyle(
-                                      color: context.textPrimary,
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.w700,
+                                const SizedBox(height: 12),
+                                ...overduePayments
+                                    .take(5)
+                                    .map(
+                                      (p) => _ReminderRow(
+                                        name: _studentName(p.studentId),
+                                        amount: p.displayAmount,
+                                        dueDate: p.dueDate,
+                                        onSend: () => _sendReminder(p),
+                                      ),
                                     ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 12),
-                              ...overduePayments.take(5).map(
-                                (p) => _ReminderRow(
-                                  name: _studentName(p.studentId),
-                                  amount: p.displayAmount,
-                                  dueDate: p.dueDate,
-                                  onSend: () => _sendReminder(p),
-                                ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
-                        ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
@@ -306,7 +324,7 @@ class _Header extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          GestureDetector(
+          Clickable(
             // `onBack` is only ever supplied by a caller that embeds this
             // screen inline (e.g. a tab body); reached via
             // `/admin/fees` in router.dart, nothing passes it, so this
@@ -385,7 +403,6 @@ class _FeeStatPill extends StatelessWidget {
   }
 }
 
-
 /// Sleek segmented control replacing the old horizontally-scrolling chip
 /// row — all four filters fit on screen at once, and the active segment
 /// gets an elevated pill so it reads as "one control", not four buttons.
@@ -412,7 +429,7 @@ class _FilterSegmentedControl extends StatelessWidget {
         children: List.generate(labels.length, (i) {
           final active = i == selected;
           return Expanded(
-            child: GestureDetector(
+            child: Clickable(
               onTap: () => onChanged(i),
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 200),
@@ -489,6 +506,12 @@ Color _statusColor(PaymentStatus status) {
       return AppTheme.error;
     case PaymentStatus.refunded:
       return AppTheme.info;
+    // Sent by the family, waiting for the driver to check.
+    case PaymentStatus.submitted:
+      return AppTheme.info;
+    // The driver checked and it had not arrived.
+    case PaymentStatus.rejected:
+      return AppTheme.error;
   }
 }
 
@@ -622,7 +645,7 @@ class _ReminderRow extends StatelessWidget {
                 ],
               ),
             ),
-            GestureDetector(
+            Clickable(
               onTap: onSend,
               child: Container(
                 padding: const EdgeInsets.symmetric(

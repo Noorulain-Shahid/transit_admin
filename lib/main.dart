@@ -11,6 +11,7 @@ import 'app/auth_service.dart';
 import 'app/locale_provider.dart';
 import 'theme/app_theme.dart';
 import 'theme/theme_provider.dart';
+import 'widgets/responsive.dart';
 
 void main() {
   // A live Firestore permission error (e.g. a session whose admin role was
@@ -104,6 +105,8 @@ class _TransitAdminAppState extends State<TransitAdminApp> {
     return MaterialApp.router(
       title: 'TransitPro Admin',
       debugShowCheckedModeBanner: false,
+      // Always-visible scrollbars on desktop (see AdminScrollBehavior).
+      scrollBehavior: const AdminScrollBehavior(),
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,
       themeMode: ThemeProvider.instance.mode,

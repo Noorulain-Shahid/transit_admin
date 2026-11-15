@@ -4,6 +4,7 @@ import '../../app/locale_provider.dart';
 import '../../services/audit_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/glass_card.dart';
+import '../../widgets/responsive.dart';
 
 /// Real "Admin Activity Tracking" view — this app is single-admin (see
 /// `single_admin_role_desc`), so "my activity" and "the audit log" are the
@@ -76,13 +77,16 @@ class _AdminActivityTrackingState extends State<AdminActivityTracking> {
                         byType[l.actionType] = (byType[l.actionType] ?? 0) + 1;
                       }
                       return ListView(
-                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+                        padding: centeredListPadding(context),
                         children: [
                           _SummaryRow(total: logs.length, today: todayCount),
                           const SizedBox(height: 16),
                           ...AuditActionType.values
                               .where((t) => (byType[t] ?? 0) > 0)
-                              .map((t) => _TypeCountRow(type: t, count: byType[t]!)),
+                              .map(
+                                (t) =>
+                                    _TypeCountRow(type: t, count: byType[t]!),
+                              ),
                         ],
                       );
                     },
@@ -107,7 +111,7 @@ class _Header extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
       child: Row(
         children: [
-          GestureDetector(
+          Clickable(
             onTap: onBack,
             child: Container(
               width: 38,
@@ -276,7 +280,11 @@ class _EmptyState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.analytics_outlined, size: 48, color: context.textTertiary),
+            Icon(
+              Icons.analytics_outlined,
+              size: 48,
+              color: context.textTertiary,
+            ),
             const SizedBox(height: 12),
             Text(
               AppStrings.t('no_activity_recorded'),

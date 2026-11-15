@@ -7,6 +7,7 @@ import '../../data/admin_repository.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/glass_card.dart';
 import '../../widgets/neumorphic_card.dart';
+import '../../widgets/responsive.dart';
 
 class AdminRoutes extends StatefulWidget {
   final VoidCallback? onBack;
@@ -70,9 +71,7 @@ class _AdminRoutesState extends State<AdminRoutes> {
     final totalStops = loading
         ? 0
         : routes.fold<int>(0, (s, r) => s + r.stops.length);
-    final activeCount = loading
-        ? 0
-        : routes.where((r) => r.isActive).length;
+    final activeCount = loading ? 0 : routes.where((r) => r.isActive).length;
 
     return Scaffold(
       body: Container(
@@ -80,195 +79,215 @@ class _AdminRoutesState extends State<AdminRoutes> {
         child: SafeArea(
           child: SingleChildScrollView(
             padding: const EdgeInsets.only(bottom: 100),
-            child: Column(
-              children: [
-                _Header(
-                  title: AppStrings.t('route_management'),
-                  onBack: widget.onBack,
-                ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Column(
-                    children: [
-                      // ── Route stats (neumorphic) ───────────────
-                      Row(
-                        children: [
-                          _MiniStat(
-                            icon: Icons.map_rounded,
-                            label: AppStrings.t('total_routes_lbl'),
-                            value: loading ? '…' : '${routes.length}',
-                            color: AppTheme.adminEmerald,
-                          ),
-                          const SizedBox(width: 10),
-                          _MiniStat(
-                            icon: Icons.check_circle_rounded,
-                            label: AppStrings.t('active_lbl'),
-                            value: loading ? '…' : '$activeCount',
-                            color: AppTheme.success,
-                          ),
-                          const SizedBox(width: 10),
-                          _MiniStat(
-                            icon: Icons.location_on_rounded,
-                            label: AppStrings.t('stops_lbl'),
-                            value: loading ? '…' : '$totalStops',
-                            color: AppTheme.info,
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-
-                      // ── Route list ──────────────────────────────
-                      if (loading)
-                        const Padding(
-                          padding: EdgeInsets.symmetric(vertical: 24),
-                          child: Center(child: CircularProgressIndicator()),
-                        )
-                      else if (routes.isEmpty)
-                        _EmptyState(
-                          onCreateRoute: () =>
-                              context.push('/admin/create-route'),
-                        )
-                      else
-                  ...routes.asMap().entries.map((entry) {
-                    final i = entry.key;
-                    final r = entry.value;
-                    final color = _colors[i % _colors.length];
-                    final stops = r.orderedStops;
-                    final desc = stops.isEmpty
-                        ? 'No stops added yet'
-                        : stops.map((s) => s.name).join(' ↔ ');
-                    final pickup = stops.isEmpty
-                        ? '—'
-                        : (stops.first.scheduledTime.isEmpty
-                              ? '—'
-                              : stops.first.scheduledTime);
-                    final drop = stops.isEmpty
-                        ? '—'
-                        : (stops.last.scheduledTime.isEmpty
-                              ? '—'
-                              : stops.last.scheduledTime);
-
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 10),
-                      child: GlassCard(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
+            child: ResponsiveBody(
+              maxWidth: 1280,
+              child: Column(
+                children: [
+                  _Header(
+                    title: AppStrings.t('route_management'),
+                    onBack: widget.onBack,
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Column(
+                      children: [
+                        // ── Route stats (neumorphic) ───────────────
+                        Row(
                           children: [
-                            Row(
-                              children: [
-                                Container(
-                                  width: 44,
-                                  height: 44,
-                                  decoration: BoxDecoration(
-                                    color: color.withValues(alpha: 0.15),
-                                    borderRadius: BorderRadius.circular(14),
-                                    border: Border.all(
-                                      color: color.withValues(alpha: 0.3),
-                                    ),
-                                  ),
-                                  child: const Center(
-                                    child: Text(
-                                      '🗺️',
-                                      style: TextStyle(fontSize: 20),
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
+                            _MiniStat(
+                              icon: Icons.map_rounded,
+                              label: AppStrings.t('total_routes_lbl'),
+                              value: loading ? '…' : '${routes.length}',
+                              color: AppTheme.adminEmerald,
+                            ),
+                            const SizedBox(width: 10),
+                            _MiniStat(
+                              icon: Icons.check_circle_rounded,
+                              label: AppStrings.t('active_lbl'),
+                              value: loading ? '…' : '$activeCount',
+                              color: AppTheme.success,
+                            ),
+                            const SizedBox(width: 10),
+                            _MiniStat(
+                              icon: Icons.location_on_rounded,
+                              label: AppStrings.t('stops_lbl'),
+                              value: loading ? '…' : '$totalStops',
+                              color: AppTheme.info,
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+
+                        // ── Route list ──────────────────────────────
+                        if (loading)
+                          const Padding(
+                            padding: EdgeInsets.symmetric(vertical: 24),
+                            child: Center(child: CircularProgressIndicator()),
+                          )
+                        else if (routes.isEmpty)
+                          _EmptyState(
+                            onCreateRoute: () =>
+                                context.push('/admin/create-route'),
+                          )
+                        else
+                          ResponsiveGrid(
+                            minItemWidth: 380,
+                            runSpacing: 0,
+                            children: routes.asMap().entries.map((entry) {
+                              final i = entry.key;
+                              final r = entry.value;
+                              final color = _colors[i % _colors.length];
+                              final stops = r.orderedStops;
+                              final desc = stops.isEmpty
+                                  ? 'No stops added yet'
+                                  : stops.map((s) => s.name).join(' ↔ ');
+                              final pickup = stops.isEmpty
+                                  ? '—'
+                                  : (stops.first.scheduledTime.isEmpty
+                                        ? '—'
+                                        : stops.first.scheduledTime);
+                              final drop = stops.isEmpty
+                                  ? '—'
+                                  : (stops.last.scheduledTime.isEmpty
+                                        ? '—'
+                                        : stops.last.scheduledTime);
+
+                              return Padding(
+                                padding: const EdgeInsets.only(bottom: 10),
+                                child: GlassCard(
+                                  padding: const EdgeInsets.all(16),
                                   child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
                                     children: [
-                                      Text(
-                                        r.name,
-                                        style: TextStyle(
-                                          color: context.textPrimary,
-                                          fontSize: 15,
-                                          fontWeight: FontWeight.w700,
-                                        ),
+                                      Row(
+                                        children: [
+                                          Container(
+                                            width: 44,
+                                            height: 44,
+                                            decoration: BoxDecoration(
+                                              color: color.withValues(
+                                                alpha: 0.15,
+                                              ),
+                                              borderRadius:
+                                                  BorderRadius.circular(14),
+                                              border: Border.all(
+                                                color: color.withValues(
+                                                  alpha: 0.3,
+                                                ),
+                                              ),
+                                            ),
+                                            child: const Center(
+                                              child: Text(
+                                                '🗺️',
+                                                style: TextStyle(fontSize: 20),
+                                              ),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 12),
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              children: [
+                                                Text(
+                                                  r.name,
+                                                  style: TextStyle(
+                                                    color: context.textPrimary,
+                                                    fontSize: 15,
+                                                    fontWeight: FontWeight.w700,
+                                                  ),
+                                                ),
+                                                const SizedBox(height: 2),
+                                                Text(
+                                                  desc,
+                                                  style: TextStyle(
+                                                    color:
+                                                        context.textSecondary,
+                                                    fontSize: 12,
+                                                  ),
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                          StatusBadge(
+                                            label: r.isActive
+                                                ? 'Active'
+                                                : 'Inactive',
+                                            color: r.isActive
+                                                ? AppTheme.success
+                                                : context.textTertiary,
+                                          ),
+                                        ],
                                       ),
-                                      const SizedBox(height: 2),
-                                      Text(
-                                        desc,
-                                        style: TextStyle(
-                                          color: context.textSecondary,
-                                          fontSize: 12,
+                                      const SizedBox(height: 12),
+                                      Row(
+                                        children: [
+                                          _RouteDetail(
+                                            icon: Icons.location_on_rounded,
+                                            label: 'Stops',
+                                            value: '${stops.length}',
+                                          ),
+                                          _RouteDetail(
+                                            icon: Icons.timer_rounded,
+                                            label: 'Duration',
+                                            value: r.averageDurationMinutes == 0
+                                                ? '—'
+                                                : '${r.averageDurationMinutes} min',
+                                          ),
+                                          _RouteDetail(
+                                            icon: Icons.directions_bus_rounded,
+                                            label: 'Bus',
+                                            value: _busNumberFor(r.busId),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 10),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 12,
+                                          vertical: 8,
                                         ),
-                                        overflow: TextOverflow.ellipsis,
+                                        decoration: BoxDecoration(
+                                          color: Colors.white.withValues(
+                                            alpha: 0.04,
+                                          ),
+                                          borderRadius: BorderRadius.circular(
+                                            10,
+                                          ),
+                                        ),
+                                        child: Row(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.spaceBetween,
+                                          children: [
+                                            Text(
+                                              '🌅 Pickup: $pickup',
+                                              style: TextStyle(
+                                                color: context.textSecondary,
+                                                fontSize: 12,
+                                              ),
+                                            ),
+                                            Text(
+                                              '🌇 Drop: $drop',
+                                              style: TextStyle(
+                                                color: context.textSecondary,
+                                                fontSize: 12,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
                                       ),
                                     ],
                                   ),
                                 ),
-                                StatusBadge(
-                                  label: r.isActive ? 'Active' : 'Inactive',
-                                  color: r.isActive
-                                      ? AppTheme.success
-                                      : context.textTertiary,
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 12),
-                            Row(
-                              children: [
-                                _RouteDetail(
-                                  icon: Icons.location_on_rounded,
-                                  label: 'Stops',
-                                  value: '${stops.length}',
-                                ),
-                                _RouteDetail(
-                                  icon: Icons.timer_rounded,
-                                  label: 'Duration',
-                                  value: r.averageDurationMinutes == 0
-                                      ? '—'
-                                      : '${r.averageDurationMinutes} min',
-                                ),
-                                _RouteDetail(
-                                  icon: Icons.directions_bus_rounded,
-                                  label: 'Bus',
-                                  value: _busNumberFor(r.busId),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 10),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 8,
-                              ),
-                              decoration: BoxDecoration(
-                                color: Colors.white.withValues(alpha: 0.04),
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              child: Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Text(
-                                    '🌅 Pickup: $pickup',
-                                    style: TextStyle(
-                                      color: context.textSecondary,
-                                      fontSize: 12,
-                                    ),
-                                  ),
-                                  Text(
-                                    '🌇 Drop: $drop',
-                                    style: TextStyle(
-                                      color: context.textSecondary,
-                                      fontSize: 12,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                          }),
-                    ],
+                              );
+                            }).toList(),
+                          ),
+                      ],
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
@@ -329,7 +348,6 @@ class _Header extends StatelessWidget {
   }
 }
 
-
 class _MiniStat extends StatelessWidget {
   final IconData icon;
   final String label, value;
@@ -383,11 +401,7 @@ class _EmptyState extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 40),
       child: Column(
         children: [
-          Icon(
-            Icons.signpost_outlined,
-            size: 48,
-            color: context.textTertiary,
-          ),
+          Icon(Icons.signpost_outlined, size: 48, color: context.textTertiary),
           const SizedBox(height: 12),
           Text(
             AppStrings.t('no_routes_created'),
@@ -395,13 +409,10 @@ class _EmptyState extends StatelessWidget {
             style: TextStyle(color: context.textTertiary, fontSize: 16),
           ),
           const SizedBox(height: 20),
-          GestureDetector(
+          Clickable(
             onTap: onCreateRoute,
             child: NeumorphicCard(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 20,
-                vertical: 12,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [

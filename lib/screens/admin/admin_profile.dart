@@ -10,6 +10,7 @@ import '../../services/audit_service.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/theme_provider.dart';
 import '../../widgets/glass_card.dart';
+import '../../widgets/responsive.dart';
 
 class AdminProfile extends StatefulWidget {
   final void Function(int) onNavigate;
@@ -126,32 +127,35 @@ class _AdminProfileState extends State<AdminProfile> {
   Widget build(BuildContext context) {
     return SingleChildScrollView(
       padding: const EdgeInsets.only(bottom: 100),
-      child: Column(
-        children: [
-          const SizedBox(height: 20),
-          _buildAvatar(context),
-          const SizedBox(height: 24),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Column(
-              children: [
-                _buildQuickStats(context),
-                const SizedBox(height: 16),
-                _buildProfileInfo(context),
-                const SizedBox(height: 12),
-                _buildSettings(context),
-                const SizedBox(height: 12),
-                _buildSecurity(context),
-                const SizedBox(height: 12),
-                _buildSystemControls(context),
-                const SizedBox(height: 12),
-                _buildThemeToggle(context),
-                const SizedBox(height: 12),
-                _buildLogout(context),
-              ],
+      child: ResponsiveBody(
+        maxWidth: 900,
+        child: Column(
+          children: [
+            const SizedBox(height: 20),
+            _buildAvatar(context),
+            const SizedBox(height: 24),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Column(
+                children: [
+                  _buildQuickStats(context),
+                  const SizedBox(height: 16),
+                  _buildProfileInfo(context),
+                  const SizedBox(height: 12),
+                  _buildSettings(context),
+                  const SizedBox(height: 12),
+                  _buildSecurity(context),
+                  const SizedBox(height: 12),
+                  _buildSystemControls(context),
+                  const SizedBox(height: 12),
+                  _buildThemeToggle(context),
+                  const SizedBox(height: 12),
+                  _buildLogout(context),
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -199,7 +203,10 @@ class _AdminProfileState extends State<AdminProfile> {
             style: TextStyle(color: context.textSecondary, fontSize: 13),
           ),
           const SizedBox(height: 6),
-          StatusBadge(label: AppStrings.t('admin_role'), color: AppTheme.adminEmerald),
+          StatusBadge(
+            label: AppStrings.t('admin_role'),
+            color: AppTheme.adminEmerald,
+          ),
         ],
       ),
     );
@@ -309,6 +316,11 @@ class _AdminProfileState extends State<AdminProfile> {
             icon: Icons.subscriptions_rounded,
             label: AppStrings.t('subscription_management'),
             onTap: () => context.push('/admin/subscription'),
+          ),
+          _OptionRow(
+            icon: Icons.reviews_rounded,
+            label: 'App Ratings & Feedback',
+            onTap: () => context.push('/admin/feedback'),
           ),
           _OptionRow(
             icon: Icons.lock_rounded,
@@ -457,7 +469,7 @@ class _AdminProfileState extends State<AdminProfile> {
   }
 
   Widget _buildLogout(BuildContext context) {
-    return GestureDetector(
+    return Clickable(
       onTap: onLogout,
       child: GlassCard(
         gradient: LinearGradient(
@@ -610,7 +622,7 @@ class _LanguageOption extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
+    return Clickable(
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
@@ -638,7 +650,11 @@ class _LanguageOption extends StatelessWidget {
               ),
             ),
             if (selected)
-              Icon(Icons.check_circle_rounded, color: AppTheme.adminAccent, size: 18),
+              Icon(
+                Icons.check_circle_rounded,
+                color: AppTheme.adminAccent,
+                size: 18,
+              ),
           ],
         ),
       ),
@@ -747,7 +763,7 @@ class _OptionRow extends StatelessWidget {
   });
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
+    return Clickable(
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
       child: Padding(
@@ -794,7 +810,7 @@ class _SecurityRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final rowColor = comingSoon ? context.textTertiary : color;
-    return GestureDetector(
+    return Clickable(
       onTap: onTap,
       child: Padding(
         padding: const EdgeInsets.only(bottom: 10),
@@ -832,7 +848,10 @@ class _SecurityRow extends StatelessWidget {
                 ),
               ),
               if (comingSoon)
-                StatusBadge(label: AppStrings.t('soon_badge'), color: context.textTertiary)
+                StatusBadge(
+                  label: AppStrings.t('soon_badge'),
+                  color: context.textTertiary,
+                )
               else
                 Icon(
                   Icons.chevron_right_rounded,

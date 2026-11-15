@@ -1,5 +1,6 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'responsive.dart';
 
 /// A glassmorphism card with BackdropFilter blur.
 class GlassCard extends StatelessWidget {
@@ -78,7 +79,7 @@ class GlassCard extends StatelessWidget {
     );
 
     if (onTap != null) {
-      return GestureDetector(onTap: onTap, child: card);
+      return Clickable(onTap: onTap, child: card);
     }
     return card;
   }
@@ -99,7 +100,7 @@ class AppSwitch extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
+    return Clickable(
       onTap: () => onChanged(!value),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 250),
@@ -216,7 +217,7 @@ class GradientButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final bool disabled = !isEnabled && !isLoading;
 
-    return GestureDetector(
+    return Clickable(
       onTap: isLoading || disabled ? null : onTap,
       child: Opacity(
         // Loading used to swap the gradient for a 10%-white fill, which on

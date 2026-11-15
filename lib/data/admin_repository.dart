@@ -13,61 +13,25 @@ class AdminRepository {
 
   String? get _adminUid => FirebaseAuth.instance.currentUser?.uid;
 
-  // ── Shared broadcast-stream cache ───────────────────────────────────────
+  // ── Why the list streams are not cached ────────────────────────────────
   //
-  // `watchDrivers()` (no status filter), `watchStudents()`, and
-  // `watchUsersByRole(UserRole.parent)` are each independently called by
-  // several screens (Dashboard, Profile's old badge counts, Vehicles,
-  // Driver/Student/Parent Management, Parent/Driver Detail…) that have no
-  // reason to each open their own Firestore listener on the exact same
-  // query. Memoizing the stream here — and making it a broadcast stream so
-  // more than one `StreamBuilder`/`StreamSubscription` can attach to it —
-  // means every caller shares one underlying listener instead of one each.
+  // `watchDrivers()`, `watchStudents()` and `watchUsersByRole()` used to hand
+  // every caller one memoized `.asBroadcastStream()`. A broadcast stream does
+  // not replay its last event to a late subscriber: the first screen to
+  // listen (the Dashboard, at app start) received the snapshot, and every
+  // screen that subscribed afterwards — Parent Detail's "Children" section,
+  // Student/Parent Management opened from the nav bar — waited for a *next*
+  // change that might never come. That was the spinner that never stopped.
   //
-  // A plain `.asBroadcastStream()` only replays to subscribers while its
-  // source is still alive — once Firestore's underlying stream delivers an
-  // error (a permission hiccup, a dropped connection, a missing index) it
-  // also *closes* the stream, and the `??=` cache above keeps pointing at
-  // that now-finished stream forever. Every screen that opens this same
-  // cached stream afterwards — even a brand new screen instance, even after
-  // a full navigation away and back — gets an immediate `onDone` and no
-  // data: the "stuck on the loading spinner forever" bug, except it never
-  // recovers, because there's no live listener left to ever emit again.
-  // [_selfHealing] clears the cache field the moment an error happens, so
-  // the *next* caller gets a fresh stream instead of the dead one — this is
-  // what actually fixes the Subscription Management screen rather than
-  // merely surfacing the error on the one screen already open when it hit.
-  Stream<List<Driver>>? _allDriversCache;
-  Stream<List<Student>>? _studentsCache;
-  final Map<UserRole, Stream<List<AppUser>>> _usersByRoleCache = {};
-
-  Stream<T> _selfHealing<T>(Stream<T> stream, void Function() clearCache) {
-    return stream.transform(
-      StreamTransformer<T, T>.fromHandlers(
-        handleError: (error, stackTrace, sink) {
-          clearCache();
-          sink.addError(error, stackTrace);
-        },
-      ),
-    );
-  }
+  // Each call now returns its own `snapshots()` stream. The Firestore SDK
+  // already shares one watch target per identical query and answers a new
+  // listener from its local cache straight away, so this costs no extra
+  // reads — and every subscriber gets the current data the moment it
+  // listens, which is the contract a `StreamBuilder` expects.
 
   // ── Drivers ───────────────────────────────────────────────────────────────
 
   Stream<List<Driver>> watchDrivers({DriverStatus? status}) {
-    if (status == null) {
-      return _allDriversCache ??= _selfHealing(
-        _watchDriversUncached(null),
-        () => _allDriversCache = null,
-      );
-    }
-    // Status-filtered variants are used by far fewer call sites and each
-    // wants a different status, so they aren't worth caching individually —
-    // only the common no-filter case is.
-    return _watchDriversUncached(status);
-  }
-
-  Stream<List<Driver>> _watchDriversUncached(DriverStatus? status) {
     final query = status == null
         ? Db.drivers
         : Db.drivers.where('status', isEqualTo: status.name);
@@ -76,9 +40,9 @@ class AdminRepository {
     // admin-soft-deleted driver vanishes from every list immediately
     // without needing a new composite index for the common case of also
     // filtering by `status`.
-    return query.snapshots().docsList
-        .map((drivers) => drivers.where((d) => !d.isDeleted).toList())
-        .asBroadcastStream();
+    return query.snapshots().docsList.map(
+      (drivers) => drivers.where((d) => !d.isDeleted).toList(),
+    );
   }
 
   Stream<Driver?> watchDriver(String driverId) =>
@@ -159,19 +123,39 @@ class AdminRepository {
 
   // ── Users (parents & students share the `users` role field) ─────────────────
 
-  Stream<List<AppUser>> watchUsersByRole(UserRole role) =>
-      _usersByRoleCache[role] ??= _selfHealing(
-        Db.users
-            .where('role', isEqualTo: role.name)
-            .snapshots()
-            .docsList
-            .map((users) => users.where((u) => !u.isDeleted).toList())
-            .asBroadcastStream(),
-        () => _usersByRoleCache.remove(role),
+  /// Every account of [role]. Archived and self-deleted accounts
+  /// (`isDeleted`) are dropped unless [includeDeleted] — the Parent
+  /// Management list keeps them, labelled "Deactivated", because an account
+  /// that silently vanished looked exactly like one that never existed.
+  Stream<List<AppUser>> watchUsersByRole(
+    UserRole role, {
+    bool includeDeleted = false,
+  }) => Db.users
+      .where('role', isEqualTo: role.name)
+      .snapshots()
+      .docsList
+      .map(
+        (users) => includeDeleted
+            ? users
+            : users.where((u) => !u.isDeleted).toList(),
       );
 
   Stream<AppUser?> watchUser(String uid) =>
       Db.users.doc(uid).snapshots().map((s) => s.data());
+
+  /// [watchUser] plus the raw `deletedBy` field (not part of `AppUser`),
+  /// which tells a self-deleted account (its own uid) from an admin archive.
+  Stream<({AppUser user, String deletedBy})?> watchUserRecord(String uid) {
+    if (uid.isEmpty) return Stream.value(null);
+    return Db.fs.collection('users').doc(uid).snapshots().map((s) {
+      final data = s.data();
+      if (!s.exists || data == null) return null;
+      return (
+        user: AppUser.fromMap(s.id, data),
+        deletedBy: asString(data['deletedBy']),
+      );
+    });
+  }
 
   /// Archives a parent account (see `AppUser.isDeleted`'s doc comment).
   /// Their students are dependent profiles, not independent accounts, so
@@ -211,14 +195,28 @@ class AdminRepository {
 
   // ── Students ──────────────────────────────────────────────────────────────
 
-  Stream<List<Student>> watchStudents() => _studentsCache ??= _selfHealing(
-    Db.students
-        .snapshots()
-        .docsList
-        .map((students) => students.where((s) => !s.isDeleted).toList())
-        .asBroadcastStream(),
-    () => _studentsCache = null,
-  );
+  Stream<List<Student>> watchStudents() => Db.students
+      .snapshots()
+      .docsList
+      .map((students) => students.where((s) => !s.isDeleted).toList());
+
+  /// One parent's children, queried directly (`parentId == uid`, the same
+  /// query the mobile app's own children list runs) rather than filtered
+  /// out of the whole `students` collection. Archived children are kept so
+  /// a deactivated family still shows who was on the account; the screen
+  /// labels them.
+  Stream<List<Student>> watchStudentsOfParent(String parentId) => Db.students
+      .where('parentId', isEqualTo: parentId)
+      .snapshots()
+      .docsList;
+
+  /// A driver's roster: `students where driverId == uid`, which is how the
+  /// driver app defines it (see `Student.driverId`).
+  Stream<List<Student>> watchStudentsOfDriver(String driverId) => Db.students
+      .where('driverId', isEqualTo: driverId)
+      .snapshots()
+      .docsList
+      .map((students) => students.where((s) => !s.isDeleted).toList());
 
   Stream<Student?> watchStudent(String studentId) =>
       Db.students.doc(studentId).snapshots().map((s) => s.data());
@@ -244,10 +242,18 @@ class AdminRepository {
 
   Stream<List<Bus>> watchBuses() => Db.buses.snapshots().docsList;
 
+  /// One vehicle, for a screen that holds a `busId` and needs the number a
+  /// person would recognise it by.
+  Stream<Bus?> watchBus(String busId) =>
+      Db.buses.doc(busId).snapshots().map((s) => s.data());
+
   Future<void> updateBus(String busId, Map<String, dynamic> fields) =>
       Db.buses.doc(busId).update({...fields, 'updatedAt': Db.now});
 
   Stream<List<BusRoute>> watchRoutes() => Db.routes.snapshots().docsList;
+
+  Stream<BusRoute?> watchRoute(String routeId) =>
+      Db.routes.doc(routeId).snapshots().map((s) => s.data());
 
   Future<void> updateRoute(String routeId, Map<String, dynamic> fields) =>
       Db.routes.doc(routeId).update({...fields, 'updatedAt': Db.now});
@@ -340,6 +346,219 @@ class AdminRepository {
     return snap.docs.map((d) => d.data()).toList();
   }
 
+  /// The driver's running trip, if any — the same query the driver app
+  /// uses for its Start/End button (`TripRepository.watchActiveTripForDriver`),
+  /// equality filters only, so no composite index.
+  Stream<Trip?> watchActiveTripForDriver(String driverId) => Db.trips
+      .where('driverId', isEqualTo: driverId)
+      .where('status', isEqualTo: TripStatus.inProgress.name)
+      .snapshots()
+      .map((s) {
+        final trips = s.docs.map((d) => d.data()).toList()
+          ..sort(
+            (a, b) => (b.startedAt ?? DateTime(0)).compareTo(
+              a.startedAt ?? DateTime(0),
+            ),
+          );
+        return trips.isEmpty ? null : trips.first;
+      });
+
+  /// A driver's trips, newest first (`driverId` + `dateKey desc` — the
+  /// indexed shape the driver app's own history uses).
+  Stream<List<Trip>> watchTripsForDriver(String driverId, {int limit = 60}) =>
+      Db.trips
+          .where('driverId', isEqualTo: driverId)
+          .orderBy('dateKey', descending: true)
+          .limit(limit)
+          .snapshots()
+          .docsList;
+
+  /// Every attendance mark on one trip, live.
+  Stream<List<AttendanceRecord>> watchTripAttendance(String tripId) =>
+      Db.attendance(tripId).snapshots().docsList;
+
+  /// One student's attendance across every trip, newest first.
+  ///
+  /// The exact collection-group shape the mobile app's ride history runs
+  /// (`studentId ==` + `dateKey desc`), so it rides on the index that
+  /// already exists. `students/{id}/attendance/{dateKey}` (a family's own
+  /// advance absence notes) shares the subcollection name, so rows are kept
+  /// only when they really live under `trips/`.
+  Future<List<AttendanceRecord>> fetchStudentAttendance(
+    String studentId, {
+    int limit = 60,
+  }) async {
+    if (studentId.isEmpty) return const [];
+    final snap = await Db.fs
+        .collectionGroup('attendance')
+        .where('studentId', isEqualTo: studentId)
+        .orderBy('dateKey', descending: true)
+        .limit(limit)
+        .get();
+    final rows = <AttendanceRecord>[];
+    for (final doc in snap.docs) {
+      final trip = doc.reference.parent.parent;
+      if (trip == null || trip.parent.id != 'trips') continue;
+      final record = AttendanceRecord.fromMap(doc.id, doc.data());
+      rows.add(
+        record.tripId.isNotEmpty
+            ? record
+            : AttendanceRecord(
+                studentId: record.studentId,
+                studentName: record.studentName,
+                status: record.status,
+                stopId: record.stopId,
+                markedAt: record.markedAt,
+                markedBy: record.markedBy,
+                tripId: trip.id,
+                dateKey: record.dateKey,
+                driverId: record.driverId,
+              ),
+      );
+    }
+    return rows;
+  }
+
+  /// [fetchStudentAttendance] for several students (a parent's children),
+  /// merged newest first. One query per child keeps every query on the
+  /// existing index.
+  Future<List<AttendanceRecord>> fetchAttendanceForStudents(
+    Iterable<String> studentIds, {
+    int limitEach = 40,
+  }) async {
+    final ids = studentIds.where((id) => id.isNotEmpty).toSet();
+    final lists = await Future.wait(
+      ids.map((id) => fetchStudentAttendance(id, limit: limitEach)),
+    );
+    final all = [for (final l in lists) ...l]
+      ..sort((a, b) => b.dateKey.compareTo(a.dateKey));
+    return all;
+  }
+
+  /// The trip documents behind [tripIds], keyed by id — for turning a list
+  /// of attendance rows into a trip history (type, times, driver).
+  Future<Map<String, Trip>> fetchTripsByIds(Iterable<String> tripIds) async {
+    final ids = tripIds.where((id) => id.isNotEmpty).toSet().toList();
+    final result = <String, Trip>{};
+    for (var i = 0; i < ids.length; i += 30) {
+      final chunk = ids.sublist(i, i + 30 > ids.length ? ids.length : i + 30);
+      final snap = await Db.trips
+          .where(FieldPath.documentId, whereIn: chunk)
+          .get();
+      for (final d in snap.docs) {
+        result[d.id] = d.data();
+      }
+    }
+    return result;
+  }
+
+  // ── Missed-bus requests ──────────────────────────────────────────────────
+
+  /// Every missed-bus request raised for [studentIds], newest first.
+  /// Single-field `whereIn` (chunks of 30) — no composite index; ordering
+  /// is done here.
+  Future<List<MissedBusRequest>> fetchMissedBusForStudents(
+    Iterable<String> studentIds,
+  ) async {
+    final ids = studentIds.where((id) => id.isNotEmpty).toSet().toList();
+    final byId = <String, MissedBusRequest>{};
+    for (var i = 0; i < ids.length; i += 30) {
+      final chunk = ids.sublist(i, i + 30 > ids.length ? ids.length : i + 30);
+      final snap = await Db.missedBusRequests
+          .where('studentId', whereIn: chunk)
+          .get();
+      for (final d in snap.docs) {
+        byId[d.id] = d.data();
+      }
+    }
+    final list = byId.values.toList()
+      ..sort(
+        (a, b) => (b.createdAt ?? DateTime(0)).compareTo(
+          a.createdAt ?? DateTime(0),
+        ),
+      );
+    return list;
+  }
+
+  /// Missed-bus pickups a driver accepted (`assignedDriverId`), newest
+  /// first, ordered here rather than by a composite index.
+  Stream<List<MissedBusRequest>> watchMissedBusForDriver(String driverId) =>
+      Db.missedBusRequests
+          .where('assignedDriverId', isEqualTo: driverId)
+          .snapshots()
+          .docsList
+          .map(
+            (list) => list
+              ..sort(
+                (a, b) => (b.createdAt ?? DateTime(0)).compareTo(
+                  a.createdAt ?? DateTime(0),
+                ),
+              ),
+          );
+
+  // ── Access history ───────────────────────────────────────────────────────
+
+  /// `users/{uid}/accessLog`, newest first — written by the mobile app on
+  /// every sign-in and sign-out. Single-field ordering, no composite index.
+  Stream<List<AccessLogEntry>> watchAccessLog(String uid, {int limit = 50}) {
+    if (uid.isEmpty) return Stream.value(const []);
+    return Db.fs
+        .collection('users')
+        .doc(uid)
+        .collection('accessLog')
+        .orderBy('at', descending: true)
+        .limit(limit)
+        .snapshots()
+        .map(
+          (s) => s.docs
+              .map((d) => AccessLogEntry.fromMap(d.id, d.data()))
+              .toList(),
+        );
+  }
+
+  // ── Safety, money and ratings per driver ─────────────────────────────────
+
+  /// SOS and safety incidents raised by / about [driverId], newest first.
+  Stream<List<Incident>> watchIncidentsForDriver(String driverId) => Db
+      .incidents
+      .where('driverId', isEqualTo: driverId)
+      .snapshots()
+      .docsList
+      .map(
+        (list) => list
+          ..sort(
+            (a, b) => (b.createdAt ?? DateTime(0)).compareTo(
+              a.createdAt ?? DateTime(0),
+            ),
+          ),
+      );
+
+  /// Every payment addressed to [driverId] (any status) — the Earnings tab
+  /// keeps only `paid` ones; single-field filter, no composite index.
+  Stream<List<Payment>> watchPaymentsForDriver(String driverId) =>
+      Db.payments.where('driverId', isEqualTo: driverId).snapshots().docsList;
+
+  /// Seat requests addressed to [driverId] — the fee a family agreed is
+  /// read from here when the student document predates `monthlyFeePaisa`.
+  Stream<List<RideRequest>> watchRideRequestsForDriver(String driverId) => Db
+      .rideRequests
+      .where('driverId', isEqualTo: driverId)
+      .snapshots()
+      .docsList;
+
+  /// One driver's ratings. `Driver.rating`/`ratingCount` are never kept
+  /// current, so the figure is always computed from these
+  /// (`DriverRatingSummary.of`).
+  Stream<List<DriverRating>> watchRatingsForDriver(String driverId) => Db
+      .ratings
+      .where('driverId', isEqualTo: driverId)
+      .snapshots()
+      .docsList;
+
+  /// Every driver rating, for the driver list's per-driver summaries.
+  Stream<List<DriverRating>> watchAllRatings() =>
+      Db.ratings.snapshots().docsList;
+
   // ── App feedback ──────────────────────────────────────────────────────────
 
   /// Newest "Rate the App" submissions — used for the admin notifications
@@ -355,26 +574,44 @@ class AdminRepository {
       .snapshots()
       .docsList;
 
-  // `AppFeedback` only stores `userId` (see its doc comment — there's no
-  // denormalized name field on the feedback document itself), so showing a
-  // submitter's name on the Notifications screen means a lookup against
-  // `users/{uid}`. Cached in memory and keyed by uid: the "Recent Feedback"
-  // list re-fetches every name on each rebuild otherwise, and the same admin
-  // or driver showing up across several feedback entries would mean a
-  // repeated read for a name that never changes mid-session.
-  final Map<String, String?> _userNameCache = {};
+  /// Every "Rate the App" submission, newest first — the full Feedback
+  /// screen and the dashboard's average.
+  Stream<List<AppFeedback>> watchAllFeedback({int limit = 500}) => Db
+      .appFeedback
+      .orderBy('timestamp', descending: true)
+      .limit(limit)
+      .snapshots()
+      .docsList;
+
+  // Feedback written before `userName`/`userRole` existed carries only
+  // `userId`, so showing who wrote it means a lookup against `users/{uid}`.
+  // Cached in memory and keyed by uid: a list rebuild would otherwise
+  // re-read the same account for every row, for a name that never changes
+  // mid-session. The in-flight future is cached, not just the result, so a
+  // list of twenty rows by one person costs one read, not twenty.
+  final Map<String, Future<AppUser?>> _userCache = {};
+
+  /// The account behind [uid], or null if it no longer exists.
+  Future<AppUser?> fetchUserCached(String uid) {
+    if (uid.isEmpty) return Future.value(null);
+    return _userCache.putIfAbsent(uid, () async {
+      try {
+        return (await Db.users.doc(uid).get()).data();
+      } catch (_) {
+        // Don't pin a transient failure in the cache forever.
+        _userCache.remove(uid);
+        return null;
+      }
+    });
+  }
 
   /// Resolves a feedback submitter's display name, or `null` if the account
   /// no longer exists (e.g. hard-deleted before soft delete existed) — the
   /// caller decides the "Anonymous User" fallback text, this just reports
   /// what's actually in Firestore.
   Future<String?> fetchUserName(String uid) async {
-    if (_userNameCache.containsKey(uid)) return _userNameCache[uid];
-    final user = await Db.users.doc(uid).get();
-    final name = user.data()?.name;
-    final resolved = (name == null || name.isEmpty) ? null : name;
-    _userNameCache[uid] = resolved;
-    return resolved;
+    final name = (await fetchUserCached(uid))?.name;
+    return (name == null || name.isEmpty) ? null : name;
   }
 
   // ── Live Chat support inbox ──────────────────────────────────────────────
@@ -416,4 +653,41 @@ class AdminRepository {
       createdAt: DateTime.now(),
     ),
   );
+}
+
+/// One row of `users/{uid}/accessLog` — a sign-in or sign-out, written by
+/// the mobile app's presence service.
+class AccessLogEntry {
+  final String id;
+
+  /// `signIn` / `signOut`.
+  final String event;
+
+  /// `android`, `iOS`, … as the device reported it.
+  final String platform;
+  final DateTime? at;
+
+  const AccessLogEntry({
+    required this.id,
+    required this.event,
+    this.platform = '',
+    this.at,
+  });
+
+  bool get isSignIn => event == 'signIn';
+
+  /// "Signed in" / "Signed out", or the raw event for anything newer.
+  String get label => switch (event) {
+    'signIn' => 'Signed in',
+    'signOut' => 'Signed out',
+    _ => event.isEmpty ? 'Activity' : event,
+  };
+
+  factory AccessLogEntry.fromMap(String id, Map<String, dynamic> m) =>
+      AccessLogEntry(
+        id: id,
+        event: asString(m['event']),
+        platform: asString(m['platform']),
+        at: asDateOrNull(m['at']),
+      );
 }

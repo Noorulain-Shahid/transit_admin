@@ -5,6 +5,7 @@ import '../../app/locale_provider.dart';
 import '../../services/audit_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/glass_card.dart';
+import '../../widgets/responsive.dart';
 
 /// Real "Login Session History" viewer — reads the `loginSessions`
 /// collection, which `AuthService.signInWithEmail` now writes to on every
@@ -69,7 +70,7 @@ class _AdminSessionHistoryState extends State<AdminSessionHistory> {
                         return _EmptyState();
                       }
                       return ListView.builder(
-                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+                        padding: centeredListPadding(context),
                         itemCount: sessions.length,
                         itemBuilder: (context, i) =>
                             _SessionRow(entry: sessions[i], isCurrent: i == 0),
@@ -96,7 +97,7 @@ class _Header extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
       child: Row(
         children: [
-          GestureDetector(
+          Clickable(
             onTap: onBack,
             child: Container(
               width: 38,

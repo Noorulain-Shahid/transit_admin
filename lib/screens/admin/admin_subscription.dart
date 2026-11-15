@@ -8,6 +8,7 @@ import '../../app/locale_provider.dart';
 import '../../data/admin_repository.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/glass_card.dart';
+import '../../widgets/responsive.dart';
 
 /// Manages each student's real `subscriptionStatus` and shows real collected/
 /// pending/overdue totals from `payments`. The screen used to model a flat
@@ -110,38 +111,50 @@ class _AdminSubscriptionState extends State<AdminSubscription> {
     _testServerFetch();
     // ignore: avoid_print
     print('[AdminSubscription] students: subscribing...');
-    _studentsSub = _repo.watchStudents().timeout(const Duration(seconds: 5)).listen(
-      (v) {
-        // ignore: avoid_print
-        print('[AdminSubscription] students: got ${v.length} doc(s)');
-        setState(() {
-          _students = v;
-          _studentsError = null;
-        });
-      },
-      onError: (e) {
-        // ignore: avoid_print
-        print('[AdminSubscription] students: ERROR -> $e');
-        if (mounted) setState(() => _studentsError = e);
-      },
-    );
+    _studentsSub = _repo
+        .watchStudents()
+        .timeout(const Duration(seconds: 5))
+        .listen(
+          (v) {
+            // ignore: avoid_print
+            print('[AdminSubscription] students: got ${v.length} doc(s)');
+            setState(() {
+              _students = v;
+              _studentsError = null;
+            });
+          },
+          onError: (e) {
+            // ignore: avoid_print
+            print('[AdminSubscription] students: ERROR -> $e');
+            // The 5s timeout also fires on a healthy listener that simply had
+            // nothing new to say for 5s. Once data has arrived that silence is
+            // normal, not a failure — only a timeout *before* the first
+            // snapshot means the listener is stuck.
+            if (e is TimeoutException && _students != null) return;
+            if (mounted) setState(() => _studentsError = e);
+          },
+        );
     // ignore: avoid_print
     print('[AdminSubscription] payments: subscribing...');
-    _paymentsSub = _repo.watchAllPayments().timeout(const Duration(seconds: 5)).listen(
-      (v) {
-        // ignore: avoid_print
-        print('[AdminSubscription] payments: got ${v.length} doc(s)');
-        setState(() {
-          _payments = v;
-          _paymentsError = null;
-        });
-      },
-      onError: (e) {
-        // ignore: avoid_print
-        print('[AdminSubscription] payments: ERROR -> $e');
-        if (mounted) setState(() => _paymentsError = e);
-      },
-    );
+    _paymentsSub = _repo
+        .watchAllPayments()
+        .timeout(const Duration(seconds: 5))
+        .listen(
+          (v) {
+            // ignore: avoid_print
+            print('[AdminSubscription] payments: got ${v.length} doc(s)');
+            setState(() {
+              _payments = v;
+              _paymentsError = null;
+            });
+          },
+          onError: (e) {
+            // ignore: avoid_print
+            print('[AdminSubscription] payments: ERROR -> $e');
+            if (e is TimeoutException && _payments != null) return;
+            if (mounted) setState(() => _paymentsError = e);
+          },
+        );
   }
 
   Future<void> _retry() async {
@@ -251,186 +264,198 @@ class _AdminSubscriptionState extends State<AdminSubscription> {
         child: SafeArea(
           child: SingleChildScrollView(
             padding: const EdgeInsets.only(bottom: 100),
-            child: Column(
-              children: [
-                _Header(onBack: () => context.pop()),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Column(
-                    children: [
-                      GlassCard(
-                        padding: const EdgeInsets.all(18),
-                        gradient: LinearGradient(
-                          colors: [
-                            AppTheme.purple.withValues(alpha: 0.14),
-                            AppTheme.info.withValues(alpha: 0.08),
-                          ],
-                        ),
-                        borderColor: AppTheme.purple.withValues(alpha: 0.2),
-                        child: Row(
-                          children: [
-                            Container(
-                              width: 54,
-                              height: 54,
-                              decoration: BoxDecoration(
-                                gradient: AppTheme.mainGradient,
-                                borderRadius: BorderRadius.circular(16),
+            child: ResponsiveBody(
+              maxWidth: 1280,
+              child: Column(
+                children: [
+                  _Header(onBack: () => context.pop()),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Column(
+                      children: [
+                        GlassCard(
+                          padding: const EdgeInsets.all(18),
+                          gradient: LinearGradient(
+                            colors: [
+                              AppTheme.purple.withValues(alpha: 0.14),
+                              AppTheme.info.withValues(alpha: 0.08),
+                            ],
+                          ),
+                          borderColor: AppTheme.purple.withValues(alpha: 0.2),
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 54,
+                                height: 54,
+                                decoration: BoxDecoration(
+                                  gradient: AppTheme.mainGradient,
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                                child: const Icon(
+                                  Icons.subscriptions_rounded,
+                                  color: Colors.white,
+                                  size: 28,
+                                ),
                               ),
-                              child: const Icon(
-                                Icons.subscriptions_rounded,
-                                color: Colors.white,
-                                size: 28,
-                              ),
-                            ),
-                            const SizedBox(width: 14),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    AppStrings.t('subscription_management'),
-                                    style: TextStyle(
-                                      color: context.textPrimary,
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w800,
+                              const SizedBox(width: 14),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      AppStrings.t('subscription_management'),
+                                      style: TextStyle(
+                                        color: context.textPrimary,
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w800,
+                                      ),
                                     ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    AppStrings.t('subscription_desc'),
-                                    style: TextStyle(
-                                      color: context.textSecondary,
-                                      fontSize: 12,
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      AppStrings.t('subscription_desc'),
+                                      style: TextStyle(
+                                        color: context.textSecondary,
+                                        fontSize: 12,
+                                      ),
                                     ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      GlassCard(
-                        padding: const EdgeInsets.all(18),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              AppStrings.t('fee_collection_title'),
-                              style: TextStyle(
-                                color: context.textPrimary,
-                                fontSize: 15,
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-                            Row(
-                              children: [
-                                _StatPill(
-                                  label: AppStrings.t('collected_lbl'),
-                                  value: feeValue(_fmtPaisa(collected)),
-                                  color: AppTheme.success,
+                                  ],
                                 ),
-                                const SizedBox(width: 8),
-                                _StatPill(
-                                  label: AppStrings.t('pending_lbl'),
-                                  value: feeValue(_fmtPaisa(pending)),
-                                  color: AppTheme.warning,
-                                ),
-                                const SizedBox(width: 8),
-                                _StatPill(
-                                  label: AppStrings.t('overdue_lbl'),
-                                  value: feeValue(_fmtPaisa(overdue)),
-                                  color: AppTheme.error,
-                                ),
-                              ],
-                            ),
-                            if (_paymentsError != null) ...[
-                              const SizedBox(height: 8),
-                              _InlineError(
-                                error: _paymentsError!,
-                                onRetry: _retry,
                               ),
                             ],
-                            const SizedBox(height: 12),
-                            GestureDetector(
-                              onTap: () => context.push('/admin/fees'),
-                              child: Row(
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        GlassCard(
+                          padding: const EdgeInsets.all(18),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                AppStrings.t('fee_collection_title'),
+                                style: TextStyle(
+                                  color: context.textPrimary,
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              Row(
                                 children: [
-                                  Text(
-                                    AppStrings.t(
-                                      'view_full_fee_breakdown_action',
-                                    ),
-                                    style: TextStyle(
-                                      color: AppTheme.adminAccent,
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w600,
-                                    ),
+                                  _StatPill(
+                                    label: AppStrings.t('collected_lbl'),
+                                    value: feeValue(_fmtPaisa(collected)),
+                                    color: AppTheme.success,
                                   ),
-                                  const SizedBox(width: 4),
-                                  const Icon(
-                                    Icons.arrow_forward_rounded,
-                                    color: AppTheme.adminAccent,
-                                    size: 14,
+                                  const SizedBox(width: 8),
+                                  _StatPill(
+                                    label: AppStrings.t('pending_lbl'),
+                                    value: feeValue(_fmtPaisa(pending)),
+                                    color: AppTheme.warning,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  _StatPill(
+                                    label: AppStrings.t('overdue_lbl'),
+                                    value: feeValue(_fmtPaisa(overdue)),
+                                    color: AppTheme.error,
                                   ),
                                 ],
                               ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      GlassCard(
-                        padding: const EdgeInsets.all(18),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              AppStrings.t('students_lbl'),
-                              style: TextStyle(
-                                color: context.textPrimary,
-                                fontSize: 15,
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-                            if (_studentsError != null)
-                              _InlineError(
-                                error: _studentsError!,
-                                onRetry: _retry,
-                              )
-                            else if (students == null)
-                              const Padding(
-                                padding: EdgeInsets.symmetric(vertical: 16),
-                                child: Center(
-                                  child: CircularProgressIndicator(),
+                              if (_paymentsError != null) ...[
+                                const SizedBox(height: 8),
+                                _InlineError(
+                                  error: _paymentsError!,
+                                  onRetry: _retry,
                                 ),
-                              )
-                            else if (students.isEmpty)
+                              ],
+                              const SizedBox(height: 12),
+                              Clickable(
+                                onTap: () => context.push('/admin/fees'),
+                                child: Row(
+                                  children: [
+                                    Text(
+                                      AppStrings.t(
+                                        'view_full_fee_breakdown_action',
+                                      ),
+                                      style: TextStyle(
+                                        color: AppTheme.adminAccent,
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    const Icon(
+                                      Icons.arrow_forward_rounded,
+                                      color: AppTheme.adminAccent,
+                                      size: 14,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        GlassCard(
+                          padding: const EdgeInsets.all(18),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
                               Text(
-                                'No students registered yet.',
+                                AppStrings.t('students_lbl'),
                                 style: TextStyle(
-                                  color: context.textSecondary,
-                                ),
-                              )
-                            else
-                              ...students.map(
-                                (s) => _SubscriberRow(
-                                  student: s,
-                                  color: _statusColor(s.subscriptionStatus),
-                                  statusLabel: _statusLabel(
-                                    s.subscriptionStatus,
-                                  ),
-                                  onToggle: () => _toggleSubscription(s),
+                                  color: context.textPrimary,
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w800,
                                 ),
                               ),
-                          ],
+                              const SizedBox(height: 12),
+                              if (_studentsError != null)
+                                _InlineError(
+                                  error: _studentsError!,
+                                  onRetry: _retry,
+                                )
+                              else if (students == null)
+                                const Padding(
+                                  padding: EdgeInsets.symmetric(vertical: 16),
+                                  child: Center(
+                                    child: CircularProgressIndicator(),
+                                  ),
+                                )
+                              else if (students.isEmpty)
+                                Text(
+                                  'No students registered yet.',
+                                  style: TextStyle(
+                                    color: context.textSecondary,
+                                  ),
+                                )
+                              else
+                                ResponsiveGrid(
+                                  minItemWidth: 420,
+                                  runSpacing: 0,
+                                  children: students
+                                      .map(
+                                        (s) => _SubscriberRow(
+                                          student: s,
+                                          color: _statusColor(
+                                            s.subscriptionStatus,
+                                          ),
+                                          statusLabel: _statusLabel(
+                                            s.subscriptionStatus,
+                                          ),
+                                          onToggle: () =>
+                                              _toggleSubscription(s),
+                                        ),
+                                      )
+                                      .toList(),
+                                ),
+                            ],
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
@@ -463,7 +488,11 @@ class _InlineError extends StatelessWidget {
         children: [
           Row(
             children: [
-              Icon(Icons.error_outline_rounded, color: AppTheme.error, size: 18),
+              Icon(
+                Icons.error_outline_rounded,
+                color: AppTheme.error,
+                size: 18,
+              ),
               const SizedBox(width: 8),
               Text(
                 'Firestore error',
@@ -600,7 +629,7 @@ class _SubscriberRow extends StatelessWidget {
                 ],
               ),
             ),
-            GestureDetector(
+            Clickable(
               onTap: onToggle,
               child: Container(
                 padding: const EdgeInsets.symmetric(
@@ -641,7 +670,7 @@ class _Header extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
       child: Row(
         children: [
-          GestureDetector(
+          Clickable(
             onTap: onBack,
             child: Container(
               width: 38,

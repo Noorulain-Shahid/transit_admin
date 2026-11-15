@@ -170,6 +170,7 @@ class AppStrings {
     'no_driver_status': 'No driver',
     'university_type': 'University',
     'college_type': 'College',
+    'academy_type': 'Academy',
 
     // Command Center (main dashboard) screen
     'command_center': 'Command Center',
@@ -456,6 +457,7 @@ class AppStrings {
     'no_driver_status': 'کوئی ڈرائیور نہیں',
     'university_type': 'یونیورسٹی',
     'college_type': 'کالج',
+    'academy_type': 'اکیڈمی',
 
     // Command Center (main dashboard) screen — kept conversational, mixing
     // plain Urdu with the transliterated tech terms Pakistani admins

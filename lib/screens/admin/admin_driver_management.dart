@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:transit_core/transit_core.dart';
+import '../../app/admin_format.dart';
 import '../../app/locale_provider.dart';
 import '../../data/admin_repository.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/entity_widgets.dart';
 import '../../widgets/glass_card.dart';
 import '../../widgets/mini_stat.dart';
+import '../../widgets/responsive.dart';
 
 const _statusFilters = [
   'All',
@@ -38,12 +41,24 @@ String _filterDisplay(String filter) => switch (filter) {
 // in memory rather than per-filter Firestore queries. See `_filterStatus`'s
 // doc comment below for the equivalent server-side query, if this ever
 // needs to move off watching the full collection.
-bool _matchesFilter(Driver d, String filter) => switch (filter) {
+//
+// Online / Offline / On Trip are *live* facts, not `Driver.status`: the
+// driver app writes `status` once at onboarding and the Firestore rule that
+// would let it flip online/offline isn't deployed, so filtering on it put
+// every driver under "Offline". Presence comes from the driver's
+// `users/{uid}` heartbeat ([online]) and "On Trip" from a trip actually in
+// progress today ([onTrip]).
+bool _matchesFilter(
+  Driver d,
+  String filter, {
+  required bool online,
+  required bool onTrip,
+}) => switch (filter) {
   'Eligible' => d.status != DriverStatus.suspended,
   'Pending' => d.status == DriverStatus.pendingVerification,
-  'Online' => d.status == DriverStatus.online,
-  'Offline' => d.status == DriverStatus.offline,
-  'On Trip' => d.status == DriverStatus.onTrip,
+  'Online' => online,
+  'Offline' => !online,
+  'On Trip' => onTrip,
   'Suspended' => d.status == DriverStatus.suspended,
   _ => true,
 };
@@ -98,6 +113,16 @@ class _AdminDriverManagementState extends State<AdminDriverManagement> {
   //     // silently include any new status; whereIn would not).
   String _filterStatus = 'All';
 
+  // Presence (each driver's `users/{uid}` heartbeat), ratings (computed —
+  // `Driver.rating` is never maintained) and today's trips (for "On Trip").
+  late final Stream<List<AppUser>> _driverUsersStream = AdminRepository.instance
+      .watchUsersByRole(UserRole.driver, includeDeleted: true);
+  late final Stream<List<DriverRating>> _ratingsStream = AdminRepository
+      .instance
+      .watchAllRatings();
+  late final Stream<List<Trip>> _tripsTodayStream = AdminRepository.instance
+      .watchTripsToday();
+
   @override
   void initState() {
     super.initState();
@@ -112,60 +137,119 @@ class _AdminDriverManagementState extends State<AdminDriverManagement> {
     super.dispose();
   }
 
-  List<Driver> _filtered(List<Driver> drivers) => drivers.where((d) {
-    if (_search.isNotEmpty &&
-        !d.name.toLowerCase().contains(_search.toLowerCase())) {
-      return false;
-    }
-    return _matchesFilter(d, _filterStatus);
-  }).toList();
+  List<Driver> _filtered(
+    List<Driver> drivers,
+    Map<String, AppUser> users,
+    Set<String> onTrip,
+    DateTime now,
+  ) {
+    final q = _search.trim().toLowerCase();
+    return drivers.where((d) {
+      if (q.isNotEmpty &&
+          !d.name.toLowerCase().contains(q) &&
+          !d.phone.toLowerCase().contains(q)) {
+        return false;
+      }
+      return _matchesFilter(
+        d,
+        _filterStatus,
+        online: isUserOnline(users[d.id], now),
+        onTrip: onTrip.contains(d.id),
+      );
+    }).toList();
+  }
 
   @override
   Widget build(BuildContext context) {
+    return StreamBuilder<List<AppUser>>(
+      stream: _driverUsersStream,
+      builder: (context, usersSnap) => StreamBuilder<List<DriverRating>>(
+        stream: _ratingsStream,
+        builder: (context, ratingsSnap) => StreamBuilder<List<Trip>>(
+          stream: _tripsTodayStream,
+          builder: (context, tripsSnap) {
+            final users = {
+              for (final u in usersSnap.data ?? const <AppUser>[]) u.uid: u,
+            };
+            final byDriver = <String, List<DriverRating>>{};
+            for (final r in ratingsSnap.data ?? const <DriverRating>[]) {
+              byDriver.putIfAbsent(r.driverId, () => []).add(r);
+            }
+            final onTrip = {
+              for (final t in tripsSnap.data ?? const <Trip>[])
+                if (t.isLive) t.driverId,
+            };
+            // The presence-based filters must re-run as heartbeats age.
+            return PresenceBuilder(
+              builder: (context, now) =>
+                  _buildList(context, users, byDriver, onTrip, now),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildList(
+    BuildContext context,
+    Map<String, AppUser> users,
+    Map<String, List<DriverRating>> ratings,
+    Set<String> onTrip,
+    DateTime now,
+  ) {
     return StreamBuilder<List<Driver>>(
       stream: _driversStream,
       builder: (context, snap) {
         final drivers = snap.data ?? const <Driver>[];
-        final filtered = _filtered(drivers);
+        final filtered = _filtered(drivers, users, onTrip, now);
         return SingleChildScrollView(
           padding: const EdgeInsets.only(bottom: 120),
-          child: Column(
-            children: [
-              _buildHeader(context, drivers.length),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Column(
-                  children: [
-                    _buildSearch(context),
-                    const SizedBox(height: 10),
-                    _buildFilters(),
-                    const SizedBox(height: 12),
-                    _buildStats(context, drivers),
-                    const SizedBox(height: 14),
-                    if (!snap.hasData)
-                      const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 40),
-                        child: Center(child: CircularProgressIndicator()),
-                      )
-                    else ...[
-                      ...filtered.map(
-                        (d) => Padding(
-                          padding: const EdgeInsets.only(bottom: 10),
-                          child: _DriverCard(
-                            driver: d,
-                            onTap: () => context.push(
-                              '/admin/driver-detail',
-                              extra: d.id,
-                            ),
-                          ),
+          child: ResponsiveBody(
+            child: Column(
+              children: [
+                _buildHeader(context, drivers.length),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Column(
+                    children: [
+                      _buildSearch(context),
+                      const SizedBox(height: 10),
+                      _buildFilters(),
+                      const SizedBox(height: 12),
+                      _buildStats(context, drivers),
+                      const SizedBox(height: 14),
+                      if (snap.hasError)
+                        LoadErrorView(error: snap.error, what: 'drivers')
+                      else if (!snap.hasData)
+                        const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 40),
+                          child: Center(child: CircularProgressIndicator()),
+                        )
+                      else ...[
+                        ResponsiveGrid(
+                          children: [
+                            for (final d in filtered)
+                              _DriverCard(
+                                driver: d,
+                                user: users[d.id],
+                                rating: DriverRatingSummary.of(
+                                  ratings[d.id] ?? const [],
+                                ),
+                                onTrip: onTrip.contains(d.id),
+                                onTap: () => context.push(
+                                  '/admin/driver-detail',
+                                  extra: d.id,
+                                ),
+                              ),
+                          ],
                         ),
-                      ),
-                      if (filtered.isEmpty) _buildEmpty(context),
+                        if (filtered.isEmpty) _buildEmpty(context),
+                      ],
                     ],
-                  ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         );
       },
@@ -326,30 +410,47 @@ class _AdminDriverManagementState extends State<AdminDriverManagement> {
 // ─── Driver Card ─────────────────────────────────────────────────────────────
 class _DriverCard extends StatelessWidget {
   final Driver driver;
+
+  /// The driver's `users/{uid}` doc — where presence lives.
+  final AppUser? user;
+  final DriverRatingSummary rating;
+  final bool onTrip;
   final VoidCallback onTap;
-  const _DriverCard({required this.driver, required this.onTap});
+  const _DriverCard({
+    required this.driver,
+    required this.user,
+    required this.rating,
+    required this.onTrip,
+    required this.onTap,
+  });
   @override
   Widget build(BuildContext context) {
+    final institutes = driver.serviceAreas
+        .map((a) => a.name)
+        .where((n) => n.isNotEmpty)
+        .toList();
+    final seats = driver.vehicleSeats;
+    final subtitle = [
+      institutes.isEmpty
+          ? 'No institutes listed'
+          : institutes.length <= 2
+          ? institutes.join(', ')
+          : '${institutes.take(2).join(', ')} +${institutes.length - 2}',
+      if (seats > 0) '$seats seats',
+    ].join(' • ');
     return GlassCard(
       onTap: onTap,
       padding: const EdgeInsets.all(14),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Container(
-                width: 46,
-                height: 46,
-                decoration: BoxDecoration(
-                  color: AppTheme.driverCyan.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(
-                    color: AppTheme.driverCyan.withValues(alpha: 0.2),
-                  ),
-                ),
-                child: const Center(
-                  child: Text('🚐', style: TextStyle(fontSize: 22)),
-                ),
+              EntityAvatar(
+                photoUrl: driver.photoUrl,
+                color: AppTheme.driverCyan,
+                fallbackEmoji: '🚐',
+                topRated: rating.isTopRated,
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -366,9 +467,7 @@ class _DriverCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      driver.busId?.isNotEmpty == true
-                          ? '${AppStrings.t('bus_prefix')} ${driver.busId}'
-                          : 'No bus assigned',
+                      subtitle,
                       style: TextStyle(
                         color: context.textSecondary,
                         fontSize: 12,
@@ -381,42 +480,45 @@ class _DriverCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 10),
-          Row(
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              // Rating stars
+              // Computed from the `ratings` collection — the driver
+              // document's own `rating` is never kept current.
               Row(
-                children: List.generate(
-                  5,
-                  (i) => Icon(
-                    i < driver.rating.floor()
-                        ? Icons.star_rounded
-                        : (i < driver.rating
-                              ? Icons.star_half_rounded
-                              : Icons.star_border_rounded),
-                    color: AppTheme.studentAmber,
-                    size: 16,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  RatingStars(value: rating.average),
+                  const SizedBox(width: 6),
+                  Text(
+                    rating.label,
+                    style: TextStyle(
+                      color: context.textSecondary,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
-                ),
+                ],
               ),
-              const SizedBox(width: 6),
-              Text(
-                driver.rating.toStringAsFixed(1),
-                style: TextStyle(
-                  color: context.textSecondary,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const Spacer(),
-              StatusBadge(
-                label: driverStatusLabel(driver.status),
-                color: driverStatusColor(driver.status),
-              ),
+              if (rating.isTopRated) const TopRatedBadge(),
             ],
           ),
-          const SizedBox(height: 6),
-          Row(
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
             children: [
+              PresenceBadge(user: user),
+              if (onTrip)
+                const DotBadge(label: 'On a trip', color: AppTheme.info),
+              if (driver.status == DriverStatus.suspended ||
+                  driver.status == DriverStatus.pendingVerification)
+                StatusBadge(
+                  label: driverStatusLabel(driver.status),
+                  color: driverStatusColor(driver.status),
+                ),
               _InfoPill(
                 icon: Icons.badge_rounded,
                 label: driver.licenseNumber.isEmpty
@@ -424,12 +526,12 @@ class _DriverCard extends StatelessWidget {
                     : driver.licenseNumber,
                 color: AppTheme.adminEmerald,
               ),
-              const Spacer(),
-              _InfoPill(
-                icon: Icons.phone_rounded,
-                label: driver.phone,
-                color: AppTheme.info,
-              ),
+              if (driver.phone.isNotEmpty)
+                _InfoPill(
+                  icon: Icons.phone_rounded,
+                  label: driver.phone,
+                  color: AppTheme.info,
+                ),
             ],
           ),
         ],

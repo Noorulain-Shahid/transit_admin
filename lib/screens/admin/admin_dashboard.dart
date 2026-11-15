@@ -10,7 +10,10 @@ import '../../theme/app_theme.dart';
 import '../../widgets/glass_card.dart';
 import '../../widgets/mini_chart.dart';
 import '../../widgets/responsive.dart';
+import 'admin_feedback.dart' show AppFeedbackSummaryCard;
 import 'admin_user_models.dart' hide DriverStatus, SubscriptionStatus;
+import '../../app/admin_format.dart';
+import '../../widgets/entity_widgets.dart';
 
 class AdminDashboard extends StatefulWidget {
   final void Function(int) onNavigate;
@@ -26,6 +29,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
   List<Student>? _students;
   List<AppUser>? _parents;
   List<Driver>? _drivers;
+  List<AppUser>? _driverUsers;
   List<Trip>? _tripsToday;
   List<Payment>? _paymentsThisMonth;
 
@@ -37,6 +41,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
   StreamSubscription<List<Student>>? _studentsSub;
   StreamSubscription<List<AppUser>>? _parentsSub;
   StreamSubscription<List<Driver>>? _driversSub;
+  StreamSubscription<List<AppUser>>? _driverUsersSub;
   StreamSubscription<List<Trip>>? _tripsSub;
   StreamSubscription<List<Payment>>? _paymentsSub;
 
@@ -90,14 +95,22 @@ class _AdminDashboardState extends State<AdminDashboard> {
       (v) => setState(() => _students = v),
       onError: (e) => _onStreamError('Students', e),
     );
-    _parentsSub = _repo.watchUsersByRole(UserRole.parent).listen(
-      (v) => setState(() => _parents = v),
-      onError: (e) => _onStreamError('Parents', e),
-    );
+    _parentsSub = _repo
+        .watchUsersByRole(UserRole.parent)
+        .listen(
+          (v) => setState(() => _parents = v),
+          onError: (e) => _onStreamError('Parents', e),
+        );
     _driversSub = _repo.watchDrivers().listen(
       (v) => setState(() => _drivers = v),
       onError: (e) => _onStreamError('Drivers', e),
     );
+    _driverUsersSub = _repo
+        .watchUsersByRole(UserRole.driver)
+        .listen(
+          (v) => setState(() => _driverUsers = v),
+          onError: (e) => _onStreamError('Driver presence', e),
+        );
     _tripsSub = _repo.watchTripsToday().listen(
       (v) => setState(() => _tripsToday = v),
       onError: (e) => _onStreamError('Trips', e),
@@ -155,6 +168,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
     _studentsSub?.cancel();
     _parentsSub?.cancel();
     _driversSub?.cancel();
+    _driverUsersSub?.cancel();
     _tripsSub?.cancel();
     _paymentsSub?.cancel();
     LocaleProvider.instance.removeListener(_onLangChanged);
@@ -183,16 +197,33 @@ class _AdminDashboardState extends State<AdminDashboard> {
                     _buildLoadErrorBanner(context),
                     const SizedBox(height: 14),
                   ],
-                  LayoutBuilder(
-                    builder: (context, constraints) =>
-                        _buildOverviewCards(context, constraints.maxWidth),
+                  // Re-run on the presence clock so "Online" drops a driver
+                  // whose heartbeat has gone stale.
+                  PresenceBuilder(
+                    builder: (context, now) => LayoutBuilder(
+                      builder: (context, constraints) => _buildOverviewCards(
+                        context,
+                        constraints.maxWidth,
+                        now,
+                      ),
+                    ),
                   ),
                   const SizedBox(height: 14),
-                  _buildSubscriptionAnalytics(context),
-                  const SizedBox(height: 14),
-                  _buildAlerts(context),
-                  const SizedBox(height: 14),
-                  _buildAnalytics(context),
+                  // Two columns on a wide window: analytics left, alerts and
+                  // feedback right; one column on a phone.
+                  TwoPane(
+                    gap: 14,
+                    primary: [
+                      _buildSubscriptionAnalytics(context),
+                      _buildAnalytics(context),
+                    ],
+                    secondary: [
+                      _buildAlerts(context),
+                      // App-level ratings and comments from every role, with
+                      // the overall average; "View all" opens the full list.
+                      const AppFeedbackSummaryCard(),
+                    ],
+                  ),
                 ],
               ),
             ),
@@ -260,7 +291,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
               ],
             ),
           ),
-          GestureDetector(
+          Clickable(
             onTap: () => context.push('/admin/notifications'),
             child: Container(
               width: 42,
@@ -313,7 +344,11 @@ class _AdminDashboardState extends State<AdminDashboard> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.error_outline_rounded, color: AppTheme.error, size: 18),
+          const Icon(
+            Icons.error_outline_rounded,
+            color: AppTheme.error,
+            size: 18,
+          ),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
@@ -327,14 +362,29 @@ class _AdminDashboardState extends State<AdminDashboard> {
   }
 
   // ── Overview Cards ──────────────────────────────────────────────────────────
-  Widget _buildOverviewCards(BuildContext context, double availableWidth) {
+  Widget _buildOverviewCards(
+    BuildContext context,
+    double availableWidth,
+    DateTime now,
+  ) {
     final studentCount = _students?.length;
     final parentCount = _parents?.length;
     final driverCount = _drivers?.length;
     final activeTrips = _tripsToday
         ?.where((t) => t.status == TripStatus.inProgress)
         .length;
-    final online = _drivers?.where((d) => d.status == DriverStatus.online).length;
+    // Live presence from each driver's `users` heartbeat — `Driver.status`
+    // is never flipped by the driver app, so counting `online` there was
+    // always zero.
+    final online = (_drivers == null || _driverUsers == null)
+        ? null
+        : () {
+            final live = {
+              for (final u in _driverUsers!)
+                if (isUserOnline(u, now)) u.uid,
+            };
+            return _drivers!.where((d) => live.contains(d.id)).length;
+          }();
     final pending = _drivers
         ?.where((d) => d.status == DriverStatus.pendingVerification)
         .length;
@@ -352,8 +402,9 @@ class _AdminDashboardState extends State<AdminDashboard> {
     // manage their own account rather than being a dependent monitored by
     // a parent — so only `instituteType == 'University'` students count as
     // a primary account here; School/College students stay excluded.
-    final universityStudents =
-        _students?.where((s) => s.instituteType == 'University').toList();
+    final universityStudents = _students
+        ?.where((s) => s.instituteType == 'University')
+        .toList();
     final suspendedDrivers = _drivers
         ?.where((d) => d.status == DriverStatus.suspended)
         .length;
@@ -390,11 +441,15 @@ class _AdminDashboardState extends State<AdminDashboard> {
           // the full device width; this already accounts for
           // `ResponsiveBody`'s own max-width cap) is actually wider than a
           // phone.
-          crossAxisCount: gridColumnsFor(availableWidth),
+          //
+          // Six in one row once there's room, otherwise two rows of three
+          // (never 4 + 2). Height is capped so a wide window gets short,
+          // wide tiles instead of 250-pixel-tall squares.
+          crossAxisCount: _statColumns(availableWidth),
           padding: EdgeInsets.zero,
           mainAxisSpacing: 8,
           crossAxisSpacing: 8,
-          childAspectRatio: 0.95,
+          childAspectRatio: _statAspect(availableWidth),
           children: [
             _StatCard(
               icon: Icons.school_rounded,
@@ -474,6 +529,15 @@ class _AdminDashboardState extends State<AdminDashboard> {
     );
   }
 
+  static int _statColumns(double width) => width >= 900 ? 6 : 3;
+
+  static double _statAspect(double width) {
+    final cols = _statColumns(width);
+    final itemWidth = (width - 8 * (cols - 1)) / cols;
+    final ratio = itemWidth / 116;
+    return ratio < 0.95 ? 0.95 : ratio;
+  }
+
   static String _fmtCount(int? n) => n == null ? '…' : '$n';
 
   static String _fmtPaisa(int paisa) {
@@ -489,15 +553,18 @@ class _AdminDashboardState extends State<AdminDashboard> {
   // ── Subscription Analytics ─────────────────────────────────────────────────
   Widget _buildSubscriptionAnalytics(BuildContext context) {
     final total = _students?.length ?? 0;
-    final active = _students
+    final active =
+        _students
             ?.where((s) => s.subscriptionStatus == SubscriptionStatus.active)
             .length ??
         0;
-    final expired = _students
+    final expired =
+        _students
             ?.where((s) => s.subscriptionStatus == SubscriptionStatus.expired)
             .length ??
         0;
-    final trial = _students
+    final trial =
+        _students
             ?.where((s) => s.subscriptionStatus == SubscriptionStatus.trial)
             .length ??
         0;
@@ -512,10 +579,12 @@ class _AdminDashboardState extends State<AdminDashboard> {
         ?.where((p) => p.status == PaymentStatus.overdue)
         .length;
     final paymentTotal = _paymentsThisMonth?.length;
-    final successPct = (paymentTotal == null || paymentTotal == 0 || paid == null)
+    final successPct =
+        (paymentTotal == null || paymentTotal == 0 || paid == null)
         ? null
         : (paid / paymentTotal * 100).round();
-    final failurePct = (paymentTotal == null || paymentTotal == 0 || overdue == null)
+    final failurePct =
+        (paymentTotal == null || paymentTotal == 0 || overdue == null)
         ? null
         : (overdue / paymentTotal * 100).round();
 
@@ -638,7 +707,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
     }
 
     for (final s in _students ?? const <Student>[]) {
-      final isLapsed = s.subscriptionStatus == SubscriptionStatus.expired ||
+      final isLapsed =
+          s.subscriptionStatus == SubscriptionStatus.expired ||
           s.subscriptionStatus == SubscriptionStatus.gracePeriod;
       if (!isLapsed) continue;
       alerts.add(
@@ -743,9 +813,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
           if (dailyTrips == null || attendanceRates == null)
             const Padding(
               padding: EdgeInsets.symmetric(vertical: 12),
-              child: Center(
-                child: CircularProgressIndicator(strokeWidth: 2),
-              ),
+              child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
             )
           else
             Row(
@@ -857,6 +925,8 @@ class _StatCard extends StatelessWidget {
           const SizedBox(height: 6),
           Text(
             value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: TextStyle(
               color: context.textPrimary,
               fontSize: 20,
@@ -865,6 +935,9 @@ class _StatCard extends StatelessWidget {
           ),
           Text(
             label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
             style: TextStyle(color: context.textSecondary, fontSize: 10),
           ),
         ],
@@ -977,6 +1050,7 @@ class _SubAnalyticBar extends StatelessWidget {
 
 class _RateCard extends StatelessWidget {
   final String label;
+
   /// `null` renders as "—" — either still loading, or (for Renewal Rate)
   /// genuinely unavailable: no renewal/cancellation history exists in the
   /// schema yet.

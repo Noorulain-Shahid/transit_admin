@@ -5,6 +5,7 @@ import '../../app/locale_provider.dart';
 import '../../data/admin_repository.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/glass_card.dart';
+import '../../widgets/responsive.dart';
 
 /// Replaces the old "Route creation — coming soon" stub on Route
 /// Management's empty state with a real form that writes a `BusRoute`
@@ -110,121 +111,124 @@ class _AdminCreateRouteState extends State<AdminCreateRoute> {
               Expanded(
                 child: SingleChildScrollView(
                   padding: const EdgeInsets.all(16),
-                  child: Form(
-                    key: _formKey,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        GlassCard(
-                          padding: const EdgeInsets.all(16),
-                          child: TextFormField(
-                            controller: _nameCtrl,
-                            style: TextStyle(color: context.textPrimary),
-                            decoration: InputDecoration(
-                              labelText: AppStrings.t('route_name_lbl'),
-                              border: InputBorder.none,
-                            ),
-                            validator: (v) => (v == null || v.trim().isEmpty)
-                                ? AppStrings.t('route_name_required')
-                                : null,
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          AppStrings.t('stops_lbl'),
-                          style: TextStyle(
-                            color: context.textPrimary,
-                            fontSize: 15,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        ...List.generate(_stops.length, (i) {
-                          return Padding(
-                            padding: const EdgeInsets.only(bottom: 8),
-                            child: GlassCard(
-                              padding: const EdgeInsets.all(12),
-                              child: Row(
-                                children: [
-                                  Expanded(
-                                    flex: 3,
-                                    child: TextField(
-                                      controller: _stops[i].nameCtrl,
-                                      style: TextStyle(
-                                        color: context.textPrimary,
-                                      ),
-                                      decoration: InputDecoration(
-                                        labelText: AppStrings.t(
-                                          'stop_name_lbl',
-                                        ),
-                                        border: InputBorder.none,
-                                        isDense: true,
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                    flex: 2,
-                                    child: TextField(
-                                      controller: _stops[i].timeCtrl,
-                                      textDirection: TextDirection.ltr,
-                                      style: TextStyle(
-                                        color: context.textPrimary,
-                                      ),
-                                      decoration: InputDecoration(
-                                        labelText: AppStrings.t('time_lbl'),
-                                        hintText: '7:15 AM',
-                                        border: InputBorder.none,
-                                        isDense: true,
-                                      ),
-                                    ),
-                                  ),
-                                  if (_stops.length > 1)
-                                    IconButton(
-                                      icon: Icon(
-                                        Icons.close_rounded,
-                                        color: context.textTertiary,
-                                        size: 18,
-                                      ),
-                                      onPressed: () => _removeStop(i),
-                                    ),
-                                ],
+                  child: ResponsiveBody(
+                    maxWidth: 760,
+                    child: Form(
+                      key: _formKey,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          GlassCard(
+                            padding: const EdgeInsets.all(16),
+                            child: TextFormField(
+                              controller: _nameCtrl,
+                              style: TextStyle(color: context.textPrimary),
+                              decoration: InputDecoration(
+                                labelText: AppStrings.t('route_name_lbl'),
+                                border: InputBorder.none,
                               ),
+                              validator: (v) => (v == null || v.trim().isEmpty)
+                                  ? AppStrings.t('route_name_required')
+                                  : null,
                             ),
-                          );
-                        }),
-                        TextButton.icon(
-                          onPressed: _addStop,
-                          icon: const Icon(
-                            Icons.add_rounded,
-                            color: AppTheme.adminAccent,
                           ),
-                          label: Text(
-                            AppStrings.t('add_stop_action'),
-                            style: const TextStyle(
+                          const SizedBox(height: 16),
+                          Text(
+                            AppStrings.t('stops_lbl'),
+                            style: TextStyle(
+                              color: context.textPrimary,
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          ...List.generate(_stops.length, (i) {
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 8),
+                              child: GlassCard(
+                                padding: const EdgeInsets.all(12),
+                                child: Row(
+                                  children: [
+                                    Expanded(
+                                      flex: 3,
+                                      child: TextField(
+                                        controller: _stops[i].nameCtrl,
+                                        style: TextStyle(
+                                          color: context.textPrimary,
+                                        ),
+                                        decoration: InputDecoration(
+                                          labelText: AppStrings.t(
+                                            'stop_name_lbl',
+                                          ),
+                                          border: InputBorder.none,
+                                          isDense: true,
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      flex: 2,
+                                      child: TextField(
+                                        controller: _stops[i].timeCtrl,
+                                        textDirection: TextDirection.ltr,
+                                        style: TextStyle(
+                                          color: context.textPrimary,
+                                        ),
+                                        decoration: InputDecoration(
+                                          labelText: AppStrings.t('time_lbl'),
+                                          hintText: '7:15 AM',
+                                          border: InputBorder.none,
+                                          isDense: true,
+                                        ),
+                                      ),
+                                    ),
+                                    if (_stops.length > 1)
+                                      IconButton(
+                                        icon: Icon(
+                                          Icons.close_rounded,
+                                          color: context.textTertiary,
+                                          size: 18,
+                                        ),
+                                        onPressed: () => _removeStop(i),
+                                      ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          }),
+                          TextButton.icon(
+                            onPressed: _addStop,
+                            icon: const Icon(
+                              Icons.add_rounded,
                               color: AppTheme.adminAccent,
                             ),
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        SizedBox(
-                          width: double.infinity,
-                          child: FilledButton(
-                            style: FilledButton.styleFrom(
-                              backgroundColor: AppTheme.adminAccent,
-                              padding: const EdgeInsets.symmetric(
-                                vertical: 14,
+                            label: Text(
+                              AppStrings.t('add_stop_action'),
+                              style: const TextStyle(
+                                color: AppTheme.adminAccent,
                               ),
                             ),
-                            onPressed: _saving ? null : _create,
-                            child: Text(
-                              _saving
-                                  ? AppStrings.t('saving_action')
-                                  : AppStrings.t('create_route_action'),
+                          ),
+                          const SizedBox(height: 16),
+                          SizedBox(
+                            width: double.infinity,
+                            child: FilledButton(
+                              style: FilledButton.styleFrom(
+                                backgroundColor: AppTheme.adminAccent,
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 14,
+                                ),
+                              ),
+                              onPressed: _saving ? null : _create,
+                              child: Text(
+                                _saving
+                                    ? AppStrings.t('saving_action')
+                                    : AppStrings.t('create_route_action'),
+                              ),
                             ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
                 ),
@@ -247,7 +251,7 @@ class _Header extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
       child: Row(
         children: [
-          GestureDetector(
+          Clickable(
             onTap: onBack,
             child: Container(
               width: 38,

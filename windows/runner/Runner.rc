@@ -89,13 +89,13 @@ BEGIN
     BEGIN
         BLOCK "040904e4"
         BEGIN
-            VALUE "CompanyName", "com.transitpro" "\0"
-            VALUE "FileDescription", "transit_admin" "\0"
+            VALUE "CompanyName", "Transit Admin" "\0"
+            VALUE "FileDescription", "Transit Admin" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
             VALUE "InternalName", "transit_admin" "\0"
-            VALUE "LegalCopyright", "Copyright (C) 2026 com.transitpro. All rights reserved." "\0"
+            VALUE "LegalCopyright", "Copyright (C) 2026 Transit Admin. All rights reserved." "\0"
             VALUE "OriginalFilename", "transit_admin.exe" "\0"
-            VALUE "ProductName", "transit_admin" "\0"
+            VALUE "ProductName", "Transit Admin" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

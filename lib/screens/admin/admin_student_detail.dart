@@ -2,14 +2,18 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:transit_core/transit_core.dart';
+import '../../app/admin_format.dart';
 import '../../app/locale_provider.dart';
 import '../../data/admin_repository.dart';
 import '../../services/audit_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/confirm_delete_dialog.dart';
+import '../../widgets/entity_widgets.dart';
 import '../../widgets/glass_card.dart';
-import 'admin_student_management.dart'
-    show subscriptionStatusLabel, subscriptionStatusColor;
+import 'admin_history_tabs.dart';
+import 'admin_links.dart';
+import 'admin_student_management.dart' show instituteTypeLabel;
+import '../../widgets/responsive.dart';
 
 class AdminStudentDetail extends StatefulWidget {
   final String studentId;
@@ -18,26 +22,42 @@ class AdminStudentDetail extends StatefulWidget {
   State<AdminStudentDetail> createState() => _AdminStudentDetailState();
 }
 
-class _AdminStudentDetailState extends State<AdminStudentDetail>
-    with SingleTickerProviderStateMixin {
-  late TabController _tabCtrl;
+class _AdminStudentDetailState extends State<AdminStudentDetail> {
   final _repo = AdminRepository.instance;
   bool _editing = false;
   final _nameCtrl = TextEditingController();
   final _gradeCtrl = TextEditingController();
   final _schoolCtrl = TextEditingController();
   final _medicalCtrl = TextEditingController();
+  String _level = 'School';
   bool _saving = false;
   // Set in `initState` (not a field initializer — `widget` isn't attached
   // yet at that point) exactly once, same fix applied across every other
   // screen in this app that built its stream inline inside `build()`.
   late final Stream<Student?> _studentStream;
+  final _historyKey = GlobalKey();
+
+  /// The account that uses the app for this student — their own for a
+  /// self-registered student, the parent's for a child (see
+  /// [primaryAccountIdFor]). Re-created only if that id changes.
+  String? _accountId;
+  Stream<AppUser?>? _accountStream;
+
+  Stream<AppUser?> _accountFor(Student s) {
+    final id = primaryAccountIdFor(s);
+    if (id != _accountId || _accountStream == null) {
+      _accountId = id;
+      _accountStream = id.isEmpty ? Stream.value(null) : _repo.watchUser(id);
+    }
+    return _accountStream!;
+  }
 
   @override
   void initState() {
     super.initState();
-    _studentStream = _repo.watchStudent(widget.studentId);
-    _tabCtrl = TabController(length: 4, vsync: this);
+    _studentStream = widget.studentId.isEmpty
+        ? Stream.value(null)
+        : _repo.watchStudent(widget.studentId);
     LocaleProvider.instance.addListener(_onLangChanged);
   }
 
@@ -46,7 +66,6 @@ class _AdminStudentDetailState extends State<AdminStudentDetail>
   @override
   void dispose() {
     LocaleProvider.instance.removeListener(_onLangChanged);
-    _tabCtrl.dispose();
     _nameCtrl.dispose();
     _gradeCtrl.dispose();
     _schoolCtrl.dispose();
@@ -59,6 +78,7 @@ class _AdminStudentDetailState extends State<AdminStudentDetail>
     _gradeCtrl.text = s.grade;
     _schoolCtrl.text = s.school;
     _medicalCtrl.text = s.medicalNotes ?? '';
+    _level = studentLevel(s);
     setState(() => _editing = true);
   }
 
@@ -69,6 +89,7 @@ class _AdminStudentDetailState extends State<AdminStudentDetail>
         'name': _nameCtrl.text.trim(),
         'grade': _gradeCtrl.text.trim(),
         'school': _schoolCtrl.text.trim(),
+        'instituteType': _level,
         'medicalNotes': _medicalCtrl.text.trim(),
       });
       if (mounted) {
@@ -135,11 +156,11 @@ class _AdminStudentDetailState extends State<AdminStudentDetail>
       ),
     );
     if (text == null || text.isEmpty) return;
-    // Messages a student's own account when they have one; the parent link
-    // (`students/{id}.parentId`) is the fallback recipient for a child too
-    // young to hold a login, since that's who actually reads the inbox.
+    // The account that actually reads the inbox: the student's own when
+    // self-registered (`parentId` empty), otherwise the parent's — a child
+    // too young to hold a login has no inbox of their own.
     await _repo.messageUser(
-      s.parentId,
+      primaryAccountIdFor(s),
       title: 'Message from admin about ${s.name}',
       body: text,
     );
@@ -159,82 +180,33 @@ class _AdminStudentDetailState extends State<AdminStudentDetail>
             stream: _studentStream,
             builder: (context, snap) {
               final s = snap.data;
+              final Widget body;
+              if (snap.hasError) {
+                body = Center(
+                  child: LoadErrorView(error: snap.error, what: 'this student'),
+                );
+              } else if (snap.connectionState == ConnectionState.waiting &&
+                  !snap.hasData) {
+                body = const Center(child: CircularProgressIndicator());
+              } else if (s == null) {
+                body = Center(
+                  child: Text(
+                    'Student not found.',
+                    style: TextStyle(color: context.textSecondary),
+                  ),
+                );
+              } else {
+                body = StreamBuilder<AppUser?>(
+                  stream: _accountFor(s),
+                  builder: (context, accountSnap) =>
+                      _buildBody(context, s, accountSnap),
+                );
+              }
               return Column(
                 children: [
-                  Container(
-                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-                    child: Row(
-                      children: [
-                        GestureDetector(
-                          onTap: () => context.pop(),
-                          child: Container(
-                            width: 38,
-                            height: 38,
-                            decoration: BoxDecoration(
-                              color: context.cardBgElevated,
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: context.inputBorder),
-                            ),
-                            child: Center(
-                              child: Icon(
-                                Icons.arrow_back_rounded,
-                                color: context.textPrimary,
-                                size: 18,
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 14),
-                        Expanded(
-                          child: Text(
-                            AppStrings.t('student_detail_title'),
-                            style: TextStyle(
-                              color: context.textPrimary,
-                              fontSize: 20,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                        ),
-                        if (s != null && !_editing)
-                          GestureDetector(
-                            onTap: () => _startEditing(s),
-                            child: Container(
-                              width: 38,
-                              height: 38,
-                              decoration: BoxDecoration(
-                                color: AppTheme.studentAmber.withValues(
-                                  alpha: 0.12,
-                                ),
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(
-                                  color: AppTheme.studentAmber.withValues(
-                                    alpha: 0.25,
-                                  ),
-                                ),
-                              ),
-                              child: const Icon(
-                                Icons.edit_rounded,
-                                color: AppTheme.studentAmber,
-                                size: 18,
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
+                  _buildHeader(context, s),
                   const SizedBox(height: 16),
-                  Expanded(
-                    child: !snap.hasData
-                        ? const Center(child: CircularProgressIndicator())
-                        : s == null
-                        ? Center(
-                            child: Text(
-                              'Student not found.',
-                              style: TextStyle(color: context.textSecondary),
-                            ),
-                          )
-                        : _buildBody(context, s),
-                  ),
+                  Expanded(child: body),
                 ],
               );
             },
@@ -244,403 +216,600 @@ class _AdminStudentDetailState extends State<AdminStudentDetail>
     );
   }
 
-  Widget _buildBody(BuildContext context, Student s) {
+  Widget _buildHeader(BuildContext context, Student? s) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+      child: Row(
+        children: [
+          Clickable(
+            onTap: () => context.pop(),
+            child: Container(
+              width: 38,
+              height: 38,
+              decoration: BoxDecoration(
+                color: context.cardBgElevated,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: context.inputBorder),
+              ),
+              child: Center(
+                child: Icon(
+                  Icons.arrow_back_rounded,
+                  color: context.textPrimary,
+                  size: 18,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Text(
+              AppStrings.t('student_detail_title'),
+              style: TextStyle(
+                color: context.textPrimary,
+                fontSize: 20,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+          if (s != null && !_editing)
+            Clickable(
+              onTap: () => _startEditing(s),
+              child: Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: AppTheme.studentAmber.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: AppTheme.studentAmber.withValues(alpha: 0.25),
+                  ),
+                ),
+                child: const Icon(
+                  Icons.edit_rounded,
+                  color: AppTheme.studentAmber,
+                  size: 18,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBody(
+    BuildContext context,
+    Student s,
+    AsyncSnapshot<AppUser?> accountSnap,
+  ) {
+    final account = accountSnap.data;
+    final accountLoaded =
+        accountSnap.hasData ||
+        accountSnap.hasError ||
+        accountSnap.connectionState == ConnectionState.active ||
+        accountSnap.connectionState == ConnectionState.done;
+    final self = isSelfRegistered(s);
+    // One column on a phone; on a wide window the student's record sits
+    // left, transport and history right.
     return SingleChildScrollView(
       padding: const EdgeInsets.only(bottom: 40),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        child: Column(
-          children: [
-            // Profile card
-            GlassCard(
-              padding: const EdgeInsets.all(18),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Container(
-                        width: 56,
-                        height: 56,
-                        decoration: BoxDecoration(
-                          color: AppTheme.studentAmber.withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(18),
-                          border: Border.all(
-                            color: AppTheme.studentAmber.withValues(
-                              alpha: 0.25,
-                            ),
-                          ),
-                        ),
-                        child: const Center(
-                          child: Text('🎓', style: TextStyle(fontSize: 26)),
-                        ),
-                      ),
-                      const SizedBox(width: 14),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              s.name,
-                              style: TextStyle(
-                                color: context.textPrimary,
-                                fontSize: 18,
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                            const SizedBox(height: 6),
-                            Row(
-                              children: [
-                                StatusBadge(
-                                  label: s.isTransportSuspended
-                                      ? AppStrings.t('suspended_status')
-                                      : AppStrings.t('active_lbl'),
-                                  color: s.isTransportSuspended
-                                      ? AppTheme.warning
-                                      : AppTheme.success,
-                                ),
-                                const SizedBox(width: 6),
-                                StatusBadge(
-                                  label:
-                                      '💳 ${subscriptionStatusLabel(s.subscriptionStatus)}',
-                                  color: subscriptionStatusColor(
-                                    s.subscriptionStatus,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
+      child: ResponsiveBody(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: TwoPane(
+            primary: [
+              _buildProfileCard(context, s, account, accountLoaded, self),
+              _buildDetailsCard(context, s),
+              _buildAccountCard(context, s, account, accountLoaded, self),
+              _buildControls(context, s),
+            ],
+            secondary: [
+              _buildTransportCard(context, s),
+              HistoryTabs(
+                // Keyed so a resize across the breakpoint keeps the open tab.
+                key: _historyKey,
+                color: AppTheme.studentAmber,
+                tabs: [
+                  (
+                    AppStrings.t('attendance_tab'),
+                    AttendanceHistoryList(studentIds: [s.id]),
                   ),
-                  if (_editing) ...[
-                    const SizedBox(height: 14),
-                    _EditField(
-                      label: AppStrings.t('name_lbl'),
-                      controller: _nameCtrl,
-                    ),
-                    const SizedBox(height: 12),
-                    _EditField(
-                      label: AppStrings.t('grade_lbl'),
-                      controller: _gradeCtrl,
-                    ),
-                    const SizedBox(height: 12),
-                    _EditField(
-                      label: AppStrings.t('school_lbl'),
-                      controller: _schoolCtrl,
-                    ),
-                    const SizedBox(height: 12),
-                    _EditField(
-                      label: AppStrings.t('medical_notes_lbl'),
-                      controller: _medicalCtrl,
-                      maxLines: 2,
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _ActionBtn(
-                            label: AppStrings.t('cancel_action'),
-                            color: AppTheme.error,
-                            icon: Icons.close_rounded,
-                            onTap: _saving
-                                ? null
-                                : () => setState(() => _editing = false),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: _ActionBtn(
-                            label: _saving
-                                ? AppStrings.t('saving_action')
-                                : AppStrings.t('save_action'),
-                            color: AppTheme.success,
-                            icon: Icons.check_rounded,
-                            onTap: _saving ? null : () => _save(s),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ],
-              ),
-            ),
-            const SizedBox(height: 12),
-
-            // Info grid
-            GlassCard(
-              padding: const EdgeInsets.all(18),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    AppStrings.t('details_title'),
-                    style: TextStyle(
-                      color: context.textPrimary,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w700,
-                    ),
+                  (
+                    AppStrings.t('trip_history_tab'),
+                    StudentTripHistoryList(studentId: s.id),
                   ),
-                  const SizedBox(height: 12),
-                  _InfoRow(
-                    icon: Icons.school_rounded,
-                    label: AppStrings.t('school_lbl'),
-                    value: s.school.isEmpty ? '—' : s.school,
-                    color: AppTheme.purple,
+                  (
+                    AppStrings.t('missed_logs_tab'),
+                    MissedBusHistoryList(studentIds: [s.id]),
                   ),
-                  _InfoRow(
-                    icon: Icons.grade_rounded,
-                    label: AppStrings.t('grade_lbl'),
-                    value: s.grade.isEmpty ? '—' : s.grade,
-                    color: AppTheme.purple,
-                  ),
-                  _InfoRow(
-                    icon: Icons.directions_bus_rounded,
-                    label: AppStrings.t('driver_lbl'),
-                    value: (s.driverId ?? '').isEmpty
-                        ? AppStrings.t('unassigned_status')
-                        : s.driverId!,
-                    color: AppTheme.driverCyan,
-                  ),
-                  _InfoRow(
-                    icon: Icons.route_rounded,
-                    label: AppStrings.t('route_lbl'),
-                    value: (s.routeId ?? '').isEmpty
-                        ? AppStrings.t('unassigned_status')
-                        : s.routeId!,
-                    color: AppTheme.info,
-                  ),
-                  if ((s.medicalNotes ?? '').isNotEmpty)
-                    _InfoRow(
-                      icon: Icons.medical_information_rounded,
-                      label: 'Medical',
-                      value: s.medicalNotes!,
-                      color: AppTheme.error,
-                    ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 12),
-
-            // Management actions
-            GlassCard(
-              padding: const EdgeInsets.all(18),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    AppStrings.t('controls_title'),
-                    style: TextStyle(
-                      color: context.textPrimary,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _ActionBtn(
-                          label: s.isTransportSuspended
-                              ? 'Re-enable' // not requested this pass
-                              : AppStrings.t('suspend_action'),
-                          color: s.isTransportSuspended
-                              ? AppTheme.success
-                              : AppTheme.warning,
-                          icon: s.isTransportSuspended
-                              ? Icons.check_circle_rounded
-                              : Icons.block_rounded,
-                          onTap: () => _toggleSuspended(s),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: _ActionBtn(
-                          label: AppStrings.t('message_action'),
-                          color: AppTheme.studentAmber,
-                          icon: Icons.chat_bubble_rounded,
-                          onTap: () => _message(s),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  SizedBox(
-                    width: double.infinity,
-                    child: _ActionBtn(
-                      label: AppStrings.t('delete_action'),
-                      color: AppTheme.error,
-                      icon: Icons.delete_outline_rounded,
-                      onTap: () => _deleteStudent(s),
+                  (
+                    self
+                        ? AppStrings.t('access_tab')
+                        : '${AppStrings.t('access_tab')} (parent)',
+                    AccessLogList(
+                      uid: primaryAccountIdFor(s),
+                      emptyText: self
+                          ? null
+                          : 'This child signs in through the parent\'s account; '
+                                'no sign-ins recorded for it yet.',
                     ),
                   ),
                 ],
               ),
-            ),
-            const SizedBox(height: 12),
-
-            // Data tabs (illustrative history — attendance/trip/missed-log
-            // data sources aren't wired up yet, out of scope for this pass)
-            GlassCard(
-              padding: const EdgeInsets.all(14),
-              child: Column(
-                children: [
-                  TabBar(
-                    controller: _tabCtrl,
-                    isScrollable: true,
-                    labelColor: AppTheme.studentAmber,
-                    unselectedLabelColor: context.textTertiary,
-                    indicatorColor: AppTheme.studentAmber,
-                    indicatorSize: TabBarIndicatorSize.label,
-                    labelStyle: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                    ),
-                    tabAlignment: TabAlignment.start,
-                    tabs: [
-                      Tab(text: AppStrings.t('attendance_tab')),
-                      Tab(text: AppStrings.t('trip_history_tab')),
-                      Tab(text: AppStrings.t('missed_logs_tab')),
-                      Tab(text: AppStrings.t('access_tab')),
-                    ],
-                  ),
-                  SizedBox(
-                    height: 260,
-                    child: TabBarView(
-                      controller: _tabCtrl,
-                      children: [
-                        _buildAttendance(context, s),
-                        _buildTripHistory(context, s),
-                        _buildMissedLogs(context, s),
-                        _buildAccessLogs(context, s),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
   }
 
-  /// Real attendance data has no query wired up yet — `AttendanceRecord`
-  /// lives under `trips/{tripId}/attendance/{studentId}` in `transit_core`,
-  /// and no trip has ever been recorded for any student in this schema (live
-  /// tracking/Phase 2 hasn't started — see the mobile app's
-  /// IMPLEMENTATION.md). Until that collection-group query exists,
-  /// `attendanceList` is honestly empty rather than hardcoded — this method
-  /// is what actually decides what the tab shows once real data does arrive.
-  Widget _buildAttendance(BuildContext context, Student? s) {
-    if (s == null) {
-      return const Center(child: CircularProgressIndicator());
-    }
-
-    final List<(String date, String status, Color color)> attendanceList =
-        const [];
-
-    if (!s.hasDriver || attendanceList.isEmpty) {
-      return _AttendanceEmptyState(hasDriver: s.hasDriver);
-    }
-
-    return ListView.builder(
-      padding: const EdgeInsets.only(top: 12),
-      itemCount: attendanceList.length,
-      itemBuilder: (context, i) {
-        final entry = attendanceList[i];
-        return _LogRow(date: entry.$1, status: entry.$2, color: entry.$3);
-      },
+  Widget _buildProfileCard(
+    BuildContext context,
+    Student s,
+    AppUser? account,
+    bool accountLoaded,
+    bool self,
+  ) {
+    final subActive = isStudentSubscriptionActive(account);
+    final accountOff = account != null && isAccountDeactivated(account);
+    return GlassCard(
+      padding: const EdgeInsets.all(18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              EntityAvatar(
+                photoUrl: s.photoUrl,
+                color: AppTheme.studentAmber,
+                fallbackEmoji: '🎓',
+                size: 60,
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      s.name.isEmpty ? 'Unnamed student' : s.name,
+                      style: TextStyle(
+                        color: context.textPrimary,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    if (s.displayCode.isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      SelectableText(
+                        s.displayCode,
+                        style: TextStyle(
+                          color: context.textSecondary,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: [
+                        // Transport: whether the admin has suspended rides.
+                        Tooltip(
+                          message: 'Transport',
+                          child: StatusBadge(
+                            label: s.isTransportSuspended
+                                ? AppStrings.t('suspended_status')
+                                : AppStrings.t('active_lbl'),
+                            color: s.isTransportSuspended
+                                ? AppTheme.warning
+                                : AppTheme.success,
+                          ),
+                        ),
+                        // Subscription: a purchased plan on the account that
+                        // pays — the student's own, or the parent's. This
+                        // chip used to read the student document's own
+                        // `subscriptionStatus`, which defaults to `active`
+                        // and nothing ever changes, so it said "Active" for
+                        // everyone.
+                        Tooltip(
+                          message: self
+                              ? 'Subscription on the student\'s own account'
+                              : 'Subscription on the parent\'s account',
+                          child: StatusBadge(
+                            label: !accountLoaded
+                                ? '💳 …'
+                                : '💳 ${subActive ? 'Active' : 'Inactive'}',
+                            color: !accountLoaded
+                                ? const Color(0xFF94A3B8)
+                                : (subActive
+                                      ? AppTheme.success
+                                      : AppTheme.error),
+                          ),
+                        ),
+                        if (accountLoaded)
+                          PresenceBadge(
+                            user: account,
+                            prefix: self ? null : 'Parent',
+                          ),
+                        if (s.isDeleted)
+                          const StatusBadge(
+                            label: 'Archived',
+                            color: AppTheme.error,
+                          ),
+                        if (accountOff)
+                          StatusBadge(
+                            label: self
+                                ? 'Account deactivated'
+                                : 'Parent account deactivated',
+                            color: AppTheme.error,
+                          ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          if (accountLoaded) ...[
+            const SizedBox(height: 12),
+            Text(
+              self ? 'App activity' : 'App activity (parent\'s account)',
+              style: TextStyle(
+                color: context.textTertiary,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 2),
+            LastSeenLine(user: account, fontSize: 12),
+          ],
+          if (_editing) ...[
+            const SizedBox(height: 14),
+            _EditField(label: AppStrings.t('name_lbl'), controller: _nameCtrl),
+            const SizedBox(height: 12),
+            _LevelPicker(
+              value: _level,
+              onChanged: (v) => setState(() => _level = v),
+            ),
+            const SizedBox(height: 12),
+            _EditField(
+              label: AppStrings.t('grade_lbl'),
+              controller: _gradeCtrl,
+            ),
+            const SizedBox(height: 12),
+            _EditField(
+              label: AppStrings.t('school_lbl'),
+              controller: _schoolCtrl,
+            ),
+            const SizedBox(height: 12),
+            _EditField(
+              label: AppStrings.t('medical_notes_lbl'),
+              controller: _medicalCtrl,
+              maxLines: 2,
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: _ActionBtn(
+                    label: AppStrings.t('cancel_action'),
+                    color: AppTheme.error,
+                    icon: Icons.close_rounded,
+                    onTap: _saving
+                        ? null
+                        : () => setState(() => _editing = false),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _ActionBtn(
+                    label: _saving
+                        ? AppStrings.t('saving_action')
+                        : AppStrings.t('save_action'),
+                    color: AppTheme.success,
+                    icon: Icons.check_rounded,
+                    onTap: _saving ? null : () => _save(s),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
     );
   }
 
-  /// Same situation as `_buildAttendance` above: no trip has ever been
-  /// recorded for any student in this schema yet (live tracking/Phase 2
-  /// hasn't started — see the mobile app's IMPLEMENTATION.md), so
-  /// `tripHistoryList` is honestly empty rather than hardcoded. The
-  /// completed/missed color-coding is preserved on `_LogRow` — it just now
-  /// only ever runs over real entries, once a real query fills the list.
-  Widget _buildTripHistory(BuildContext context, Student? s) {
-    if (s == null) {
-      return const Center(child: CircularProgressIndicator());
-    }
-
-    final List<(String date, String status, Color color)> tripHistoryList =
-        const [];
-
-    if (!s.hasDriver || tripHistoryList.isEmpty) {
-      return _TripHistoryEmptyState(hasDriver: s.hasDriver);
-    }
-
-    return ListView.builder(
-      padding: const EdgeInsets.only(top: 12),
-      itemCount: tripHistoryList.length,
-      itemBuilder: (context, i) {
-        final entry = tripHistoryList[i];
-        return _LogRow(date: entry.$1, status: entry.$2, color: entry.$3);
-      },
+  Widget _buildDetailsCard(BuildContext context, Student s) {
+    return SectionCard(
+      title: AppStrings.t('details_title'),
+      icon: Icons.badge_rounded,
+      color: AppTheme.studentAmber,
+      child: Column(
+        children: [
+          InfoLine(
+            icon: Icons.layers_rounded,
+            label: 'Level',
+            value: instituteTypeLabel(studentLevel(s)),
+            color: AppTheme.purple,
+          ),
+          InfoLine(
+            icon: Icons.school_rounded,
+            label: AppStrings.t('school_lbl'),
+            value: s.school.isEmpty ? '—' : s.school,
+            color: AppTheme.purple,
+          ),
+          InfoLine(
+            icon: Icons.grade_rounded,
+            label: AppStrings.t('grade_lbl'),
+            value: s.grade.isEmpty ? '—' : s.grade,
+            color: AppTheme.purple,
+          ),
+          if (s.studentIdNumber.trim().isNotEmpty)
+            InfoLine(
+              icon: Icons.numbers_rounded,
+              label: 'Roll number',
+              value: s.studentIdNumber.trim(),
+              color: AppTheme.info,
+            ),
+          if ((s.medicalNotes ?? '').isNotEmpty)
+            InfoLine(
+              icon: Icons.medical_information_rounded,
+              label: 'Medical',
+              value: s.medicalNotes!,
+              color: AppTheme.error,
+            ),
+          if (s.createdAt != null)
+            InfoLine(
+              icon: Icons.event_rounded,
+              label: 'Registered',
+              value: formatDate(s.createdAt!),
+              color: AppTheme.info,
+            ),
+        ],
+      ),
     );
   }
 
-  /// Same situation as `_buildAttendance`/`_buildTripHistory`: no missed-log
-  /// event has ever been recorded for any student in this schema yet (no
-  /// trip has run — see the mobile app's IMPLEMENTATION.md), so
-  /// `missedLogsList` is honestly empty rather than hardcoded. The missed
-  /// pickup/drop color-coding is preserved on `_LogRow`, running only over
-  /// real entries once a real query fills the list.
-  Widget _buildMissedLogs(BuildContext context, Student? s) {
-    if (s == null) {
-      return const Center(child: CircularProgressIndicator());
-    }
-
-    final List<(String date, String status, Color color)> missedLogsList =
-        const [];
-
-    if (!s.hasDriver || missedLogsList.isEmpty) {
-      return _MissedLogsEmptyState(hasDriver: s.hasDriver);
-    }
-
-    return ListView.builder(
-      padding: const EdgeInsets.only(top: 12),
-      itemCount: missedLogsList.length,
-      itemBuilder: (context, i) {
-        final entry = missedLogsList[i];
-        return _LogRow(date: entry.$1, status: entry.$2, color: entry.$3);
-      },
+  /// Who drives this student and between which two points: the booked
+  /// driver (a link to their own detail screen, not a copy of their data),
+  /// the agreed fee, the home pickup pin and the institute drop-off pin.
+  Widget _buildTransportCard(BuildContext context, Student s) {
+    final fee = s.monthlyFeePaisa;
+    return SectionCard(
+      title: 'Transport',
+      icon: Icons.directions_bus_rounded,
+      color: AppTheme.driverCyan,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (s.hasDriver)
+            DriverLink(driverId: s.driverId!, scheduleId: s.scheduleId)
+          else
+            InfoLine(
+              icon: Icons.directions_bus_rounded,
+              label: 'Booked driver',
+              value: AppStrings.t('unassigned_status'),
+              color: AppTheme.warning,
+            ),
+          if (s.hasDriver)
+            InfoLine(
+              icon: Icons.payments_rounded,
+              label: 'Agreed fee',
+              value: fee > 0
+                  ? '${formatRupees(fee)} / month'
+                        '${s.feeStartedAt == null ? '' : ' · since ${formatDate(s.feeStartedAt!)}'}'
+                  : 'No fee agreed yet',
+              color: AppTheme.adminEmerald,
+            ),
+          LocationBlock(
+            title: 'Pickup point (home)',
+            coord: s.pickupLocation,
+            icon: Icons.home_rounded,
+            color: AppTheme.parentPurple,
+          ),
+          LocationBlock(
+            title: 'Drop-off point (institute)',
+            name: s.school,
+            coord: s.dropoffLocation,
+            icon: Icons.school_rounded,
+            color: AppTheme.studentAmber,
+          ),
+        ],
+      ),
     );
   }
 
-  /// Access/subscription events have no query wired up yet either — there is
-  /// no per-student event log for subscription changes in `transit_core`
-  /// today (only the current `subscriptionStatus` field, no history), so
-  /// `accessLogsList` is honestly empty rather than hardcoded. The
-  /// active/renewed/blocked color-coding is preserved on `_LogRow`, running
-  /// only over real entries once a real event log exists.
-  Widget _buildAccessLogs(BuildContext context, Student? s) {
-    if (s == null) {
-      return const Center(child: CircularProgressIndicator());
-    }
+  /// The parent (a link to their detail screen) or, for a self-registered
+  /// student, their own account — contact details and every emergency
+  /// contact on file at both levels.
+  Widget _buildAccountCard(
+    BuildContext context,
+    Student s,
+    AppUser? account,
+    bool accountLoaded,
+    bool self,
+  ) {
+    final guardian = [
+      if (s.guardianName.isNotEmpty) s.guardianName,
+      if (s.guardianPhone.isNotEmpty) s.guardianPhone,
+    ].join(' · ');
+    return SectionCard(
+      title: self ? 'Account & contacts' : 'Parent & contacts',
+      icon: self ? Icons.person_rounded : Icons.family_restroom_rounded,
+      color: AppTheme.parentPurple,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (!self)
+            InfoLine(
+              icon: Icons.family_restroom_rounded,
+              label: 'Parent',
+              value: !accountLoaded
+                  ? 'Loading…'
+                  : account == null
+                  ? 'Parent account not found'
+                  : '${account.name.isEmpty ? 'Unnamed parent' : account.name}'
+                        '${isAccountDeactivated(account) ? ' (deactivated)' : ''}',
+              color: AppTheme.parentPurple,
+              onTap: () => openParentDetail(context, s.parentId.trim()),
+            )
+          else
+            const InfoLine(
+              icon: Icons.person_rounded,
+              label: 'Account',
+              value: 'Self-registered student',
+              color: AppTheme.parentPurple,
+            ),
+          InfoLine(
+            icon: Icons.phone_rounded,
+            label: AppStrings.t('phone_lbl'),
+            value: (account?.phone ?? '').isNotEmpty
+                ? account!.phone
+                : (s.guardianPhone.isNotEmpty ? s.guardianPhone : '—'),
+            color: AppTheme.adminEmerald,
+          ),
+          InfoLine(
+            icon: Icons.email_rounded,
+            label: AppStrings.t('email_lbl'),
+            value: (account?.email ?? '').isNotEmpty ? account!.email : '—',
+            color: AppTheme.driverCyan,
+          ),
+          if (!self && guardian.isNotEmpty)
+            InfoLine(
+              icon: Icons.shield_rounded,
+              label: 'Guardian',
+              value: guardian,
+              color: AppTheme.info,
+            ),
+          const SizedBox(height: 4),
+          EmergencyContactsBlock(
+            title: 'Emergency contacts on the student record',
+            contacts: s.emergencyContacts,
+          ),
+          const SizedBox(height: 4),
+          EmergencyContactsBlock(
+            title: self
+                ? 'Emergency contacts on the account'
+                : 'Emergency contacts on the parent\'s account',
+            contacts: account?.emergencyContacts ?? const [],
+          ),
+        ],
+      ),
+    );
+  }
 
-    final List<(String date, String status, Color color)> accessLogsList =
-        const [];
-
-    if (accessLogsList.isEmpty) {
-      return const _AccessLogsEmptyState();
-    }
-
-    return ListView.builder(
-      padding: const EdgeInsets.only(top: 12),
-      itemCount: accessLogsList.length,
-      itemBuilder: (context, i) {
-        final entry = accessLogsList[i];
-        return _LogRow(date: entry.$1, status: entry.$2, color: entry.$3);
-      },
+  Widget _buildControls(BuildContext context, Student s) {
+    return GlassCard(
+      padding: const EdgeInsets.all(18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            AppStrings.t('controls_title'),
+            style: TextStyle(
+              color: context.textPrimary,
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: _ActionBtn(
+                  label: s.isTransportSuspended
+                      ? 'Re-enable' // not requested this pass
+                      : AppStrings.t('suspend_action'),
+                  color: s.isTransportSuspended
+                      ? AppTheme.success
+                      : AppTheme.warning,
+                  icon: s.isTransportSuspended
+                      ? Icons.check_circle_rounded
+                      : Icons.block_rounded,
+                  onTap: () => _toggleSuspended(s),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _ActionBtn(
+                  label: AppStrings.t('message_action'),
+                  color: AppTheme.studentAmber,
+                  icon: Icons.chat_bubble_rounded,
+                  onTap: () => _message(s),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          SizedBox(
+            width: double.infinity,
+            child: _ActionBtn(
+              label: AppStrings.t('delete_action'),
+              color: AppTheme.error,
+              icon: Icons.delete_outline_rounded,
+              onTap: s.isDeleted ? null : () => _deleteStudent(s),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
 
 // ─── Sub-widgets ────────────────────────────────────────────────────────────
+
+/// Level choice for the edit form: School / College / University / Academy.
+/// A record holding some other free-text value keeps it as an option, so
+/// opening the editor never silently rewrites it.
+class _LevelPicker extends StatelessWidget {
+  final String value;
+  final ValueChanged<String> onChanged;
+  const _LevelPicker({required this.value, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    final options = [
+      ...instituteLevels,
+      if (!instituteLevels.contains(value)) value,
+    ];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Level',
+          style: TextStyle(
+            color: context.textSecondary,
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final o in options)
+              ChoiceChip(
+                label: Text(instituteTypeLabel(o)),
+                selected: o == value,
+                onSelected: (_) => onChanged(o),
+                selectedColor: AppTheme.studentAmber.withValues(alpha: 0.25),
+                labelStyle: TextStyle(
+                  color: o == value
+                      ? AppTheme.studentOrange
+                      : context.textPrimary,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 12,
+                ),
+              ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
 /// Label-outside layout — the localized label sits above the Neumorphic
 /// input box (not as a Material floating label riding on the box's top
 /// border), so a wider Urdu label never clips against the box's edge the
@@ -710,59 +879,6 @@ class _EditField extends StatelessWidget {
   }
 }
 
-class _InfoRow extends StatelessWidget {
-  final IconData icon;
-  final String label, value;
-  final Color color;
-  const _InfoRow({
-    required this.icon,
-    required this.label,
-    required this.value,
-    required this.color,
-  });
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.06),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: color.withValues(alpha: 0.12)),
-        ),
-        child: Row(
-          children: [
-            Icon(icon, color: color, size: 18),
-            const SizedBox(width: 10),
-            SizedBox(
-              width: 56,
-              child: Text(
-                label,
-                style: TextStyle(
-                  color: context.textSecondary,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-            Expanded(
-              child: Text(
-                value,
-                style: TextStyle(
-                  color: context.textPrimary,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 class _ActionBtn extends StatelessWidget {
   final String label;
   final Color color;
@@ -777,7 +893,7 @@ class _ActionBtn extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final disabled = onTap == null;
-    return GestureDetector(
+    return Clickable(
       onTap: onTap,
       child: Opacity(
         opacity: disabled ? 0.5 : 1,
@@ -798,201 +914,19 @@ class _ActionBtn extends StatelessWidget {
             children: [
               Icon(icon, color: color, size: 16),
               const SizedBox(width: 6),
-              Text(
-                label,
-                style: TextStyle(
-                  color: color,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
+              Flexible(
+                child: Text(
+                  label,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: color,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ),
             ],
           ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Shared neumorphic shell (soft, elevated card — two opposing shadows
-/// rather than this app's usual glassmorphic `GlassCard`) for a tab's empty
-/// state. Each tab supplies its own icon/title/subtitle on top of it.
-class _NeumorphicEmptyState extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  const _NeumorphicEmptyState({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = context.isDark;
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 12),
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 20),
-        decoration: BoxDecoration(
-          color: context.cardBg,
-          borderRadius: BorderRadius.circular(18),
-          boxShadow: [
-            BoxShadow(
-              color: isDark
-                  ? Colors.black.withValues(alpha: 0.45)
-                  : const Color(0xFFB8BEC8).withValues(alpha: 0.6),
-              offset: const Offset(6, 6),
-              blurRadius: 12,
-            ),
-            BoxShadow(
-              color: isDark
-                  ? Colors.white.withValues(alpha: 0.04)
-                  : Colors.white.withValues(alpha: 0.9),
-              offset: const Offset(-6, -6),
-              blurRadius: 12,
-            ),
-          ],
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 36, color: context.textTertiary),
-            const SizedBox(height: 12),
-            Text(
-              title,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: context.textSecondary,
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              subtitle,
-              textAlign: TextAlign.center,
-              style: TextStyle(color: context.textTertiary, fontSize: 12),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// Attendance tab's empty state — separately flags the actual reason (no
-/// driver assigned vs. a driver assigned but no trips run yet) so an admin
-/// knows what to fix rather than just seeing a dead end.
-class _AttendanceEmptyState extends StatelessWidget {
-  final bool hasDriver;
-  const _AttendanceEmptyState({required this.hasDriver});
-
-  @override
-  Widget build(BuildContext context) {
-    return _NeumorphicEmptyState(
-      icon: Icons.assignment_outlined,
-      title: AppStrings.t('no_attendance_records_student'),
-      subtitle: hasDriver
-          ? 'A driver is assigned, but no trips have been recorded yet.' // not requested this pass
-          : AppStrings.t('ensure_driver_assigned_desc'),
-    );
-  }
-}
-
-/// Trip History tab's empty state — same reasoning as attendance's.
-class _TripHistoryEmptyState extends StatelessWidget {
-  final bool hasDriver;
-  const _TripHistoryEmptyState({required this.hasDriver});
-
-  @override
-  Widget build(BuildContext context) {
-    return _NeumorphicEmptyState(
-      icon: Icons.route_rounded,
-      title: AppStrings.t('no_trip_history_student'),
-      subtitle: hasDriver
-          ? 'A driver is assigned, but no trips have been recorded yet.' // not requested this pass
-          : AppStrings.t('ensure_driver_assigned_desc'),
-    );
-  }
-}
-
-/// Missed Logs tab's empty state — same reasoning as attendance's, but
-/// framed for admin triage (an alert-style icon) rather than a routine log.
-class _MissedLogsEmptyState extends StatelessWidget {
-  final bool hasDriver;
-  const _MissedLogsEmptyState({required this.hasDriver});
-
-  @override
-  Widget build(BuildContext context) {
-    return _NeumorphicEmptyState(
-      icon: Icons.fact_check_outlined,
-      title: AppStrings.t('no_missed_logs_student'),
-      subtitle: hasDriver
-          ? 'A driver is assigned, but no trips have been recorded yet.' // not requested this pass
-          : AppStrings.t('ensure_driver_assigned_desc'),
-    );
-  }
-}
-
-/// Access tab's empty state — no `hasDriver` distinction, since subscription
-/// events are unrelated to whether a driver is assigned.
-class _AccessLogsEmptyState extends StatelessWidget {
-  const _AccessLogsEmptyState();
-
-  @override
-  Widget build(BuildContext context) {
-    return _NeumorphicEmptyState(
-      icon: Icons.verified_user_outlined,
-      title: AppStrings.t('no_access_events_student'),
-      subtitle: AppStrings.t('access_events_appear_desc'),
-    );
-  }
-}
-
-class _LogRow extends StatelessWidget {
-  final String date, status;
-  final Color color;
-  const _LogRow({
-    required this.date,
-    required this.status,
-    required this.color,
-  });
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.06),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: color.withValues(alpha: 0.12)),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 8,
-              height: 8,
-              decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-            ),
-            const SizedBox(width: 10),
-            Text(
-              date,
-              style: TextStyle(
-                color: context.textSecondary,
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                status,
-                style: TextStyle(color: context.textPrimary, fontSize: 12),
-              ),
-            ),
-          ],
         ),
       ),
     );

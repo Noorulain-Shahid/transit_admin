@@ -5,6 +5,7 @@ import '../../app/locale_provider.dart';
 import '../../data/admin_repository.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/glass_card.dart';
+import '../../widgets/responsive.dart';
 
 class AdminNotifications extends StatefulWidget {
   const AdminNotifications({super.key});
@@ -36,78 +37,81 @@ class _AdminNotificationsState extends State<AdminNotifications> {
         child: SafeArea(
           child: SingleChildScrollView(
             padding: const EdgeInsets.only(bottom: 100),
-            child: Column(
-              children: [
-                _Header(onBack: () => context.pop()),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Column(
-                    children: [
-                      GlassCard(
-                        padding: const EdgeInsets.all(18),
-                        gradient: LinearGradient(
-                          colors: [
-                            AppTheme.adminEmerald.withValues(alpha: 0.14),
-                            AppTheme.info.withValues(alpha: 0.08),
-                          ],
-                        ),
-                        borderColor: AppTheme.adminEmerald.withValues(
-                          alpha: 0.18,
-                        ),
-                        child: Row(
-                          children: [
-                            Container(
-                              width: 54,
-                              height: 54,
-                              decoration: BoxDecoration(
-                                gradient: AppTheme.adminGradient,
-                                borderRadius: BorderRadius.circular(16),
-                              ),
-                              child: const Center(
-                                child: Icon(
-                                  Icons.notifications_active_rounded,
-                                  color: Colors.white,
-                                  size: 28,
+            child: ResponsiveBody(
+              maxWidth: 900,
+              child: Column(
+                children: [
+                  _Header(onBack: () => context.pop()),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Column(
+                      children: [
+                        GlassCard(
+                          padding: const EdgeInsets.all(18),
+                          gradient: LinearGradient(
+                            colors: [
+                              AppTheme.adminEmerald.withValues(alpha: 0.14),
+                              AppTheme.info.withValues(alpha: 0.08),
+                            ],
+                          ),
+                          borderColor: AppTheme.adminEmerald.withValues(
+                            alpha: 0.18,
+                          ),
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 54,
+                                height: 54,
+                                decoration: BoxDecoration(
+                                  gradient: AppTheme.adminGradient,
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                                child: const Center(
+                                  child: Icon(
+                                    Icons.notifications_active_rounded,
+                                    color: Colors.white,
+                                    size: 28,
+                                  ),
                                 ),
                               ),
-                            ),
-                            const SizedBox(width: 14),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    AppStrings.t('admin_notifications_title'),
-                                    style: TextStyle(
-                                      color: context.textPrimary,
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w800,
+                              const SizedBox(width: 14),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      AppStrings.t('admin_notifications_title'),
+                                      style: TextStyle(
+                                        color: context.textPrimary,
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w800,
+                                      ),
                                     ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    AppStrings.t('admin_notifications_desc'),
-                                    style: TextStyle(
-                                      color: context.textSecondary,
-                                      fontSize: 12,
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      AppStrings.t('admin_notifications_desc'),
+                                      style: TextStyle(
+                                        color: context.textSecondary,
+                                        fontSize: 12,
+                                      ),
                                     ),
-                                  ),
-                                ],
+                                  ],
+                                ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 12),
-                      _RecentFeedbackSection(),
-                      const SizedBox(height: 12),
-                      _RecentAccountsSection(),
-                      const SizedBox(height: 12),
-                      _PendingDriversSection(),
-                    ],
+                        const SizedBox(height: 12),
+                        _RecentFeedbackSection(),
+                        const SizedBox(height: 12),
+                        _RecentAccountsSection(),
+                        const SizedBox(height: 12),
+                        _PendingDriversSection(),
+                      ],
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
@@ -124,8 +128,7 @@ class _PendingDriversSection extends StatefulWidget {
   const _PendingDriversSection();
 
   @override
-  State<_PendingDriversSection> createState() =>
-      _PendingDriversSectionState();
+  State<_PendingDriversSection> createState() => _PendingDriversSectionState();
 }
 
 class _PendingDriversSectionState extends State<_PendingDriversSection> {
@@ -175,13 +178,12 @@ class _RecentFeedbackSection extends StatefulWidget {
   const _RecentFeedbackSection();
 
   @override
-  State<_RecentFeedbackSection> createState() =>
-      _RecentFeedbackSectionState();
+  State<_RecentFeedbackSection> createState() => _RecentFeedbackSectionState();
 }
 
 class _RecentFeedbackSectionState extends State<_RecentFeedbackSection> {
-  late final Stream<List<AppFeedback>> _stream =
-      AdminRepository.instance.watchRecentFeedback();
+  late final Stream<List<AppFeedback>> _stream = AdminRepository.instance
+      .watchRecentFeedback();
 
   @override
   Widget build(BuildContext context) {
@@ -216,13 +218,18 @@ class _FeedbackCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Newer rows carry the author's name; only older ones need the lookup.
     return FutureBuilder<String?>(
-      future: AdminRepository.instance.fetchUserName(feedback.userId),
+      future: feedback.userName.isNotEmpty
+          ? Future.value(feedback.userName)
+          : AdminRepository.instance.fetchUserName(feedback.userId),
+      initialData: feedback.userName.isNotEmpty ? feedback.userName : null,
       builder: (context, snap) {
         final name = snap.data ?? 'Anonymous User';
         return _NotificationItem(
           header: name,
-          title: '${'⭐' * feedback.rating}${'☆' * (5 - feedback.rating)} rating',
+          title:
+              '${'⭐' * feedback.rating}${'☆' * (5 - feedback.rating)} rating',
           subtitle: (feedback.comment == null || feedback.comment!.isEmpty)
               ? 'No comment left.'
               : feedback.comment!,
@@ -260,13 +267,12 @@ class _RecentAccountsSection extends StatefulWidget {
   const _RecentAccountsSection();
 
   @override
-  State<_RecentAccountsSection> createState() =>
-      _RecentAccountsSectionState();
+  State<_RecentAccountsSection> createState() => _RecentAccountsSectionState();
 }
 
 class _RecentAccountsSectionState extends State<_RecentAccountsSection> {
-  late final Stream<List<AppUser>> _stream =
-      AdminRepository.instance.watchRecentUsers();
+  late final Stream<List<AppUser>> _stream = AdminRepository.instance
+      .watchRecentUsers();
 
   static const _roleIcons = {
     UserRole.driver: Icons.drive_eta_rounded,
@@ -464,7 +470,7 @@ class _NotificationItem extends StatelessWidget {
             ),
             if (actionLabel != null) ...[
               const SizedBox(width: 8),
-              GestureDetector(
+              Clickable(
                 onTap: onAction,
                 child: Container(
                   padding: const EdgeInsets.symmetric(
@@ -506,7 +512,7 @@ class _Header extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
       child: Row(
         children: [
-          GestureDetector(
+          Clickable(
             onTap: onBack,
             child: Container(
               width: 38,

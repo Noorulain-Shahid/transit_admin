@@ -17,6 +17,7 @@ import '../screens/admin/admin_create_route.dart';
 import '../screens/admin/admin_student_detail.dart';
 import '../screens/admin/admin_parent_detail.dart';
 import '../screens/admin/admin_driver_detail.dart';
+import '../screens/admin/admin_feedback.dart';
 import 'auth_service.dart';
 
 /// Notifies GoRouter to re-run [_guard] whenever Firebase auth state changes,
@@ -117,6 +118,12 @@ final appRouter = GoRouter(
     GoRoute(
       path: '/admin/activity-tracking',
       builder: (context, state) => const AdminActivityTracking(),
+    ),
+    // Every "Rate the App" rating and comment from parents, students and
+    // drivers — reached from the dashboard's feedback card and Profile.
+    GoRoute(
+      path: '/admin/feedback',
+      builder: (context, state) => const AdminFeedbackScreen(),
     ),
     // Entity detail pages — keyed by Firestore id, the screen loads its
     // own live data rather than being handed a snapshot object.

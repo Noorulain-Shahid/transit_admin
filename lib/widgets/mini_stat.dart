@@ -35,6 +35,8 @@ class MiniStat extends StatelessWidget {
             const SizedBox(height: 4),
             Text(
               value,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: TextStyle(
                 color: context.textPrimary,
                 fontSize: 18,
@@ -43,6 +45,9 @@ class MiniStat extends StatelessWidget {
             ),
             Text(
               label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
               style: TextStyle(color: context.textSecondary, fontSize: 10),
             ),
           ],

@@ -77,11 +77,18 @@ void _accountRepairTests() {
     test('the login screen offers the repair for both shapes', () {
       final src = read('lib/screens/login_screen.dart');
       expect(src, contains('on AdminRecordMissingException'));
-      expect(
-        src,
-        contains("e.code == 'user-not-found') _recordMissing = true"),
-        reason: 'no account at all is the other shape a cleared backend takes',
-      );
+      // Modern Firebase Auth reports a missing account as
+      // 'invalid-credential', indistinguishable from a wrong password, so
+      // both codes have to open the panel or a cleared backend looks like
+      // a typo.
+      expect(src, contains("_recordMissing = true"));
+      for (final code in ['user-not-found', 'invalid-credential']) {
+        expect(
+          src,
+          contains("e.code == '$code'"),
+          reason: 'a cleared backend can arrive as $code',
+        );
+      }
       expect(src, contains('_buildRepairPanel'));
     });
 

@@ -9,6 +9,7 @@ import 'admin_student_management.dart';
 import 'admin_parent_management.dart';
 import 'admin_driver_management.dart';
 import 'admin_profile.dart';
+import '../../widgets/responsive.dart';
 
 class AdminLayout extends StatefulWidget {
   const AdminLayout({super.key});
@@ -55,33 +56,127 @@ class _AdminLayoutState extends State<AdminLayout> {
     AppTheme.adminAccent,
   ];
 
+  // Built once and reused by every layout below, so resizing the window
+  // across a breakpoint keeps each tab's state (scroll position, search
+  // text, open streams) instead of rebuilding the screens from scratch.
+  final _stackKey = GlobalKey();
+
+  Widget _buildStack(BuildContext context) => IndexedStack(
+    key: _stackKey,
+    index: _tab,
+    children: [
+      AdminDashboard(onNavigate: _goToTab),
+      const AdminStudentManagement(),
+      const AdminParentManagement(),
+      const AdminDriverManagement(),
+      AdminProfile(
+        onNavigate: _goToTab,
+        onLogout: () async {
+          await AuthService.instance.signOut();
+          if (context.mounted) context.go('/login');
+        },
+      ),
+    ],
+  );
+
   @override
   Widget build(BuildContext context) {
+    final windowClass = windowClassOf(context);
+    if (windowClass == WindowClass.compact) {
+      // Phone: the floating bottom navigation bar.
+      return Scaffold(
+        body: Container(
+          decoration: context.scaffoldBg,
+          child: SafeArea(bottom: false, child: _buildStack(context)),
+        ),
+        extendBody: true,
+        bottomNavigationBar: _buildNav(),
+      );
+    }
+    // Tablet / desktop window: navigation down the left — an icon rail on
+    // medium widths, a labelled side bar once the window is wide.
+    final expanded = windowClass == WindowClass.expanded;
     return Scaffold(
       body: Container(
         decoration: context.scaffoldBg,
         child: SafeArea(
-          bottom: false,
-          child: IndexedStack(
-            index: _tab,
+          child: Row(
             children: [
-              AdminDashboard(onNavigate: _goToTab),
-              const AdminStudentManagement(),
-              const AdminParentManagement(),
-              const AdminDriverManagement(),
-              AdminProfile(
-                onNavigate: _goToTab,
-                onLogout: () async {
-                  await AuthService.instance.signOut();
-                  if (context.mounted) context.go('/login');
-                },
-              ),
+              _buildRail(context, extended: expanded),
+              VerticalDivider(width: 1, color: context.surfaceBorder),
+              Expanded(child: _buildStack(context)),
             ],
           ),
         ),
       ),
-      extendBody: true,
-      bottomNavigationBar: _buildNav(),
+    );
+  }
+
+  Widget _buildRail(BuildContext context, {required bool extended}) {
+    final activeColor = _navColors[_tab];
+    return NavigationRail(
+      selectedIndex: _tab,
+      onDestinationSelected: _goToTab,
+      extended: extended,
+      minExtendedWidth: 220,
+      labelType: extended
+          ? NavigationRailLabelType.none
+          : NavigationRailLabelType.all,
+      backgroundColor: context.isDark
+          ? Colors.white.withValues(alpha: 0.04)
+          : Colors.white.withValues(alpha: 0.7),
+      indicatorColor: activeColor.withValues(alpha: 0.16),
+      selectedIconTheme: IconThemeData(color: activeColor, size: 24),
+      unselectedIconTheme: IconThemeData(color: context.textTertiary, size: 22),
+      selectedLabelTextStyle: TextStyle(
+        color: activeColor,
+        fontSize: 13,
+        fontWeight: FontWeight.w700,
+      ),
+      unselectedLabelTextStyle: TextStyle(
+        color: context.textSecondary,
+        fontSize: 12,
+        fontWeight: FontWeight.w500,
+      ),
+      leading: Padding(
+        padding: const EdgeInsets.only(top: 8, bottom: 16),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                gradient: AppTheme.adminGradient,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(
+                Icons.directions_bus_rounded,
+                color: Colors.white,
+                size: 22,
+              ),
+            ),
+            if (extended) ...[
+              const SizedBox(width: 10),
+              Text(
+                'Transit Admin',
+                style: TextStyle(
+                  color: context.textPrimary,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+      destinations: [
+        for (final item in _navItems)
+          NavigationRailDestination(
+            icon: Icon(item.icon),
+            label: Text(AppStrings.t(item.label)),
+          ),
+      ],
     );
   }
 
@@ -119,13 +214,16 @@ class _AdminLayoutState extends State<AdminLayout> {
                   final isActive = _tab == i;
                   final activeColor = _navColors[i];
                   return Expanded(
-                    child: GestureDetector(
+                    child: Clickable(
                       onTap: () => _goToTab(i),
                       behavior: HitTestBehavior.opaque,
                       child: AnimatedContainer(
                         duration: const Duration(milliseconds: 280),
                         curve: Curves.easeInOut,
-                        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+                        padding: const EdgeInsets.symmetric(
+                          vertical: 8,
+                          horizontal: 4,
+                        ),
                         decoration: isActive
                             ? BoxDecoration(
                                 color: context.isDark
@@ -143,15 +241,21 @@ class _AdminLayoutState extends State<AdminLayout> {
                             Icon(
                               _navItems[i].icon,
                               size: isActive ? 24 : 22,
-                              color: isActive ? activeColor : context.textTertiary,
+                              color: isActive
+                                  ? activeColor
+                                  : context.textTertiary,
                             ),
                             const SizedBox(height: 2),
                             Text(
                               AppStrings.t(_navItems[i].label),
                               style: TextStyle(
-                                color: isActive ? activeColor : context.textTertiary,
+                                color: isActive
+                                    ? activeColor
+                                    : context.textTertiary,
                                 fontSize: isActive ? 10 : 9,
-                                fontWeight: isActive ? FontWeight.w700 : FontWeight.w400,
+                                fontWeight: isActive
+                                    ? FontWeight.w700
+                                    : FontWeight.w400,
                               ),
                               overflow: TextOverflow.ellipsis,
                               maxLines: 1,

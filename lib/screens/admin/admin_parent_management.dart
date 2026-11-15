@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:transit_core/transit_core.dart';
+import '../../app/admin_format.dart';
 import '../../app/locale_provider.dart';
 import '../../data/admin_repository.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/entity_widgets.dart';
 import '../../widgets/glass_card.dart';
 import '../../widgets/mini_stat.dart';
+import '../../widgets/responsive.dart';
 
 // Urdu doesn't inflect for count the way English's child/children does, but
 // "1 بچہ" (1 child) still reads oddly with the plain plural, so this keeps
@@ -23,8 +26,13 @@ class _AdminParentManagementState extends State<AdminParentManagement> {
   String _search = '';
   // Constructed once each — see the identical note on
   // `_AdminDriverManagementState._driversStream`.
+  //
+  // Deleted parents are deliberately *included*: an account the parent
+  // deleted, or an admin archived, used to vanish from this list (or, before
+  // the tombstone, look like any other account). It now stays, labelled
+  // "Deactivated".
   late final Stream<List<AppUser>> _parentsStream = AdminRepository.instance
-      .watchUsersByRole(UserRole.parent);
+      .watchUsersByRole(UserRole.parent, includeDeleted: true);
   late final Stream<List<Student>> _studentsStream = AdminRepository.instance
       .watchStudents();
 
@@ -42,14 +50,28 @@ class _AdminParentManagementState extends State<AdminParentManagement> {
     super.dispose();
   }
 
-  List<AppUser> _filtered(List<AppUser> parents) => parents
-      .where(
-        (p) =>
-            _search.isEmpty ||
-            p.name.toLowerCase().contains(_search.toLowerCase()) ||
-            p.email.toLowerCase().contains(_search.toLowerCase()),
-      )
-      .toList();
+  /// Search over name, email and phone; active accounts first, then by
+  /// name, so a list full of tombstones doesn't bury the live families.
+  List<AppUser> _filtered(List<AppUser> parents) {
+    final q = _search.trim().toLowerCase();
+    final list = parents
+        .where(
+          (p) =>
+              q.isEmpty ||
+              p.name.toLowerCase().contains(q) ||
+              p.email.toLowerCase().contains(q) ||
+              p.phone.toLowerCase().contains(q),
+        )
+        .toList();
+    list.sort((a, b) {
+      final byState = (isAccountDeactivated(a) ? 1 : 0).compareTo(
+        isAccountDeactivated(b) ? 1 : 0,
+      );
+      if (byState != 0) return byState;
+      return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+    });
+    return list;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -67,42 +89,50 @@ class _AdminParentManagementState extends State<AdminParentManagement> {
             }
             return SingleChildScrollView(
               padding: const EdgeInsets.only(bottom: 120),
-              child: Column(
-                children: [
-                  _buildHeader(context, parents.length),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Column(
-                      children: [
-                        _buildSearch(context),
-                        const SizedBox(height: 10),
-                        _buildStats(context, parents),
-                        const SizedBox(height: 14),
-                        if (!parentSnap.hasData)
-                          const Padding(
-                            padding: EdgeInsets.symmetric(vertical: 40),
-                            child: Center(child: CircularProgressIndicator()),
-                          )
-                        else ...[
-                          ...filtered.map(
-                            (p) => Padding(
-                              padding: const EdgeInsets.only(bottom: 10),
-                              child: _ParentCard(
-                                parent: p,
-                                children: childrenByParent[p.uid] ?? const [],
-                                onTap: () => context.push(
-                                  '/admin/parent-detail',
-                                  extra: p.uid,
-                                ),
-                              ),
+              child: ResponsiveBody(
+                child: Column(
+                  children: [
+                    _buildHeader(context, parents.length),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Column(
+                        children: [
+                          _buildSearch(context),
+                          const SizedBox(height: 10),
+                          _buildStats(context, parents),
+                          const SizedBox(height: 14),
+                          if (parentSnap.hasError)
+                            LoadErrorView(
+                              error: parentSnap.error,
+                              what: 'parents',
+                            )
+                          else if (!parentSnap.hasData)
+                            const Padding(
+                              padding: EdgeInsets.symmetric(vertical: 40),
+                              child: Center(child: CircularProgressIndicator()),
+                            )
+                          else ...[
+                            ResponsiveGrid(
+                              children: [
+                                for (final p in filtered)
+                                  _ParentCard(
+                                    parent: p,
+                                    children:
+                                        childrenByParent[p.uid] ?? const [],
+                                    onTap: () => context.push(
+                                      '/admin/parent-detail',
+                                      extra: p.uid,
+                                    ),
+                                  ),
+                              ],
                             ),
-                          ),
-                          if (filtered.isEmpty) _buildEmpty(context),
+                            if (filtered.isEmpty) _buildEmpty(context),
+                          ],
                         ],
-                      ],
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             );
           },
@@ -201,14 +231,14 @@ class _AdminParentManagementState extends State<AdminParentManagement> {
         MiniStat(
           icon: Icons.check_circle_rounded,
           label: AppStrings.t('active_lbl'),
-          value: '${parents.where((p) => p.isActive).length}',
+          value: '${parents.where((p) => !isAccountDeactivated(p)).length}',
           color: AppTheme.success,
         ),
         const SizedBox(width: 8),
         MiniStat(
           icon: Icons.pause_circle_rounded,
-          label: AppStrings.t('inactive_status'),
-          value: '${parents.where((p) => !p.isActive).length}',
+          label: 'Deactivated',
+          value: '${parents.where(isAccountDeactivated).length}',
           color: AppTheme.error,
         ),
       ],
@@ -242,76 +272,86 @@ class _ParentCard extends StatelessWidget {
   });
   @override
   Widget build(BuildContext context) {
-    return GlassCard(
-      onTap: onTap,
-      padding: const EdgeInsets.all(14),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 46,
-                height: 46,
-                decoration: BoxDecoration(
-                  color: AppTheme.parentPurple.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(
-                    color: AppTheme.parentPurple.withValues(alpha: 0.2),
+    final deactivated = isAccountDeactivated(parent);
+    final contact = [
+      if (parent.phone.isNotEmpty) parent.phone,
+      if (parent.email.isNotEmpty) parent.email,
+    ].join(' • ');
+    return Opacity(
+      // A tombstone stays readable but visibly isn't a live account.
+      opacity: deactivated ? 0.75 : 1,
+      child: GlassCard(
+        onTap: onTap,
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                EntityAvatar(
+                  photoUrl: parent.photoUrl,
+                  color: AppTheme.parentPurple,
+                  fallbackEmoji: '👨‍👩‍👧',
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        parent.name.isEmpty ? 'Unnamed parent' : parent.name,
+                        style: TextStyle(
+                          color: context.textPrimary,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        children.isNotEmpty
+                            ? children.map((c) => c.name).join(' • ')
+                            : (contact.isEmpty
+                                  ? 'No contact details'
+                                  : contact),
+                        style: TextStyle(
+                          color: context.textSecondary,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                child: const Center(
-                  child: Text('👨‍👩‍👧', style: TextStyle(fontSize: 20)),
+                Icon(Icons.chevron_right_rounded, color: context.textTertiary),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [
+                AccountStatusBadge(user: parent),
+                PresenceBadge(user: parent),
+                StatusBadge(
+                  label: _childrenLabel(children.length),
+                  color: AppTheme.parentPurple,
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            if (deactivated) ...[
+              Text(
+                deactivationReason(parent),
+                style: const TextStyle(
+                  color: AppTheme.error,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      parent.name,
-                      style: TextStyle(
-                        color: context.textPrimary,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      children.isNotEmpty
-                          ? children.map((c) => c.name).join(' • ')
-                          : (parent.phone.isEmpty
-                                ? parent.email
-                                : parent.phone),
-                      style: TextStyle(
-                        color: context.textSecondary,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Icon(Icons.chevron_right_rounded, color: context.textTertiary),
+              const SizedBox(height: 4),
             ],
-          ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              StatusBadge(
-                label: _childrenLabel(children.length),
-                color: AppTheme.parentPurple,
-              ),
-              const SizedBox(width: 6),
-              StatusBadge(
-                label: parent.isActive
-                    ? AppStrings.t('active_lbl')
-                    : AppStrings.t('inactive_status'),
-                color: parent.isActive ? AppTheme.success : AppTheme.error,
-              ),
-              const Spacer(),
-            ],
-          ),
-        ],
+            LastSeenLine(user: parent),
+          ],
+        ),
       ),
     );
   }

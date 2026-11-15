@@ -1,16 +1,24 @@
+import 'dart:async';
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:transit_core/transit_core.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../../app/admin_format.dart';
 import '../../app/locale_provider.dart';
 import '../../data/admin_repository.dart';
+import '../../data/live_location_client.dart';
 import '../../services/audit_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/confirm_delete_dialog.dart';
+import '../../widgets/entity_widgets.dart';
 import '../../widgets/glass_card.dart';
 import '../../widgets/mini_chart.dart';
-import 'admin_driver_management.dart' show driverStatusLabel, driverStatusColor;
+import 'admin_driver_management.dart' show driverStatusColor, driverStatusLabel;
+import 'admin_history_tabs.dart';
+import 'admin_links.dart';
+import '../../widgets/responsive.dart';
 
 // Only Driving License / Vehicle Registration were in the requested term
 // list — the other four document types stay hardcoded English.
@@ -39,6 +47,22 @@ Color documentStatusColor(DocumentStatus status) => switch (status) {
   DocumentStatus.rejected => const Color(0xFFEF4444),
 };
 
+Color _severityColor(IncidentSeverity s) => switch (s) {
+  IncidentSeverity.low => AppTheme.info,
+  IncidentSeverity.medium => AppTheme.warning,
+  IncidentSeverity.high => AppTheme.error,
+  IncidentSeverity.critical => AppTheme.error,
+};
+
+String _severityLabel(IncidentSeverity s) => switch (s) {
+  IncidentSeverity.low => 'Low',
+  IncidentSeverity.medium => 'Medium',
+  IncidentSeverity.high => 'High',
+  IncidentSeverity.critical => 'Critical',
+};
+
+const _weekdayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
 class AdminDriverDetail extends StatefulWidget {
   final String driverId;
   const AdminDriverDetail({super.key, required this.driverId});
@@ -46,26 +70,60 @@ class AdminDriverDetail extends StatefulWidget {
   State<AdminDriverDetail> createState() => _AdminDriverDetailState();
 }
 
-class _AdminDriverDetailState extends State<AdminDriverDetail>
-    with SingleTickerProviderStateMixin {
-  late TabController _tabCtrl;
+class _AdminDriverDetailState extends State<AdminDriverDetail> {
   final _repo = AdminRepository.instance;
-  // Set in `initState` (not a field initializer — `widget` isn't attached
-  // yet at that point) exactly once, so this screen doesn't attach a new
-  // Firestore listener on every rebuild the way an inline
-  // `stream: _repo.watchDriver(widget.driverId)` in `build()` would.
+  // Every stream is created once in `initState` (not inline in `build()`,
+  // which would attach a new Firestore listener on every rebuild).
   late final Stream<Driver?> _driverStream;
   late final Stream<List<DriverDocument>> _documentsStream;
+
+  /// `users/{uid}` — the driver's presence. `Driver.status` is written once
+  /// at onboarding and the rule that would let the app flip it isn't
+  /// deployed, so it said "Offline" about everyone.
+  late final Stream<AppUser?> _userStream;
+
+  /// Ratings, summarised here — `Driver.rating` is never maintained.
+  late final Stream<List<DriverRating>> _ratingsStream;
+
+  /// `students where driverId == uid` — the driver's booked roster.
+  late final Stream<List<Student>> _rosterStream;
+  late final Stream<List<RideRequest>> _requestsStream;
+  late final Stream<Trip?> _activeTripStream;
+  // Firestore's `snapshots()` is a *broadcast* stream: a second listener
+  // attached to the same stream object while the first is still listening
+  // never receives the initial snapshot (the same late-subscriber trap
+  // that left Parent Detail spinning). So every widget below that listens
+  // gets its own stream, even when two of them run the same query — the
+  // SDK shares the underlying watch, so this costs no extra reads.
+  late final Stream<List<Trip>> _tripsStream;
+  late final Stream<List<Trip>> _tripsForAttendanceStream;
+  late final Stream<List<Incident>> _incidentsStream;
+  late final Stream<List<Incident>> _incidentsForAlertsStream;
+  late final Stream<List<DriverDocument>> _documentsForAlertsStream;
+  late final Stream<List<Payment>> _paymentsStream;
+
+  // Keep the live-status poller and the open history tab alive when the
+  // window is resized across the one/two-column breakpoint.
+  final _liveKey = GlobalKey();
+  final _historyKey = GlobalKey();
 
   @override
   void initState() {
     super.initState();
-    _driverStream = _repo.watchDriver(widget.driverId);
-    // `d.id` in the Documents section always equals `widget.driverId` (it's
-    // the same driver from the stream above), so this is hoisted off the
-    // constructor argument rather than the nested snapshot's value.
-    _documentsStream = _repo.watchDriverDocuments(widget.driverId);
-    _tabCtrl = TabController(length: 4, vsync: this);
+    final id = widget.driverId;
+    _driverStream = id.isEmpty ? Stream.value(null) : _repo.watchDriver(id);
+    _documentsStream = _repo.watchDriverDocuments(id);
+    _userStream = id.isEmpty ? Stream.value(null) : _repo.watchUser(id);
+    _ratingsStream = _repo.watchRatingsForDriver(id);
+    _rosterStream = _repo.watchStudentsOfDriver(id);
+    _requestsStream = _repo.watchRideRequestsForDriver(id);
+    _activeTripStream = _repo.watchActiveTripForDriver(id);
+    _tripsStream = _repo.watchTripsForDriver(id);
+    _tripsForAttendanceStream = _repo.watchTripsForDriver(id);
+    _incidentsStream = _repo.watchIncidentsForDriver(id);
+    _incidentsForAlertsStream = _repo.watchIncidentsForDriver(id);
+    _documentsForAlertsStream = _repo.watchDriverDocuments(id);
+    _paymentsStream = _repo.watchPaymentsForDriver(id);
     LocaleProvider.instance.addListener(_onLangChanged);
   }
 
@@ -73,7 +131,6 @@ class _AdminDriverDetailState extends State<AdminDriverDetail>
 
   @override
   void dispose() {
-    _tabCtrl.dispose();
     LocaleProvider.instance.removeListener(_onLangChanged);
     super.dispose();
   }
@@ -213,13 +270,31 @@ class _AdminDriverDetailState extends State<AdminDriverDetail>
             stream: _driverStream,
             builder: (context, snap) {
               final d = snap.data;
+              final Widget body;
+              if (snap.hasError) {
+                body = Center(
+                  child: LoadErrorView(error: snap.error, what: 'this driver'),
+                );
+              } else if (snap.connectionState == ConnectionState.waiting &&
+                  !snap.hasData) {
+                body = const Center(child: CircularProgressIndicator());
+              } else if (d == null) {
+                body = Center(
+                  child: Text(
+                    'Driver not found.',
+                    style: TextStyle(color: context.textSecondary),
+                  ),
+                );
+              } else {
+                body = _buildBody(context, d);
+              }
               return Column(
                 children: [
                   Container(
                     padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
                     child: Row(
                       children: [
-                        GestureDetector(
+                        Clickable(
                           onTap: () => context.pop(),
                           child: Container(
                             width: 38,
@@ -253,18 +328,7 @@ class _AdminDriverDetailState extends State<AdminDriverDetail>
                     ),
                   ),
                   const SizedBox(height: 16),
-                  Expanded(
-                    child: !snap.hasData
-                        ? const Center(child: CircularProgressIndicator())
-                        : d == null
-                        ? Center(
-                            child: Text(
-                              'Driver not found.',
-                              style: TextStyle(color: context.textSecondary),
-                            ),
-                          )
-                        : _buildBody(context, d),
-                  ),
+                  Expanded(child: body),
                 ],
               );
             },
@@ -275,30 +339,111 @@ class _AdminDriverDetailState extends State<AdminDriverDetail>
   }
 
   Widget _buildBody(BuildContext context, Driver d) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.only(bottom: 40),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        child: Column(
-          children: [
-            // Profile card
-            GlassCard(
-              padding: const EdgeInsets.all(18),
-              child: Row(
+    return StreamBuilder<List<DriverRating>>(
+      stream: _ratingsStream,
+      builder: (context, ratingSnap) {
+        final rating = DriverRatingSummary.of(ratingSnap.data ?? const []);
+        return StreamBuilder<List<Student>>(
+          stream: _rosterStream,
+          builder: (context, rosterSnap) => StreamBuilder<List<RideRequest>>(
+            stream: _requestsStream,
+            builder: (context, requestSnap) {
+              final roster = rosterSnap.data ?? const <Student>[];
+              // One column on a phone; on a wide window the profile and
+              // records sit left, live status, alerts, roster and history
+              // right.
+              return SingleChildScrollView(
+                padding: const EdgeInsets.only(bottom: 40),
+                child: ResponsiveBody(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: TwoPane(
+                      primary: [
+                        _buildProfileCard(context, d, rating),
+                        _buildDetailsCard(context, d),
+                        _buildInstitutesCard(context, d),
+                        _buildRoundsCard(context, d, roster),
+                        _buildPerformance(context, d, rating),
+                        _buildControls(context, d),
+                        _buildDocuments(context, d),
+                      ],
+                      secondary: [
+                        _LiveStatusCard(
+                          // Keyed so crossing the two-column breakpoint
+                          // moves the card instead of restarting its polling.
+                          key: _liveKey,
+                          driver: d,
+                          roster: roster,
+                          activeTrip: _activeTripStream,
+                        ),
+                        _buildAlerts(context),
+                        _buildRosterCard(
+                          context,
+                          d,
+                          rosterSnap,
+                          requestSnap.data ?? const [],
+                        ),
+                        HistoryTabs(
+                          key: _historyKey,
+                          color: AppTheme.driverCyan,
+                          tabs: [
+                            (
+                              AppStrings.t('trip_history_tab'),
+                              _TripHistoryTab(trips: _tripsStream, driver: d),
+                            ),
+                            (
+                              AppStrings.t('attendance_tab'),
+                              _TripAttendanceTab(
+                                trips: _tripsForAttendanceStream,
+                              ),
+                            ),
+                            (
+                              AppStrings.t('sos_history_tab'),
+                              _SosTab(incidents: _incidentsStream),
+                            ),
+                            (
+                              AppStrings.t('earnings_tab'),
+                              _EarningsTab(payments: _paymentsStream),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildProfileCard(
+    BuildContext context,
+    Driver d,
+    DriverRatingSummary rating,
+  ) {
+    return GlassCard(
+      padding: const EdgeInsets.all(18),
+      child: StreamBuilder<AppUser?>(
+        stream: _userStream,
+        builder: (context, userSnap) {
+          final user = userSnap.data;
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Container(
-                    width: 56,
-                    height: 56,
-                    decoration: BoxDecoration(
-                      color: AppTheme.driverCyan.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(18),
-                      border: Border.all(
-                        color: AppTheme.driverCyan.withValues(alpha: 0.25),
-                      ),
-                    ),
-                    child: const Center(
-                      child: Text('🚐', style: TextStyle(fontSize: 26)),
-                    ),
+                  // The driver's own photo, in the gold "Top rated" frame
+                  // when their ratings earn it.
+                  EntityAvatar(
+                    photoUrl: d.photoUrl,
+                    color: AppTheme.driverCyan,
+                    fallbackEmoji: '🚐',
+                    size: 60,
+                    topRated: rating.isTopRated,
                   ),
                   const SizedBox(width: 14),
                   Expanded(
@@ -314,31 +459,44 @@ class _AdminDriverDetailState extends State<AdminDriverDetail>
                           ),
                         ),
                         const SizedBox(height: 4),
-                        Text(
-                          d.busId?.isNotEmpty == true
-                              ? '${AppStrings.t('bus_prefix')} ${d.busId} • ${d.routeId ?? AppStrings.t('no_route_status')}'
-                              : 'No bus assigned',
-                          style: TextStyle(
-                            color: context.textSecondary,
-                            fontSize: 13,
-                          ),
-                        ),
+                        // Names, not ids. This printed the raw Firestore
+                        // document id, so the card read "Bus
+                        // oHmKQrX4Cx8N60RqMYi2" — a string nobody can
+                        // match against a vehicle in a yard.
+                        _VehicleLine(driver: d),
                         const SizedBox(height: 6),
                         Row(
+                          mainAxisSize: MainAxisSize.min,
                           children: [
-                            StatusBadge(
-                              label: driverStatusLabel(d.status),
-                              color: driverStatusColor(d.status),
-                            ),
+                            RatingStars(value: rating.average, size: 15),
                             const SizedBox(width: 6),
+                            Text(
+                              rating.label,
+                              style: TextStyle(
+                                color: context.textSecondary,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 6,
+                          children: [
+                            // Presence from the driver's `users` heartbeat,
+                            // the same source as every other role.
+                            PresenceBadge(user: user),
                             StatusBadge(
                               label: d.isApproved
                                   ? AppStrings.t('approved_status')
-                                  : AppStrings.t('pending_lbl'),
+                                  : driverStatusLabel(d.status),
                               color: d.isApproved
                                   ? AppTheme.success
-                                  : AppTheme.warning,
+                                  : driverStatusColor(d.status),
                             ),
+                            if (rating.isTopRated) const TopRatedBadge(),
                           ],
                         ),
                       ],
@@ -346,322 +504,720 @@ class _AdminDriverDetailState extends State<AdminDriverDetail>
                   ),
                 ],
               ),
-            ),
-            const SizedBox(height: 12),
+              const SizedBox(height: 12),
+              LastSeenLine(user: user, fontSize: 12),
+            ],
+          );
+        },
+      ),
+    );
+  }
 
-            // Details
-            GlassCard(
-              padding: const EdgeInsets.all(18),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    AppStrings.t('details_title'),
+  /// Open SOS / safety incidents and compliance documents that have
+  /// expired or are about to.
+  Widget _buildAlerts(BuildContext context) {
+    return StreamBuilder<List<Incident>>(
+      stream: _incidentsForAlertsStream,
+      builder: (context, incSnap) => StreamBuilder<List<DriverDocument>>(
+        stream: _documentsForAlertsStream,
+        builder: (context, docSnap) {
+          final open = (incSnap.data ?? const <Incident>[])
+              .where((i) => !i.isResolved)
+              .toList();
+          final docs = _latestPerType(docSnap.data ?? const []);
+          final expiring = docs
+              .where((doc) => doc.isExpired || doc.expiresSoon)
+              .toList();
+          final count = open.length + expiring.length;
+          return SectionCard(
+            title: 'Active alerts',
+            icon: Icons.warning_amber_rounded,
+            color: AppTheme.error,
+            trailing: StatusBadge(
+              label: count == 0 ? AppStrings.t('all_clear') : '$count active',
+              color: count == 0 ? AppTheme.success : AppTheme.error,
+            ),
+            child: incSnap.hasError
+                ? LoadErrorView(error: incSnap.error, what: 'alerts')
+                : !incSnap.hasData
+                ? const SectionLoading()
+                : count == 0
+                ? Text(
+                    'No open SOS alerts and no expiring documents.',
                     style: TextStyle(
-                      color: context.textPrimary,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  _InfoRow(
-                    icon: Icons.badge_rounded,
-                    label: AppStrings.t('license_lbl'),
-                    value: d.licenseNumber.isEmpty ? '—' : d.licenseNumber,
-                    color: AppTheme.info,
-                  ),
-                  _InfoRow(
-                    icon: Icons.phone_rounded,
-                    label: AppStrings.t('contact_lbl'),
-                    value: d.phone.isEmpty ? '—' : d.phone,
-                    color: AppTheme.adminEmerald,
-                  ),
-                  _InfoRow(
-                    icon: Icons.email_rounded,
-                    label: AppStrings.t('email_lbl'),
-                    value: d.email.isEmpty ? '—' : d.email,
-                    color: AppTheme.driverCyan,
-                  ),
-                  _InfoRow(
-                    icon: Icons.route_rounded,
-                    label: AppStrings.t('route_lbl'),
-                    value: d.routeId?.isNotEmpty == true
-                        ? d.routeId!
-                        : AppStrings.t('unassigned_status'),
-                    color: AppTheme.purple,
-                  ),
-                  _InfoRow(
-                    icon: Icons.work_history_rounded,
-                    label: AppStrings.t('experience_lbl'),
-                    // Was `'${d.experienceYears} yrs'` — a plain all-Latin
-                    // string with no strong-direction character, sitting
-                    // inside this screen's RTL `Directionality` once Urdu is
-                    // active. With no RTL anchor, the bidi algorithm falls
-                    // back to the paragraph's own (RTL) base direction and
-                    // visually reverses the whole neutral run — "1 yrs"
-                    // showing as "yrs 1". Translating the unit itself fixes
-                    // it: "1 سال" has a real RTL character (سال), so the
-                    // digit anchors correctly in front of it instead of the
-                    // whole fragment flipping.
-                    value: AppStrings.t(
-                      'experience_years_value',
-                    ).replaceFirst('{count}', '${d.experienceYears}'),
-                    color: AppTheme.warning,
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 12),
-
-            // Performance
-            GlassCard(
-              padding: const EdgeInsets.all(18),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    AppStrings.t('performance_lbl'),
-                    style: TextStyle(
-                      color: context.textPrimary,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-                  Row(
-                    children: [
-                      RingIndicator(
-                        percentage: d.rating / 5 * 100,
-                        color: AppTheme.driverCyan,
-                        size: 72,
-                        strokeWidth: 7,
-                        center: Text(
-                          d.rating.toStringAsFixed(1),
-                          style: TextStyle(
-                            color: context.textPrimary,
-                            fontSize: 16,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 18),
-                      Expanded(
-                        child: Column(
-                          children: [
-                            _PerfBar(
-                              label: AppStrings.t('reliability_lbl'),
-                              pct: d.reliabilityScore.clamp(0, 100) / 100,
-                              color: AppTheme.success,
-                            ),
-                            const SizedBox(height: 8),
-                            _PerfBar(
-                              label: AppStrings.t('rating_lbl'),
-                              pct: d.rating / 5,
-                              color: AppTheme.info,
-                            ),
-                            const SizedBox(height: 8),
-                            _PerfBar(
-                              label: AppStrings.t('safety_lbl'),
-                              pct:
-                                  (1 -
-                                          ((d.harshBrakingEvents +
-                                                      d.overSpeedEvents) /
-                                                  20)
-                                              .clamp(0, 1))
-                                      .toDouble(),
-                              color: AppTheme.purple,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 12),
-
-            // Controls
-            GlassCard(
-              padding: const EdgeInsets.all(18),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    AppStrings.t('controls_title'),
-                    style: TextStyle(
-                      color: context.textPrimary,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _ActionBtn(
-                          label: d.isApproved
-                              ? AppStrings.t('approved_status')
-                              : 'Approve', // not in the requested term list
-                          color: AppTheme.success,
-                          icon: Icons.check_circle_rounded,
-                          onTap: d.isApproved ? null : () => _approve(d),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: _ActionBtn(
-                          label: d.status == DriverStatus.suspended
-                              ? 'Suspended' // not in the requested term list
-                              : AppStrings.t('suspend_action'),
-                          color: AppTheme.error,
-                          icon: Icons.block_rounded,
-                          onTap: d.status == DriverStatus.suspended
-                              ? null
-                              : () => _suspend(d),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _ActionBtn(
-                          label: AppStrings.t('message_driver_action'),
-                          color: AppTheme.driverCyan,
-                          icon: Icons.chat_bubble_rounded,
-                          onTap: () => _message(d),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  SizedBox(
-                    width: double.infinity,
-                    child: _ActionBtn(
-                      label: AppStrings.t('delete_action'),
-                      color: AppTheme.error,
-                      icon: Icons.delete_outline_rounded,
-                      onTap: () => _deleteDriver(d),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 12),
-
-            // Documents
-            GlassCard(
-              padding: const EdgeInsets.all(18),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    AppStrings.t('compliance_documents_title'),
-                    style: TextStyle(
-                      color: context.textPrimary,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  StreamBuilder<List<DriverDocument>>(
-                    stream: _documentsStream,
-                    builder: (context, docSnap) {
-                      if (!docSnap.hasData) {
-                        return const Padding(
-                          padding: EdgeInsets.symmetric(vertical: 16),
-                          child: Center(child: CircularProgressIndicator()),
-                        );
-                      }
-                      final latestByType = _latestPerType(docSnap.data!);
-                      if (latestByType.isEmpty) {
-                        return Text(
-                          'No documents uploaded yet.',
-                          style: TextStyle(
-                            color: context.textSecondary,
-                            fontSize: 13,
-                          ),
-                        );
-                      }
-                      return Column(
-                        children: latestByType
-                            .map(
-                              (doc) => _DocumentRow(
-                                doc: doc,
-                                onView: (doc.fileUrl ?? '').isEmpty
-                                    ? null
-                                    : () => launchUrl(
-                                        Uri.parse(doc.fileUrl!),
-                                        mode: LaunchMode.externalApplication,
-                                      ),
-                                onVerify: doc.status == DocumentStatus.pending
-                                    ? () => _verifyDocument(doc)
-                                    : null,
-                                onReject: doc.status == DocumentStatus.pending
-                                    ? () => _rejectDocument(doc, d)
-                                    : null,
-                              ),
-                            )
-                            .toList(),
-                      );
-                    },
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 12),
-
-            // Tabs (illustrative history — trip/attendance/SOS/earnings data
-            // sources aren't wired up yet, out of scope for this pass)
-            GlassCard(
-              padding: const EdgeInsets.all(14),
-              child: Column(
-                children: [
-                  TabBar(
-                    controller: _tabCtrl,
-                    isScrollable: true,
-                    labelColor: AppTheme.driverCyan,
-                    unselectedLabelColor: context.textTertiary,
-                    indicatorColor: AppTheme.driverCyan,
-                    indicatorSize: TabBarIndicatorSize.label,
-                    labelStyle: const TextStyle(
+                      color: context.textSecondary,
                       fontSize: 12,
-                      fontWeight: FontWeight.w700,
                     ),
-                    tabAlignment: TabAlignment.start,
-                    // Was `const [Tab(text: '...'), ...]` — `AppStrings.t()`
-                    // is a runtime call, so `const` has to go (a `const`
-                    // widget can't depend on anything computed at runtime).
-                    // Dropping `const` changes nothing about layout —
-                    // `isScrollable`, `tabAlignment: TabAlignment.start`,
-                    // and `labelStyle` above are what control tab
-                    // sizing/alignment, none of which touch constness.
-                    tabs: [
-                      Tab(text: AppStrings.t('trip_history_tab')),
-                      Tab(text: AppStrings.t('attendance_tab')),
-                      Tab(text: AppStrings.t('sos_history_tab')),
-                      Tab(text: AppStrings.t('earnings_tab')),
+                  )
+                : Column(
+                    children: [
+                      for (final i in open)
+                        HistoryRow(
+                          color: _severityColor(i.severity),
+                          title: i.title.isEmpty
+                              ? (i.isAutomatic ? 'Safety alert' : 'SOS')
+                              : i.title,
+                          subtitle: [
+                            if (i.createdAt != null)
+                              formatExactTime(i.createdAt!),
+                            if (i.description.isNotEmpty) i.description,
+                            'Unresolved',
+                          ].join(' · '),
+                          trailing: _severityLabel(i.severity),
+                          onTap: i.lat == null || i.lng == null
+                              ? null
+                              : () =>
+                                    openInGoogleMaps(GeoCoord(i.lat!, i.lng!)),
+                        ),
+                      for (final doc in expiring)
+                        HistoryRow(
+                          color: doc.isExpired
+                              ? AppTheme.error
+                              : AppTheme.warning,
+                          title:
+                              '${documentTypeLabel(doc.type)} '
+                              '${doc.isExpired ? 'expired' : 'expires soon'}',
+                          subtitle: doc.expiryDate == null
+                              ? null
+                              : 'Expiry ${formatDate(doc.expiryDate!)}',
+                        ),
                     ],
                   ),
-                  SizedBox(
-                    height: 260,
-                    child: TabBarView(
-                      controller: _tabCtrl,
-                      children: [
-                        _buildTrips(context, d),
-                        _buildAttendance(context, d),
-                        _buildSOS(context, d),
-                        _buildEarnings(context, d),
-                      ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildDetailsCard(BuildContext context, Driver d) {
+    return SectionCard(
+      title: AppStrings.t('details_title'),
+      icon: Icons.badge_rounded,
+      color: AppTheme.driverCyan,
+      child: Column(
+        children: [
+          InfoLine(
+            icon: Icons.badge_rounded,
+            label: AppStrings.t('license_lbl'),
+            value: [
+              d.licenseNumber.isEmpty ? '—' : d.licenseNumber,
+              if (d.licenseExpiry != null)
+                '(expires ${formatDate(d.licenseExpiry!)})',
+            ].join(' '),
+            color: AppTheme.info,
+          ),
+          InfoLine(
+            icon: Icons.phone_rounded,
+            label: AppStrings.t('contact_lbl'),
+            value: d.phone.isEmpty ? '—' : d.phone,
+            color: AppTheme.adminEmerald,
+          ),
+          InfoLine(
+            icon: Icons.email_rounded,
+            label: AppStrings.t('email_lbl'),
+            value: d.email.isEmpty ? '—' : d.email,
+            color: AppTheme.driverCyan,
+          ),
+          InfoLine(
+            icon: Icons.work_history_rounded,
+            label: AppStrings.t('experience_lbl'),
+            // Was `'${d.experienceYears} yrs'` — a plain all-Latin
+            // string with no strong-direction character, sitting
+            // inside this screen's RTL `Directionality` once Urdu is
+            // active. With no RTL anchor, the bidi algorithm falls
+            // back to the paragraph's own (RTL) base direction and
+            // visually reverses the whole neutral run — "1 yrs"
+            // showing as "yrs 1". Translating the unit itself fixes
+            // it: "1 سال" has a real RTL character (سال), so the
+            // digit anchors correctly in front of it instead of the
+            // whole fragment flipping.
+            value: AppStrings.t(
+              'experience_years_value',
+            ).replaceFirst('{count}', '${d.experienceYears}'),
+            color: AppTheme.warning,
+          ),
+          InfoLine(
+            icon: Icons.airline_seat_recline_normal_rounded,
+            label: 'Vehicle seats',
+            value: d.vehicleSeats > 0 ? '${d.vehicleSeats}' : 'Not set',
+            color: AppTheme.purple,
+          ),
+          InfoLine(
+            icon: Icons.local_taxi_rounded,
+            label: 'Missed-bus fare',
+            value: d.missedBusFarePaisa > 0
+                ? formatRupees(d.missedBusFarePaisa)
+                : 'Not set',
+            color: AppTheme.adminEmerald,
+          ),
+          if (d.serviceRadiusKm > 0)
+            InfoLine(
+              icon: Icons.radar_rounded,
+              label: 'Service radius',
+              value: '${d.serviceRadiusKm.toStringAsFixed(1)} km',
+              color: AppTheme.info,
+            ),
+          if (d.baseLocation != null)
+            LocationBlock(
+              title: 'Base location (start of day)',
+              coord: d.baseLocation,
+              icon: Icons.home_work_rounded,
+              color: AppTheme.driverCyan,
+            ),
+        ],
+      ),
+    );
+  }
+
+  /// Institutes the driver serves: their service areas, plus any institute
+  /// named only on a round.
+  Widget _buildInstitutesCard(BuildContext context, Driver d) {
+    final areas = d.serviceAreas.where((a) => a.name.isNotEmpty).toList();
+    final known = {for (final a in areas) a.normalizedName};
+    final roundOnly = <String>{
+      for (final r in d.schedules)
+        for (final i in r.institutes)
+          if (i.trim().isNotEmpty && !known.contains(ServiceArea.normalize(i)))
+            i.trim(),
+    };
+    return SectionCard(
+      title: 'Institutes served',
+      icon: Icons.account_balance_rounded,
+      color: AppTheme.studentAmber,
+      trailing: StatusBadge(
+        label: '${areas.length + roundOnly.length}',
+        color: AppTheme.studentAmber,
+      ),
+      child: areas.isEmpty && roundOnly.isEmpty
+          ? Text(
+              'This driver has not listed any institutes yet.',
+              style: TextStyle(color: context.textSecondary, fontSize: 12),
+            )
+          : Column(
+              children: [
+                for (final a in areas)
+                  a.location != null
+                      ? LocationBlock(
+                          title: a.instituteType,
+                          name: a.name,
+                          coord: a.location,
+                          icon: Icons.school_rounded,
+                          color: AppTheme.studentAmber,
+                        )
+                      : InfoLine(
+                          icon: Icons.school_rounded,
+                          label: a.instituteType,
+                          value: a.name,
+                          color: AppTheme.studentAmber,
+                        ),
+                for (final name in roundOnly)
+                  InfoLine(
+                    icon: Icons.school_rounded,
+                    label: 'On a round',
+                    value: name,
+                    color: AppTheme.studentAmber,
+                  ),
+              ],
+            ),
+    );
+  }
+
+  /// Each round the driver runs: legs, days, institutes and the seats left.
+  Widget _buildRoundsCard(
+    BuildContext context,
+    Driver d,
+    List<Student> roster,
+  ) {
+    final rounds = d.orderedSchedules;
+    return SectionCard(
+      title: 'Routes & rounds',
+      icon: Icons.alt_route_rounded,
+      color: AppTheme.purple,
+      trailing: d.vehicleSeats > 0
+          ? StatusBadge(
+              label: '${d.vehicleSeats}-seat vehicle',
+              color: AppTheme.purple,
+            )
+          : null,
+      child: rounds.isEmpty
+          ? Text(
+              'No rounds set up yet.',
+              style: TextStyle(color: context.textSecondary, fontSize: 12),
+            )
+          : Column(
+              children: [
+                for (final r in rounds) _roundTile(context, d, r, roster),
+              ],
+            ),
+    );
+  }
+
+  Widget _roundTile(
+    BuildContext context,
+    Driver d,
+    DriverSchedule r,
+    List<Student> roster,
+  ) {
+    final offered = d.vehicleCapacity > 0 && r.totalSeats > d.vehicleCapacity
+        ? d.vehicleCapacity
+        : r.totalSeats;
+    final free = d.seatsFreeOn(r);
+    final onRound = roster.where((s) => s.scheduleId == r.id).length;
+    final days = r.weekdays.isEmpty
+        ? 'Every day'
+        : (r.weekdays.toList()..sort())
+              .where((w) => w >= 1 && w <= 7)
+              .map((w) => _weekdayNames[w - 1])
+              .join(', ');
+    final color = free == 0 ? AppTheme.error : AppTheme.success;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: AppTheme.purple.withValues(alpha: 0.06),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppTheme.purple.withValues(alpha: 0.14)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    r.label.isEmpty ? 'Round' : r.label,
+                    style: TextStyle(
+                      color: context.textPrimary,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
-                ],
-              ),
+                ),
+                StatusBadge(
+                  label: free == 0 ? 'Full' : '$free of $offered free',
+                  color: color,
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            if (r.pickupRange.isNotEmpty)
+              _roundLine(context, 'To institute', r.pickupRange),
+            if (r.dropoffRange.isNotEmpty)
+              _roundLine(context, 'Back home', r.dropoffRange),
+            _roundLine(context, 'Days', days),
+            _roundLine(
+              context,
+              'Institutes',
+              r.institutes.isEmpty
+                  ? 'All institutes served'
+                  : r.institutes.join(', '),
+            ),
+            _roundLine(
+              context,
+              'Seats',
+              '${r.bookedSeats} booked of $offered · '
+                  '$onRound on the current roster',
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _roundLine(BuildContext context, String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 2),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 84,
+            child: Text(
+              label,
+              style: TextStyle(color: context.textSecondary, fontSize: 11),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: TextStyle(
+                color: context.textPrimary,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Every student currently booked with this driver, the fee agreed for
+  /// each, and which round they ride — each a link to the student.
+  Widget _buildRosterCard(
+    BuildContext context,
+    Driver d,
+    AsyncSnapshot<List<Student>> snap,
+    List<RideRequest> requests,
+  ) {
+    final roster = [...?snap.data]
+      ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+    final total = roster.fold<int>(
+      0,
+      (sum, s) => sum + agreedFeePaisa(s, requests),
+    );
+    final manual = d.manualStudentCount;
+    return SectionCard(
+      title: 'Booked students',
+      icon: Icons.groups_rounded,
+      color: AppTheme.studentAmber,
+      trailing: snap.hasData
+          ? StatusBadge(label: '${roster.length}', color: AppTheme.studentAmber)
+          : null,
+      child: snapshotView<List<Student>>(
+        snap,
+        what: 'booked students',
+        builder: (_) => Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (roster.isEmpty)
+              Text(
+                'No students booked with this driver.',
+                style: TextStyle(color: context.textSecondary, fontSize: 12),
+              )
+            else ...[
+              Text(
+                'Agreed fees total ${formatRupees(total)} / month',
+                style: TextStyle(
+                  color: context.textSecondary,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 8),
+              for (final s in roster) _rosterRow(context, d, s, requests),
+            ],
+            if (manual > 0)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text(
+                  '+ $manual rider${manual == 1 ? '' : 's'} the driver added '
+                  'outside the app.',
+                  style: TextStyle(color: context.textTertiary, fontSize: 11),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _rosterRow(
+    BuildContext context,
+    Driver d,
+    Student s,
+    List<RideRequest> requests,
+  ) {
+    final fee = agreedFeePaisa(s, requests);
+    final round = d.scheduleById(s.scheduleId);
+    final expected = d.expectedTimes[s.id];
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: () => openStudentDetail(context, s.id),
+          child: Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: AppTheme.studentAmber.withValues(alpha: 0.06),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: AppTheme.studentAmber.withValues(alpha: 0.14),
+              ),
+            ),
+            child: Row(
+              children: [
+                EntityAvatar(
+                  photoUrl: s.photoUrl,
+                  color: AppTheme.studentAmber,
+                  fallbackEmoji: '🎓',
+                  size: 38,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        s.name,
+                        style: TextStyle(
+                          color: context.textPrimary,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        [
+                          if (s.school.isNotEmpty) s.school,
+                          round == null
+                              ? 'No round set'
+                              : (round.label.isEmpty ? 'Round' : round.label),
+                          if (expected != null && expected.pickup.isNotEmpty)
+                            'pickup ${expected.pickup}',
+                          if (expected != null && expected.dropoff.isNotEmpty)
+                            'home ${expected.dropoff}',
+                        ].join(' • '),
+                        style: TextStyle(
+                          color: context.textSecondary,
+                          fontSize: 11,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      fee > 0 ? formatRupees(fee) : 'No fee',
+                      style: TextStyle(
+                        color: fee > 0
+                            ? AppTheme.adminEmerald
+                            : context.textTertiary,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    Text(
+                      fee > 0 ? 'per month' : 'agreed',
+                      style: TextStyle(
+                        color: context.textTertiary,
+                        fontSize: 10,
+                      ),
+                    ),
+                  ],
+                ),
+                Icon(Icons.chevron_right_rounded, color: context.textTertiary),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPerformance(
+    BuildContext context,
+    Driver d,
+    DriverRatingSummary rating,
+  ) {
+    return GlassCard(
+      padding: const EdgeInsets.all(18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            AppStrings.t('performance_lbl'),
+            style: TextStyle(
+              color: context.textPrimary,
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              // From the `ratings` collection (DriverRatingSummary) — the
+              // driver document's `rating` field is never maintained.
+              RingIndicator(
+                percentage: rating.average / 5 * 100,
+                color: rating.isTopRated ? topRatedGold : AppTheme.driverCyan,
+                size: 72,
+                strokeWidth: 7,
+                center: Text(
+                  rating.count == 0 ? 'New' : rating.average.toStringAsFixed(1),
+                  style: TextStyle(
+                    color: context.textPrimary,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 18),
+              Expanded(
+                child: Column(
+                  children: [
+                    _PerfBar(
+                      label: AppStrings.t('reliability_lbl'),
+                      pct: d.reliabilityScore.clamp(0, 100) / 100,
+                      color: AppTheme.success,
+                    ),
+                    const SizedBox(height: 8),
+                    _PerfBar(
+                      label: AppStrings.t('rating_lbl'),
+                      pct: rating.average / 5,
+                      color: AppTheme.info,
+                    ),
+                    const SizedBox(height: 8),
+                    _PerfBar(
+                      label: AppStrings.t('safety_lbl'),
+                      pct:
+                          (1 -
+                                  ((d.harshBrakingEvents + d.overSpeedEvents) /
+                                          20)
+                                      .clamp(0, 1))
+                              .toDouble(),
+                      color: AppTheme.purple,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(
+            rating.count == 0
+                ? 'No family has rated this driver yet.'
+                : '${rating.count} rating${rating.count == 1 ? '' : 's'} from families'
+                      '${rating.isTopRated ? ' — Top rated' : ''}',
+            style: TextStyle(color: context.textSecondary, fontSize: 12),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildControls(BuildContext context, Driver d) {
+    return GlassCard(
+      padding: const EdgeInsets.all(18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            AppStrings.t('controls_title'),
+            style: TextStyle(
+              color: context.textPrimary,
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: _ActionBtn(
+                  label: d.isApproved
+                      ? AppStrings.t('approved_status')
+                      : 'Approve', // not in the requested term list
+                  color: AppTheme.success,
+                  icon: Icons.check_circle_rounded,
+                  onTap: d.isApproved ? null : () => _approve(d),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _ActionBtn(
+                  label: d.status == DriverStatus.suspended
+                      ? 'Suspended' // not in the requested term list
+                      : AppStrings.t('suspend_action'),
+                  color: AppTheme.error,
+                  icon: Icons.block_rounded,
+                  onTap: d.status == DriverStatus.suspended
+                      ? null
+                      : () => _suspend(d),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: _ActionBtn(
+                  label: AppStrings.t('message_driver_action'),
+                  color: AppTheme.driverCyan,
+                  icon: Icons.chat_bubble_rounded,
+                  onTap: () => _message(d),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          SizedBox(
+            width: double.infinity,
+            child: _ActionBtn(
+              label: AppStrings.t('delete_action'),
+              color: AppTheme.error,
+              icon: Icons.delete_outline_rounded,
+              onTap: () => _deleteDriver(d),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDocuments(BuildContext context, Driver d) {
+    return GlassCard(
+      padding: const EdgeInsets.all(18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            AppStrings.t('compliance_documents_title'),
+            style: TextStyle(
+              color: context.textPrimary,
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 12),
+          StreamBuilder<List<DriverDocument>>(
+            stream: _documentsStream,
+            builder: (context, docSnap) {
+              if (docSnap.hasError) {
+                return LoadErrorView(error: docSnap.error, what: 'documents');
+              }
+              if (!docSnap.hasData) {
+                return const SectionLoading();
+              }
+              final latestByType = _latestPerType(docSnap.data!);
+              if (latestByType.isEmpty) {
+                return Text(
+                  'No documents uploaded yet.',
+                  style: TextStyle(color: context.textSecondary, fontSize: 13),
+                );
+              }
+              return Column(
+                children: latestByType
+                    .map(
+                      (doc) => _DocumentRow(
+                        doc: doc,
+                        onView: (doc.fileUrl ?? '').isEmpty
+                            ? null
+                            : () => launchUrl(
+                                Uri.parse(doc.fileUrl!),
+                                mode: LaunchMode.externalApplication,
+                              ),
+                        onVerify: doc.status == DocumentStatus.pending
+                            ? () => _verifyDocument(doc)
+                            : null,
+                        onReject: doc.status == DocumentStatus.pending
+                            ? () => _rejectDocument(doc, d)
+                            : null,
+                      ),
+                    )
+                    .toList(),
+              );
+            },
+          ),
+        ],
       ),
     );
   }
@@ -683,162 +1239,636 @@ class _AdminDriverDetailState extends State<AdminDriverDetail>
       ..sort((a, b) => a.type.index.compareTo(b.type.index));
     return list;
   }
+}
 
-  /// Real trip data has no query wired up yet — no `Trip` has ever been
-  /// recorded for any driver in this schema (live tracking/Phase 2 hasn't
-  /// started, see the mobile app's IMPLEMENTATION.md), so `driverTripsList`
-  /// is honestly empty rather than hardcoded. The completed/delayed
-  /// color-coding is preserved on `_LogRow`, running only over real entries
-  /// once a real query fills the list.
-  Widget _buildTrips(BuildContext context, Driver? d) {
-    if (d == null) {
-      return const Center(child: CircularProgressIndicator());
-    }
+// ─── Live status ─────────────────────────────────────────────────────────────
 
-    final List<(String date, String status, Color color)> driverTripsList =
-        const [];
+/// What the driver is doing right now: the running trip (round, progress,
+/// the stop the van is heading for and which children are there) and where
+/// the van is, read from the Realtime Database every 10 s while this screen
+/// is open.
+class _LiveStatusCard extends StatefulWidget {
+  final Driver driver;
+  final List<Student> roster;
+  final Stream<Trip?> activeTrip;
+  const _LiveStatusCard({
+    super.key,
+    required this.driver,
+    required this.roster,
+    required this.activeTrip,
+  });
 
-    if (!d.isApproved || driverTripsList.isEmpty) {
-      return _DriverTripsEmptyState(isVerified: d.isApproved);
-    }
+  @override
+  State<_LiveStatusCard> createState() => _LiveStatusCardState();
+}
 
-    return ListView.builder(
-      padding: const EdgeInsets.only(top: 12),
-      itemCount: driverTripsList.length,
-      itemBuilder: (context, i) {
-        final entry = driverTripsList[i];
-        return _LogRow(date: entry.$1, status: entry.$2, color: entry.$3);
-      },
-    );
+class _LiveStatusCardState extends State<_LiveStatusCard> {
+  static const _pollEvery = Duration(seconds: 10);
+
+  Timer? _poll;
+  Trip? _trip;
+  LiveLocation? _location;
+  Object? _locationError;
+  bool _locationChecked = false;
+  bool _fetching = false;
+
+  String? _attendanceTripId;
+  Stream<List<AttendanceRecord>>? _attendanceStream;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchLocation();
+    _poll = Timer.periodic(_pollEvery, (_) => _fetchLocation());
   }
 
-  /// Same situation as `_buildTrips` above: no attendance/shift event has
-  /// ever been recorded for any driver in this schema yet, so
-  /// `driverAttendanceList` is honestly empty rather than hardcoded. The
-  /// on-time/late/absent color-coding is preserved on `_LogRow`, running
-  /// only over real entries once a real query fills the list.
-  Widget _buildAttendance(BuildContext context, Driver? d) {
-    if (d == null) {
-      return const Center(child: CircularProgressIndicator());
-    }
-
-    final List<(String date, String status, Color color)> driverAttendanceList =
-        const [];
-
-    if (!d.isApproved || driverAttendanceList.isEmpty) {
-      return _DriverAttendanceEmptyState(isVerified: d.isApproved);
-    }
-
-    return ListView.builder(
-      padding: const EdgeInsets.only(top: 12),
-      itemCount: driverAttendanceList.length,
-      itemBuilder: (context, i) {
-        final entry = driverAttendanceList[i];
-        return _LogRow(date: entry.$1, status: entry.$2, color: entry.$3);
-      },
-    );
+  @override
+  void dispose() {
+    _poll?.cancel();
+    super.dispose();
   }
 
-  /// Same situation as the other tabs: no SOS/emergency event has ever been
-  /// recorded for any driver in this schema yet, so `sosHistoryList` is
-  /// honestly empty rather than hardcoded. Real SOS rows keep the current
-  /// high-visibility red styling on `_LogRow` unchanged once a real query
-  /// fills the list.
-  Widget _buildSOS(BuildContext context, Driver? d) {
-    if (d == null) {
-      return const Center(child: CircularProgressIndicator());
+  Future<void> _fetchLocation() async {
+    if (_fetching) return;
+    _fetching = true;
+    final d = widget.driver;
+    try {
+      // The trip's bus first (that's the node a running trip publishes
+      // to), then the driver's bus, then their uid — a self-signed-up
+      // driver with no admin bus publishes under their own uid.
+      final loc = await LiveLocationClient.instance.fetchFirst([
+        _trip?.busId,
+        d.busId,
+        d.id,
+      ], driverId: d.id);
+      if (!mounted) return;
+      setState(() {
+        _location = loc;
+        _locationError = null;
+        _locationChecked = true;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _locationError = e;
+        _locationChecked = true;
+      });
+    } finally {
+      _fetching = false;
     }
-
-    final List<(String date, String status, Color color)> sosHistoryList =
-        const [];
-
-    if (!d.isApproved || sosHistoryList.isEmpty) {
-      return _DriverSOSEmptyState(isVerified: d.isApproved);
-    }
-
-    return ListView.builder(
-      padding: const EdgeInsets.only(top: 12),
-      itemCount: sosHistoryList.length,
-      itemBuilder: (context, i) {
-        final entry = sosHistoryList[i];
-        return _LogRow(date: entry.$1, status: entry.$2, color: entry.$3);
-      },
-    );
   }
 
-  /// No payroll/earnings source exists for drivers in this schema yet — the
-  /// `payments` collection covers parent/student fee payments, not driver
-  /// compensation — so `earningsData` is honestly `null` rather than a
-  /// hardcoded chart. Currency formatting (₨) and the base/bonus/deduction
-  /// color-coding are preserved on `_EarnRow` for once a real source exists.
-  Widget _buildEarnings(BuildContext context, Driver? d) {
-    if (d == null) {
-      return const Center(child: CircularProgressIndicator());
+  Stream<List<AttendanceRecord>> _attendanceFor(String tripId) {
+    if (_attendanceTripId != tripId || _attendanceStream == null) {
+      _attendanceTripId = tripId;
+      _attendanceStream = AdminRepository.instance.watchTripAttendance(tripId);
     }
+    return _attendanceStream!;
+  }
 
-    final ({
-      int monthlyTotal,
-      List<double> chartValues,
-      List<String> chartLabels,
-      int baseSalary,
-      int tripBonus,
-      int deductions,
-    })?
-    earningsData = null;
-
-    if (!d.isApproved || earningsData == null) {
-      return _DriverEarningsEmptyState(isVerified: d.isApproved);
-    }
-
-    return Padding(
-      padding: const EdgeInsets.only(top: 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<Trip?>(
+      stream: widget.activeTrip,
+      builder: (context, snap) {
+        final trip = snap.data;
+        final tripChanged = trip?.id != _trip?.id;
+        _trip = trip;
+        if (tripChanged && trip != null) {
+          // A trip just started — look for the van now, not in 10 s.
+          WidgetsBinding.instance.addPostFrameCallback((_) => _fetchLocation());
+        }
+        return SectionCard(
+          title: 'Live status',
+          icon: Icons.sensors_rounded,
+          color: AppTheme.info,
+          trailing:
+              snap.hasData || snap.connectionState == ConnectionState.active
+              ? DotBadge(
+                  label: trip == null ? 'No active trip' : 'On a trip',
+                  color: trip == null ? const Color(0xFF94A3B8) : AppTheme.info,
+                )
+              : null,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                'Monthly Earnings',
-                style: TextStyle(color: context.textSecondary, fontSize: 12),
-              ),
-              Text(
-                '₨${earningsData.monthlyTotal}',
-                style: TextStyle(
-                  color: context.textPrimary,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w800,
+              if (snap.hasError)
+                LoadErrorView(error: snap.error, what: 'the active trip')
+              else if (snap.connectionState == ConnectionState.waiting)
+                const SectionLoading()
+              else if (trip == null)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Text(
+                    'No route is running right now.',
+                    style: TextStyle(
+                      color: context.textSecondary,
+                      fontSize: 12,
+                    ),
+                  ),
+                )
+              else
+                StreamBuilder<List<AttendanceRecord>>(
+                  stream: _attendanceFor(trip.id),
+                  builder: (context, attSnap) =>
+                      _tripBody(context, trip, attSnap.data ?? const []),
                 ),
-              ),
+              _locationBlock(context, trip),
             ],
           ),
-          const SizedBox(height: 12),
-          MiniBarChart(
-            values: earningsData.chartValues,
-            labels: earningsData.chartLabels,
-            barColor: AppTheme.driverCyan,
-            barActiveColor: AppTheme.driverCyan,
-            height: 70,
-            barWidth: 16,
-          ),
-          const SizedBox(height: 16),
-          _EarnRow(
-            label: 'Base Salary',
-            value: '₨${earningsData.baseSalary}',
-            color: AppTheme.info,
-          ),
-          _EarnRow(
-            label: 'Trip Bonus',
-            value: '₨${earningsData.tripBonus}',
-            color: AppTheme.success,
-          ),
-          _EarnRow(
-            label: 'Deductions',
-            value: '-₨${earningsData.deductions}',
-            color: AppTheme.error,
-          ),
-        ],
+        );
+      },
+    );
+  }
+
+  String _names(List<String> ids) {
+    final byId = {for (final s in widget.roster) s.id: s.name};
+    final names = [
+      for (final id in ids)
+        if ((byId[id] ?? '').isNotEmpty) byId[id]!,
+    ];
+    final unknown = ids.length - names.length;
+    if (unknown > 0) {
+      names.add('$unknown other student${unknown == 1 ? '' : 's'}');
+    }
+    return names.isEmpty ? 'no students listed' : names.join(', ');
+  }
+
+  String _instituteName(TripStop stop) {
+    final byId = {for (final s in widget.roster) s.id: s};
+    for (final id in stop.studentIds) {
+      final school = byId[id]?.school ?? '';
+      if (school.isNotEmpty) return school;
+    }
+    return 'the institute';
+  }
+
+  Widget _tripBody(
+    BuildContext context,
+    Trip trip,
+    List<AttendanceRecord> attendance,
+  ) {
+    final d = widget.driver;
+    final round = d.scheduleById(trip.scheduleId);
+    final stopsDone = trip.stops
+        .where(
+          (s) =>
+              s.status == TripStopStatus.done ||
+              s.status == TripStopStatus.skipped,
+        )
+        .length;
+    int count(AttendanceStatus st) =>
+        attendance.where((a) => a.status == st).length;
+    final riders = trip.riderIds.isNotEmpty
+        ? trip.riderIds.length
+        : (trip.studentsExpected > 0
+              ? trip.studentsExpected
+              : attendance.length);
+    final next = trip.nextStop;
+    final children = <Widget>[
+      InfoLine(
+        icon: Icons.alt_route_rounded,
+        label: 'Trip',
+        value: [
+          '${tripTypeLabel(trip.type)} trip',
+          if (round != null) (round.label.isEmpty ? 'Round' : round.label),
+          if (trip.startedAt != null) 'started ${formatClock(trip.startedAt!)}',
+        ].join(' · '),
+        color: AppTheme.info,
       ),
+      InfoLine(
+        icon: Icons.fact_check_rounded,
+        label: 'Progress',
+        value: [
+          if (trip.stops.isNotEmpty) '$stopsDone of ${trip.stops.length} stops',
+          '${count(AttendanceStatus.boarded)} on board',
+          '${count(AttendanceStatus.droppedOff)} dropped off',
+          '${count(AttendanceStatus.absent)} absent',
+          if (riders > 0) '$riders riders',
+        ].join(' · '),
+        color: AppTheme.success,
+      ),
+    ];
+    if (trip.phase == TripPhase.arrivedInstitute) {
+      children.add(
+        const InfoLine(
+          icon: Icons.school_rounded,
+          label: 'Now',
+          value: 'At the institute — handing over students',
+          color: AppTheme.studentAmber,
+        ),
+      );
+    } else if (next == null) {
+      children.add(
+        const InfoLine(
+          icon: Icons.flag_rounded,
+          label: 'Now',
+          value: 'All stops done — waiting for the driver to end the trip',
+          color: AppTheme.success,
+        ),
+      );
+    } else {
+      final who = next.isInstitute
+          ? _instituteName(next)
+          : _names(next.studentIds);
+      final eta = next.etaAt == null
+          ? ''
+          : ' · ETA ${formatClock(next.etaAt!)}';
+      final dist = next.distanceMeters == null
+          ? ''
+          : ' · ${(next.distanceMeters! / 1000).toStringAsFixed(1)} km away';
+      children.add(
+        LocationBlock(
+          title: 'Now: ${stopActivityLabel(next)}',
+          name: next.isInstitute && next.studentIds.isNotEmpty
+              ? '$who — dropping ${_names(next.studentIds)}'
+              : who,
+          coord: next.location,
+          icon: next.isInstitute
+              ? Icons.school_rounded
+              : (next.kind == TripStopKind.pickup
+                    ? Icons.person_pin_circle_rounded
+                    : Icons.home_rounded),
+          color: AppTheme.studentAmber,
+          note: 'Stop ${next.order} of ${trip.stops.length}$eta$dist',
+        ),
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: children,
+    );
+  }
+
+  Widget _locationBlock(BuildContext context, Trip? trip) {
+    final loc = _location;
+    if (loc != null) {
+      final age = DateTime.now().difference(loc.time);
+      final parts = [
+        'Updated ${formatDuration(age)} ago',
+        if (loc.speedKmh > 0) '${loc.speedKmh.round()} km/h',
+        if (loc.isStale) 'signal may be lost',
+      ];
+      return LocationBlock(
+        title: 'Live location',
+        coord: loc.coord,
+        icon: Icons.my_location_rounded,
+        color: loc.isStale ? AppTheme.warning : AppTheme.success,
+        note: '${parts.join(' · ')} · refreshes every 10 s',
+      );
+    }
+    final String text;
+    if (!_locationChecked) {
+      text = 'Checking live location…';
+    } else if (_locationError != null) {
+      text = 'Could not reach live location: $_locationError';
+    } else {
+      text = trip == null
+          ? 'Not sharing location right now.'
+          : 'The trip is running but no location has been published yet.';
+    }
+    return InfoLine(
+      icon: Icons.location_off_rounded,
+      label: 'Live location',
+      value: text,
+      color: _locationError != null ? AppTheme.error : const Color(0xFF94A3B8),
+    );
+  }
+}
+
+// ─── History tabs ────────────────────────────────────────────────────────────
+
+class _TripHistoryTab extends StatelessWidget {
+  final Stream<List<Trip>> trips;
+  final Driver driver;
+  const _TripHistoryTab({required this.trips, required this.driver});
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<List<Trip>>(
+      stream: trips,
+      builder: (context, snap) => snapshotView<List<Trip>>(
+        snap,
+        what: 'trip history',
+        builder: (list) {
+          if (list.isEmpty) {
+            return SingleChildScrollView(
+              child: EmptyHint(
+                text: driver.isApproved
+                    ? AppStrings.t('no_trips_recorded_driver')
+                    : 'No trips available. Driver is pending verification.',
+                icon: Icons.directions_car_outlined,
+              ),
+            );
+          }
+          return ListView.builder(
+            padding: const EdgeInsets.only(top: 12),
+            itemCount: list.length,
+            itemBuilder: (context, i) {
+              final t = list[i];
+              final round = driver.scheduleById(t.scheduleId);
+              final times = [
+                if (t.startedAt != null) formatClock(t.startedAt!),
+                if (t.endedAt != null) formatClock(t.endedAt!),
+              ].join(' – ');
+              final dur = t.duration == null ? '' : formatDuration(t.duration!);
+              final punctual = t.onTime == null
+                  ? ''
+                  : (t.onTime!
+                        ? 'On time'
+                        : 'Late${(t.delayMinutes ?? 0) > 0 ? ' by ${t.delayMinutes} min' : ''}');
+              return HistoryRow(
+                color: tripStatusColor(t.status),
+                title:
+                    '${formatDateKey(t.dateKey)} · ${tripTypeLabel(t.type)}'
+                    '${round == null ? '' : ' · ${round.label.isEmpty ? 'Round' : round.label}'}',
+                subtitle: [
+                  if (times.isNotEmpty) times,
+                  if (dur.isNotEmpty) dur,
+                  if (punctual.isNotEmpty) punctual,
+                  if (t.stops.isNotEmpty) '${t.stops.length} stops',
+                ].join(' · '),
+                trailing: tripStatusLabel(t.status),
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+}
+
+/// Per trip: how many boarded, how many were absent, out of how many.
+class _TripAttendanceTab extends StatelessWidget {
+  final Stream<List<Trip>> trips;
+  const _TripAttendanceTab({required this.trips});
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<List<Trip>>(
+      stream: trips,
+      builder: (context, snap) => snapshotView<List<Trip>>(
+        snap,
+        what: 'attendance',
+        builder: (all) {
+          final list = all
+              .where((t) => t.status != TripStatus.cancelled)
+              .toList();
+          if (list.isEmpty) {
+            return SingleChildScrollView(
+              child: EmptyHint(
+                text: AppStrings.t('no_attendance_logged_driver'),
+                icon: Icons.event_available_outlined,
+              ),
+            );
+          }
+          final finished = list.where((t) => t.status == TripStatus.completed);
+          final boarded = finished.fold<int>(
+            0,
+            (s, t) => s + t.studentsBoarded,
+          );
+          final absent = finished.fold<int>(0, (s, t) => s + t.studentsAbsent);
+          return ListView.builder(
+            padding: const EdgeInsets.only(top: 12),
+            itemCount: list.length + 1,
+            itemBuilder: (context, i) {
+              if (i == 0) {
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: Text(
+                    'Completed trips: $boarded boarded · $absent absent',
+                    style: TextStyle(
+                      color: context.textSecondary,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                );
+              }
+              final t = list[i - 1];
+              final expected = t.studentsExpected > 0
+                  ? t.studentsExpected
+                  : t.riderIds.length;
+              final live = t.status == TripStatus.inProgress;
+              final rate = expected > 0
+                  ? ' · ${(t.studentsBoarded / expected * 100).round()}%'
+                  : '';
+              return HistoryRow(
+                color: live
+                    ? AppTheme.info
+                    : (t.studentsAbsent > 0
+                          ? AppTheme.warning
+                          : AppTheme.success),
+                title: '${formatDateKey(t.dateKey)} · ${tripTypeLabel(t.type)}',
+                subtitle: live
+                    ? 'In progress — counts are final when the trip ends'
+                    : '${t.studentsBoarded} boarded · ${t.studentsAbsent} absent'
+                          '${expected > 0 ? ' of $expected' : ''}$rate',
+                trailing: live ? 'Live' : tripStatusLabel(t.status),
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _SosTab extends StatelessWidget {
+  final Stream<List<Incident>> incidents;
+  const _SosTab({required this.incidents});
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<List<Incident>>(
+      stream: incidents,
+      builder: (context, snap) => snapshotView<List<Incident>>(
+        snap,
+        what: 'SOS history',
+        builder: (list) {
+          if (list.isEmpty) {
+            return SingleChildScrollView(
+              child: EmptyHint(
+                text: AppStrings.t('no_sos_alerts_clean_record'),
+                icon: Icons.verified_user_outlined,
+              ),
+            );
+          }
+          return ListView.builder(
+            padding: const EdgeInsets.only(top: 12),
+            itemCount: list.length,
+            itemBuilder: (context, i) {
+              final inc = list[i];
+              final hasPin = inc.lat != null && inc.lng != null;
+              return HistoryRow(
+                color: inc.isResolved
+                    ? const Color(0xFF94A3B8)
+                    : _severityColor(inc.severity),
+                title: inc.title.isEmpty
+                    ? (inc.isAutomatic ? 'Safety alert' : 'SOS')
+                    : inc.title,
+                subtitle: [
+                  if (inc.createdAt != null) formatExactTime(inc.createdAt!),
+                  if (inc.description.isNotEmpty) inc.description,
+                  inc.isResolved
+                      ? 'Resolved${inc.resolvedAt == null ? '' : ' ${formatExactTime(inc.resolvedAt!)}'}'
+                      : 'Unresolved',
+                  if ((inc.resolutionNotes ?? '').isNotEmpty)
+                    inc.resolutionNotes!,
+                  if (hasPin) 'Tap to open the location',
+                ].join(' · '),
+                trailing: _severityLabel(inc.severity),
+                onTap: hasPin
+                    ? () => openInGoogleMaps(GeoCoord(inc.lat!, inc.lng!))
+                    : null,
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+}
+
+/// Fees families paid this driver (`payments` marked paid), totalled per
+/// month.
+class _EarningsTab extends StatelessWidget {
+  final Stream<List<Payment>> payments;
+  const _EarningsTab({required this.payments});
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<List<Payment>>(
+      stream: payments,
+      builder: (context, snap) => snapshotView<List<Payment>>(
+        snap,
+        what: 'earnings',
+        builder: (all) {
+          final paid = all.where((p) => p.status == PaymentStatus.paid).toList()
+            ..sort(
+              (a, b) => (b.paidAt ?? b.confirmedAt ?? DateTime(0)).compareTo(
+                a.paidAt ?? a.confirmedAt ?? DateTime(0),
+              ),
+            );
+          if (paid.isEmpty) {
+            return SingleChildScrollView(
+              child: EmptyHint(
+                text: AppStrings.t('no_earnings_recorded_driver'),
+                icon: Icons.account_balance_wallet_outlined,
+              ),
+            );
+          }
+          final months = paidTotalsByMonth(paid);
+          final total = paid.fold<int>(0, (s, p) => s + p.amountPaisa);
+          final thisMonth = Payment.monthKeyFor(DateTime.now());
+          final current = months
+              .where((e) => e.key == thisMonth)
+              .fold<int>(0, (s, e) => s + e.value);
+          final chart = months.take(6).toList().reversed.toList();
+          final awaiting = all
+              .where((p) => p.status == PaymentStatus.submitted)
+              .length;
+          return ListView(
+            padding: const EdgeInsets.only(top: 12),
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: _EarnStat(
+                      label: 'This month',
+                      value: formatRupees(current),
+                    ),
+                  ),
+                  Expanded(
+                    child: _EarnStat(
+                      label: 'All time',
+                      value: formatRupees(total),
+                    ),
+                  ),
+                ],
+              ),
+              if (awaiting > 0)
+                Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Text(
+                    '$awaiting payment${awaiting == 1 ? '' : 's'} waiting for '
+                    'the driver to confirm.',
+                    style: TextStyle(color: AppTheme.warning, fontSize: 11),
+                  ),
+                ),
+              const SizedBox(height: 12),
+              if (chart.isNotEmpty)
+                MiniBarChart(
+                  values: [for (final e in chart) e.value / 100],
+                  labels: [
+                    for (final e in chart)
+                      formatMonthKey(e.key).split(' ').first,
+                  ],
+                  barColor: AppTheme.driverCyan,
+                  barActiveColor: AppTheme.driverCyan,
+                  height: 70,
+                  barWidth: 16,
+                ),
+              const SizedBox(height: 12),
+              for (final e in months)
+                _EarnRow(
+                  label: formatMonthKey(e.key),
+                  value: formatRupees(e.value),
+                  color: AppTheme.success,
+                ),
+              const SizedBox(height: 8),
+              Text(
+                'Recent payments',
+                style: TextStyle(
+                  color: context.textSecondary,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 6),
+              for (final p in paid.take(20))
+                HistoryRow(
+                  color: AppTheme.success,
+                  title: p.displayAmount,
+                  subtitle: [
+                    if (p.monthKey.isNotEmpty)
+                      'For ${formatMonthKey(p.monthKey)}',
+                    if (p.paidAt != null) 'paid ${formatDate(p.paidAt!)}',
+                    if ((p.methodName ?? '').isNotEmpty) p.methodName!,
+                  ].join(' · '),
+                  onTap: p.studentId.isEmpty
+                      ? null
+                      : () => openStudentDetail(context, p.studentId),
+                ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _EarnStat extends StatelessWidget {
+  final String label, value;
+  const _EarnStat({required this.label, required this.value});
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: TextStyle(color: context.textSecondary, fontSize: 11),
+        ),
+        Text(
+          value,
+          style: TextStyle(
+            color: context.textPrimary,
+            fontSize: 16,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+      ],
     );
   }
 }
@@ -899,7 +1929,7 @@ class _DocumentRow extends StatelessWidget {
               ),
             ],
             const SizedBox(height: 8),
-            Row(
+            Wrap(
               children: [
                 TextButton.icon(
                   onPressed: onView,
@@ -933,59 +1963,6 @@ class _DocumentRow extends StatelessWidget {
                     ),
                   ),
               ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _InfoRow extends StatelessWidget {
-  final IconData icon;
-  final String label, value;
-  final Color color;
-  const _InfoRow({
-    required this.icon,
-    required this.label,
-    required this.value,
-    required this.color,
-  });
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.06),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: color.withValues(alpha: 0.12)),
-        ),
-        child: Row(
-          children: [
-            Icon(icon, color: color, size: 18),
-            const SizedBox(width: 10),
-            SizedBox(
-              width: 60,
-              child: Text(
-                label,
-                style: TextStyle(
-                  color: context.textSecondary,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-            Expanded(
-              child: Text(
-                value,
-                style: TextStyle(
-                  color: context.textPrimary,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
             ),
           ],
         ),
@@ -1049,7 +2026,7 @@ class _ActionBtn extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final disabled = onTap == null;
-    return GestureDetector(
+    return Clickable(
       onTap: onTap,
       child: Opacity(
         opacity: disabled ? 0.5 : 1,
@@ -1070,189 +2047,19 @@ class _ActionBtn extends StatelessWidget {
             children: [
               Icon(icon, color: color, size: 15),
               const SizedBox(width: 5),
-              Text(
-                label,
-                style: TextStyle(
-                  color: color,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
+              Flexible(
+                child: Text(
+                  label,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: color,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ),
             ],
           ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Shared neumorphic shell (soft, elevated card — two opposing shadows
-/// rather than this app's usual glassmorphic `GlassCard`) for a tab's empty
-/// state, matching the pattern used on `admin_student_detail.dart`.
-class _NeumorphicEmptyState extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  const _NeumorphicEmptyState({required this.icon, required this.title});
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = context.isDark;
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 12),
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 20),
-        decoration: BoxDecoration(
-          color: context.cardBg,
-          borderRadius: BorderRadius.circular(18),
-          boxShadow: [
-            BoxShadow(
-              color: isDark
-                  ? Colors.black.withValues(alpha: 0.45)
-                  : const Color(0xFFB8BEC8).withValues(alpha: 0.6),
-              offset: const Offset(6, 6),
-              blurRadius: 12,
-            ),
-            BoxShadow(
-              color: isDark
-                  ? Colors.white.withValues(alpha: 0.04)
-                  : Colors.white.withValues(alpha: 0.9),
-              offset: const Offset(-6, -6),
-              blurRadius: 12,
-            ),
-          ],
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 36, color: context.textTertiary),
-            const SizedBox(height: 12),
-            Text(
-              title,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: context.textSecondary,
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// Trip History tab's empty state — distinguishes an unverified driver (the
-/// far more common reason a new account has no trips) from a verified driver
-/// who simply hasn't run one yet.
-class _DriverTripsEmptyState extends StatelessWidget {
-  final bool isVerified;
-  const _DriverTripsEmptyState({required this.isVerified});
-
-  @override
-  Widget build(BuildContext context) {
-    return _NeumorphicEmptyState(
-      icon: Icons.directions_car_outlined,
-      title: isVerified
-          ? AppStrings.t('no_trips_recorded_driver')
-          : 'No trips available. Driver is pending verification.', // not requested this pass
-    );
-  }
-}
-
-/// Attendance tab's empty state — same reasoning as Trip History's.
-class _DriverAttendanceEmptyState extends StatelessWidget {
-  final bool isVerified;
-  const _DriverAttendanceEmptyState({required this.isVerified});
-
-  @override
-  Widget build(BuildContext context) {
-    return _NeumorphicEmptyState(
-      icon: Icons.event_available_outlined,
-      title: isVerified
-          ? AppStrings.t('no_attendance_logged_driver')
-          : 'No attendance records. Driver is pending verification.', // not requested this pass
-    );
-  }
-}
-
-/// SOS History tab's empty state — for a verified driver, an empty list is
-/// good news (a clean safety record), so the copy is reassuring rather than
-/// a dead-end message, unlike the other tabs' neutral "nothing yet" framing.
-class _DriverSOSEmptyState extends StatelessWidget {
-  final bool isVerified;
-  const _DriverSOSEmptyState({required this.isVerified});
-
-  @override
-  Widget build(BuildContext context) {
-    return _NeumorphicEmptyState(
-      icon: Icons.verified_user_outlined,
-      title: isVerified
-          ? AppStrings.t('no_sos_alerts_clean_record')
-          : 'No SOS alerts. Driver is pending verification.', // not requested this pass
-    );
-  }
-}
-
-/// Earnings tab's empty state — same reasoning as the other tabs.
-class _DriverEarningsEmptyState extends StatelessWidget {
-  final bool isVerified;
-  const _DriverEarningsEmptyState({required this.isVerified});
-
-  @override
-  Widget build(BuildContext context) {
-    return _NeumorphicEmptyState(
-      icon: Icons.account_balance_wallet_outlined,
-      title: isVerified
-          ? AppStrings.t('no_earnings_recorded_driver')
-          : 'No financial data. Driver is pending verification.', // not requested this pass
-    );
-  }
-}
-
-class _LogRow extends StatelessWidget {
-  final String date, status;
-  final Color color;
-  const _LogRow({
-    required this.date,
-    required this.status,
-    required this.color,
-  });
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.06),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: color.withValues(alpha: 0.12)),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 8,
-              height: 8,
-              decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-            ),
-            const SizedBox(width: 10),
-            Text(
-              date,
-              style: TextStyle(
-                color: context.textSecondary,
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                status,
-                style: TextStyle(color: context.textPrimary, fontSize: 12),
-              ),
-            ),
-          ],
         ),
       ),
     );
@@ -1288,6 +2095,107 @@ class _EarnRow extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// "Bus LHR-4201 • Morning Round", resolved from the fleet rather than
+/// printed as the ids the driver document actually stores.
+class _VehicleLine extends StatefulWidget {
+  final Driver driver;
+  const _VehicleLine({required this.driver});
+
+  @override
+  State<_VehicleLine> createState() => _VehicleLineState();
+}
+
+class _VehicleLineState extends State<_VehicleLine> {
+  // Held across rebuilds (this card now rebuilds on every presence tick),
+  // so the bus listener isn't re-attached each time.
+  String? _busId;
+  Stream<Bus?>? _bus;
+
+  Stream<Bus?> _busFor(String id) {
+    if (id != _busId || _bus == null) {
+      _busId = id;
+      _bus = AdminRepository.instance.watchBus(id);
+    }
+    return _bus!;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final busId = widget.driver.busId?.trim() ?? '';
+    if (busId.isEmpty) {
+      // A self-signed-up driver runs their own vehicle — no fleet bus.
+      return _RouteLine(
+        driver: widget.driver,
+        prefix: widget.driver.vehicleSeats > 0
+            ? 'Own vehicle (${widget.driver.vehicleSeats} seats)'
+            : 'No bus assigned',
+      );
+    }
+    return StreamBuilder<Bus?>(
+      stream: _busFor(busId),
+      builder: (context, snap) {
+        final bus = snap.data;
+        // While the vehicle loads, the id is still worse than nothing:
+        // say what is known and fill the rest in when it arrives.
+        final label = bus == null
+            ? 'Bus …'
+            : '${AppStrings.t('bus_prefix')} '
+                  '${bus.busNumber.isEmpty ? bus.plateNumber : bus.busNumber}';
+        return _RouteLine(driver: widget.driver, prefix: label);
+      },
+    );
+  }
+}
+
+class _RouteLine extends StatefulWidget {
+  final Driver driver;
+  final String prefix;
+  const _RouteLine({required this.driver, required this.prefix});
+
+  @override
+  State<_RouteLine> createState() => _RouteLineState();
+}
+
+class _RouteLineState extends State<_RouteLine> {
+  String? _routeId;
+  Stream<BusRoute?>? _route;
+
+  Stream<BusRoute?> _routeFor(String id) {
+    if (id != _routeId || _route == null) {
+      _routeId = id;
+      _route = AdminRepository.instance.watchRoute(id);
+    }
+    return _route!;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final routeId = widget.driver.routeId?.trim() ?? '';
+    final rounds = widget.driver.schedules.length;
+    if (routeId.isEmpty) {
+      // Self-signed-up drivers run their own rounds instead of an
+      // admin-assigned route.
+      final tail = rounds > 0
+          ? '$rounds round${rounds == 1 ? '' : 's'}'
+          : AppStrings.t('no_route_status');
+      return Text(
+        '${widget.prefix} • $tail',
+        style: TextStyle(color: context.textSecondary, fontSize: 13),
+      );
+    }
+    return StreamBuilder<BusRoute?>(
+      stream: _routeFor(routeId),
+      builder: (context, snap) {
+        final name = snap.data?.name;
+        return Text(
+          '${widget.prefix} • ${name == null || name.isEmpty ? AppStrings.t('no_route_status') : name}',
+          style: TextStyle(color: context.textSecondary, fontSize: 13),
+        );
+      },
     );
   }
 }
