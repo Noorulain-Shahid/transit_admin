@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:transit_core/transit_core.dart';
@@ -11,7 +10,8 @@ import '../../data/admin_repository.dart';
 import '../../data/live_location_client.dart';
 import '../../services/audit_service.dart';
 import '../../theme/app_theme.dart';
-import '../../widgets/confirm_delete_dialog.dart';
+import '../../widgets/ai_check_view.dart';
+import '../../widgets/account_controls.dart';
 import '../../widgets/entity_widgets.dart';
 import '../../widgets/glass_card.dart';
 import '../../widgets/mini_chart.dart';
@@ -29,6 +29,7 @@ String documentTypeLabel(DocumentType type) => switch (type) {
   DocumentType.routePermit => 'Route Permit',
   DocumentType.medicalFitness => 'Medical Fitness',
   DocumentType.schoolContract => 'School Contract',
+  DocumentType.cnic => 'CNIC / National ID',
 };
 
 // Only 'Verified' was requested — the other three document statuses stay
@@ -37,6 +38,24 @@ String documentStatusLabel(DocumentStatus status) => switch (status) {
   DocumentStatus.notUploaded => 'Not uploaded',
   DocumentStatus.pending => 'Pending review',
   DocumentStatus.verified => AppStrings.t('verified_status'),
+  DocumentStatus.rejected => 'Rejected',
+};
+
+/// English names for the audit log, which is stored in one language.
+String _plainDocType(DocumentType type) => switch (type) {
+  DocumentType.drivingLicense => 'Driving License',
+  DocumentType.vehicleRegistration => 'Vehicle Registration',
+  DocumentType.insuranceCertificate => 'Insurance Certificate',
+  DocumentType.routePermit => 'Route Permit',
+  DocumentType.medicalFitness => 'Medical Fitness',
+  DocumentType.schoolContract => 'School Contract',
+  DocumentType.cnic => 'CNIC / National ID',
+};
+
+String _plainDocStatus(DocumentStatus status) => switch (status) {
+  DocumentStatus.notUploaded => 'Not uploaded',
+  DocumentStatus.pending => 'Pending review',
+  DocumentStatus.verified => 'Verified',
   DocumentStatus.rejected => 'Rejected',
 };
 
@@ -77,10 +96,14 @@ class _AdminDriverDetailState extends State<AdminDriverDetail> {
   late final Stream<Driver?> _driverStream;
   late final Stream<List<DriverDocument>> _documentsStream;
 
-  /// `users/{uid}` — the driver's presence. `Driver.status` is written once
-  /// at onboarding and the rule that would let the app flip it isn't
-  /// deployed, so it said "Offline" about everyone.
-  late final Stream<AppUser?> _userStream;
+  /// `users/{uid}` — the driver's presence and account state. `Driver.status`
+  /// is written once at onboarding and the rule that would let the app flip
+  /// it isn't deployed, so it said "Offline" about everyone.
+  late final Stream<AccountRecord?> _userStream;
+
+  /// The same document for the account controls — its own stream, see the
+  /// broadcast note below.
+  late final Stream<AccountRecord?> _accountStream;
 
   /// Ratings, summarised here — `Driver.rating` is never maintained.
   late final Stream<List<DriverRating>> _ratingsStream;
@@ -113,7 +136,8 @@ class _AdminDriverDetailState extends State<AdminDriverDetail> {
     final id = widget.driverId;
     _driverStream = id.isEmpty ? Stream.value(null) : _repo.watchDriver(id);
     _documentsStream = _repo.watchDriverDocuments(id);
-    _userStream = id.isEmpty ? Stream.value(null) : _repo.watchUser(id);
+    _userStream = _repo.watchUserRecord(id);
+    _accountStream = _repo.watchUserRecord(id);
     _ratingsStream = _repo.watchRatingsForDriver(id);
     _rosterStream = _repo.watchStudentsOfDriver(id);
     _requestsStream = _repo.watchRideRequestsForDriver(id);
@@ -135,22 +159,58 @@ class _AdminDriverDetailState extends State<AdminDriverDetail> {
     super.dispose();
   }
 
+  /// "Approved" for an approved driver, otherwise the status label.
+  String _driverStatusText(Driver d) =>
+      d.isApproved ? 'Approved' : _plainStatus(d.status);
+
+  static String _plainStatus(DriverStatus s) => switch (s) {
+    DriverStatus.online => 'Online',
+    DriverStatus.offline => 'Offline',
+    DriverStatus.onTrip => 'On Trip',
+    DriverStatus.suspended => 'Suspended',
+    DriverStatus.pendingVerification => 'Pending verification',
+  };
+
   Future<void> _approve(Driver d) async {
+    final before = _driverStatusText(d);
     await _repo.updateDriverStatus(d.id, DriverStatus.offline);
     await _audit(
       AuditActionType.statusChange,
       d.id,
       'Approved driver ${d.name}',
+      action: AuditActions.driverApprove,
+      targetType: 'driver',
+      targetName: d.name,
+      targetRole: 'Driver',
+      changes: [AuditChange('Driver status', before, 'Approved')],
     );
     if (mounted) _msg('Driver approved');
   }
 
   Future<void> _suspend(Driver d) async {
+    final ok = await showAccountConfirmDialog(
+      context,
+      title: 'Suspend ${d.name}?',
+      lines: const [
+        'Their driver status becomes Suspended until you approve them '
+            'again. The sign-in itself is not changed — use Deactivate for '
+            'that.',
+      ],
+      confirmLabel: AppStrings.t('suspend_action'),
+      color: AppTheme.error,
+    );
+    if (!ok) return;
+    final before = _driverStatusText(d);
     await _repo.updateDriverStatus(d.id, DriverStatus.suspended);
     await _audit(
       AuditActionType.statusChange,
       d.id,
       'Suspended driver ${d.name}',
+      action: AuditActions.driverSuspend,
+      targetType: 'driver',
+      targetName: d.name,
+      targetRole: 'Driver',
+      changes: [AuditChange('Driver status', before, 'Suspended')],
     );
     if (mounted) _msg('Driver suspended');
   }
@@ -158,26 +218,25 @@ class _AdminDriverDetailState extends State<AdminDriverDetail> {
   Future<void> _audit(
     AuditActionType type,
     String targetId,
-    String description,
-  ) {
-    final adminId = FirebaseAuth.instance.currentUser?.uid ?? 'unknown';
+    String description, {
+    String action = '',
+    String targetType = '',
+    String targetName = '',
+    String targetRole = '',
+    List<AuditChange> changes = const [],
+    List<AuditDetail> details = const [],
+  }) {
     return AuditService.instance.logAction(
-      adminId: adminId,
       actionType: type,
       targetEntityId: targetId,
       description: description,
+      action: action,
+      targetType: targetType,
+      targetName: targetName,
+      targetRole: targetRole,
+      changes: changes,
+      details: details,
     );
-  }
-
-  /// Soft-delete (archive) a driver — see
-  /// `AdminRepository.deleteDriver`'s doc comment; also reassigns every
-  /// student off this driver's roster as part of the same call.
-  Future<void> _deleteDriver(Driver d) async {
-    final confirmed = await showConfirmDeleteDialog(context);
-    if (!confirmed) return;
-    await _repo.deleteDriver(d.id);
-    await _audit(AuditActionType.delete, d.id, 'Archived driver ${d.name}');
-    if (mounted) context.pop();
   }
 
   Future<void> _message(Driver d) async {
@@ -191,12 +250,22 @@ class _AdminDriverDetailState extends State<AdminDriverDetail> {
     if (mounted) _msg('Message sent to ${d.name}');
   }
 
-  Future<void> _verifyDocument(DriverDocument doc) async {
+  Future<void> _verifyDocument(DriverDocument doc, Driver d) async {
+    final before = _plainDocStatus(doc.status);
     await _repo.updateDriverDocument(doc.id, status: DocumentStatus.verified);
     await _audit(
       AuditActionType.statusChange,
       doc.id,
-      '${documentTypeLabel(doc.type)} verified',
+      '${_plainDocType(doc.type)} verified',
+      action: AuditActions.documentVerify,
+      targetType: 'document',
+      targetName: '${_plainDocType(doc.type)} of ${d.name}',
+      targetRole: 'Driver document',
+      changes: [AuditChange('Document status', before, 'Verified')],
+      details: [
+        AuditDetail('Driver', '${d.name} (ID ${d.id})'),
+        AuditDetail('Document', _plainDocType(doc.type)),
+      ],
     );
     if (mounted) _msg('${documentTypeLabel(doc.type)} verified');
   }
@@ -221,7 +290,20 @@ class _AdminDriverDetailState extends State<AdminDriverDetail> {
     await _audit(
       AuditActionType.statusChange,
       doc.id,
-      '${documentTypeLabel(doc.type)} rejected: $reason',
+      '${_plainDocType(doc.type)} rejected',
+      action: AuditActions.documentReject,
+      targetType: 'document',
+      targetName: '${_plainDocType(doc.type)} of ${d.name}',
+      targetRole: 'Driver document',
+      changes: [
+        AuditChange('Document status', _plainDocStatus(doc.status), 'Rejected'),
+      ],
+      details: [
+        AuditDetail('Driver', '${d.name} (ID ${d.id})'),
+        AuditDetail('Document', _plainDocType(doc.type)),
+        AuditDetail('Reason', reason),
+        const AuditDetail('Driver notified', 'Yes, in the app inbox'),
+      ],
     );
     if (mounted) {
       _msg('${documentTypeLabel(doc.type)} rejected and driver notified');
@@ -426,10 +508,11 @@ class _AdminDriverDetailState extends State<AdminDriverDetail> {
   ) {
     return GlassCard(
       padding: const EdgeInsets.all(18),
-      child: StreamBuilder<AppUser?>(
+      child: StreamBuilder<AccountRecord?>(
         stream: _userStream,
         builder: (context, userSnap) {
-          final user = userSnap.data;
+          final record = userSnap.data?.withProfileArchived(d.isDeleted);
+          final user = record?.user;
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -487,6 +570,8 @@ class _AdminDriverDetailState extends State<AdminDriverDetail> {
                           children: [
                             // Presence from the driver's `users` heartbeat,
                             // the same source as every other role.
+                            if (record != null)
+                              AccountStatusBadge(state: record.state),
                             PresenceBadge(user: user),
                             StatusBadge(
                               label: d.isApproved
@@ -506,6 +591,10 @@ class _AdminDriverDetailState extends State<AdminDriverDetail> {
               ),
               const SizedBox(height: 12),
               LastSeenLine(user: user, fontSize: 12),
+              if (record != null && record.state != AccountState.active) ...[
+                const SizedBox(height: 8),
+                AccountStateNote(record: record),
+              ],
             ],
           );
         },
@@ -1148,15 +1237,33 @@ class _AdminDriverDetailState extends State<AdminDriverDetail> {
               ),
             ],
           ),
-          const SizedBox(height: 8),
-          SizedBox(
-            width: double.infinity,
-            child: _ActionBtn(
-              label: AppStrings.t('delete_action'),
-              color: AppTheme.error,
-              icon: Icons.delete_outline_rounded,
-              onTap: () => _deleteDriver(d),
+          const SizedBox(height: 12),
+          Text(
+            AppStrings.t('account_section'),
+            style: TextStyle(
+              color: context.textSecondary,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
             ),
+          ),
+          const SizedBox(height: 8),
+          StreamBuilder<AccountRecord?>(
+            stream: _accountStream,
+            builder: (context, snap) {
+              final record = snap.data?.withProfileArchived(d.isDeleted);
+              if (record == null) {
+                return Text(
+                  snap.connectionState == ConnectionState.waiting
+                      ? '…'
+                      : AppStrings.t('no_account_record'),
+                  style: TextStyle(color: context.textSecondary, fontSize: 12),
+                );
+              }
+              return AccountControls(
+                record: record,
+                deleteNote: AppStrings.t('delete_driver_note'),
+              );
+            },
           ),
         ],
       ),
@@ -1206,7 +1313,7 @@ class _AdminDriverDetailState extends State<AdminDriverDetail> {
                                 mode: LaunchMode.externalApplication,
                               ),
                         onVerify: doc.status == DocumentStatus.pending
-                            ? () => _verifyDocument(doc)
+                            ? () => _verifyDocument(doc, d)
                             : null,
                         onReject: doc.status == DocumentStatus.pending
                             ? () => _rejectDocument(doc, d)
@@ -1750,7 +1857,14 @@ class _EarningsTab extends StatelessWidget {
                 a.paidAt ?? a.confirmedAt ?? DateTime(0),
               ),
             );
-          if (paid.isEmpty) {
+          final submitted =
+              all.where((p) => p.status == PaymentStatus.submitted).toList()
+                ..sort(
+                  (a, b) => (b.paidAt ?? DateTime(0)).compareTo(
+                    a.paidAt ?? DateTime(0),
+                  ),
+                );
+          if (paid.isEmpty && submitted.isEmpty) {
             return SingleChildScrollView(
               child: EmptyHint(
                 text: AppStrings.t('no_earnings_recorded_driver'),
@@ -1816,6 +1930,19 @@ class _EarningsTab extends StatelessWidget {
                   value: formatRupees(e.value),
                   color: AppTheme.success,
                 ),
+              if (submitted.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Text(
+                  'Waiting for the driver',
+                  style: TextStyle(
+                    color: context.textSecondary,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                for (final p in submitted.take(20)) _paymentRow(context, p),
+              ],
               const SizedBox(height: 8),
               Text(
                 'Recent payments',
@@ -1826,24 +1953,39 @@ class _EarningsTab extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 6),
-              for (final p in paid.take(20))
-                HistoryRow(
-                  color: AppTheme.success,
-                  title: p.displayAmount,
-                  subtitle: [
-                    if (p.monthKey.isNotEmpty)
-                      'For ${formatMonthKey(p.monthKey)}',
-                    if (p.paidAt != null) 'paid ${formatDate(p.paidAt!)}',
-                    if ((p.methodName ?? '').isNotEmpty) p.methodName!,
-                  ].join(' · '),
-                  onTap: p.studentId.isEmpty
-                      ? null
-                      : () => openStudentDetail(context, p.studentId),
-                ),
+              for (final p in paid.take(20)) _paymentRow(context, p),
             ],
           );
         },
       ),
+    );
+  }
+
+  /// One payment, with the AI check of its screenshot under it.
+  Widget _paymentRow(BuildContext context, Payment p) {
+    final waiting = p.status == PaymentStatus.submitted;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        HistoryRow(
+          color: waiting ? AppTheme.warning : AppTheme.success,
+          title: p.displayAmount,
+          subtitle: [
+            if (p.monthKey.isNotEmpty) 'For ${formatMonthKey(p.monthKey)}',
+            if (p.paidAt != null)
+              '${waiting ? 'sent' : 'paid'} ${formatDate(p.paidAt!)}',
+            if ((p.methodName ?? '').isNotEmpty) p.methodName!,
+          ].join(' · '),
+          onTap: p.studentId.isEmpty
+              ? null
+              : () => openStudentDetail(context, p.studentId),
+        ),
+        if (p.slipCheck != null)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 6),
+            child: SlipCheckView(check: p.slipCheck!),
+          ),
+      ],
     );
   }
 }
@@ -1919,6 +2061,14 @@ class _DocumentRow extends StatelessWidget {
                 ),
               ],
             ),
+            if (doc.expiryDate != null) ...[
+              const SizedBox(height: 4),
+              Text(
+                'Expires ${formatDate(doc.expiryDate!)}',
+                style: TextStyle(color: context.textSecondary, fontSize: 12),
+              ),
+            ],
+            if (doc.docCheck != null) DocCheckView(check: doc.docCheck!),
             if (doc.status == DocumentStatus.rejected &&
                 doc.rejectionReason != null &&
                 doc.rejectionReason!.isNotEmpty) ...[

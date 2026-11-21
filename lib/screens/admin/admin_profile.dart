@@ -6,7 +6,6 @@ import 'package:transit_core/transit_core.dart';
 import '../../app/auth_service.dart';
 import '../../app/locale_provider.dart';
 import '../../data/admin_repository.dart';
-import '../../services/audit_service.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/theme_provider.dart';
 import '../../widgets/glass_card.dart';
@@ -32,8 +31,6 @@ class _AdminProfileState extends State<AdminProfile> {
   int? _busCount;
   int? _routeCount;
   int? _userCount;
-  LoginSessionEntry? _lastSignIn;
-  bool _lastSignInLoaded = false;
 
   StreamSubscription<AppUser?>? _meSub;
 
@@ -56,7 +53,6 @@ class _AdminProfileState extends State<AdminProfile> {
     // drivers) duplicated listeners the Dashboard and other screens already
     // keep open on the exact same collections.
     _loadCounts();
-    _loadLastSignIn(uid);
     // `AppStrings.t()` reads `LocaleProvider` directly rather than through
     // an `InheritedWidget`, so nothing rebuilds this screen automatically
     // when the language changes elsewhere (e.g. the language picker sheet
@@ -79,39 +75,6 @@ class _AdminProfileState extends State<AdminProfile> {
       _routeCount = results[1];
       _userCount = results[2] + results[3] + results[4];
     });
-  }
-
-  Future<void> _loadLastSignIn(String? uid) async {
-    if (uid == null) return;
-    try {
-      final sessions = await AuditService.instance.fetchLoginSessions(
-        adminId: uid,
-        limit: 1,
-      );
-      if (!mounted) return;
-      setState(() {
-        _lastSignIn = sessions.isEmpty ? null : sessions.first;
-        _lastSignInLoaded = true;
-      });
-    } catch (e) {
-      // This screen builds immediately on login (it's one of AdminLayout's
-      // IndexedStack tabs, not lazily on first visit), so an uncaught
-      // Firestore error here fires right after sign-in — exactly the crash
-      // pattern `main.dart`'s `runZonedGuarded` comment warns an unhandled
-      // Firestore error has caused on a real device before. This row simply
-      // shows "not available" instead, same as a genuinely empty result.
-      if (!mounted) return;
-      setState(() => _lastSignInLoaded = true);
-    }
-  }
-
-  String _lastSignInDetail() {
-    if (!_lastSignInLoaded) return '…';
-    final s = _lastSignIn;
-    if (s == null) return AppStrings.t('not_available_yet');
-    final t = s.timestamp.toLocal();
-    String two(int n) => n.toString().padLeft(2, '0');
-    return '${s.platform} • ${two(t.hour)}:${two(t.minute)}, ${two(t.day)}/${two(t.month)}';
   }
 
   void _onLangChanged() => setState(() {});
@@ -144,8 +107,6 @@ class _AdminProfileState extends State<AdminProfile> {
                   const SizedBox(height: 12),
                   _buildSettings(context),
                   const SizedBox(height: 12),
-                  _buildSecurity(context),
-                  const SizedBox(height: 12),
                   _buildSystemControls(context),
                   const SizedBox(height: 12),
                   _buildThemeToggle(context),
@@ -161,7 +122,9 @@ class _AdminProfileState extends State<AdminProfile> {
   }
 
   Widget _buildAvatar(BuildContext context) {
-    final name = _me?.name.isNotEmpty == true ? _me!.name : 'Admin';
+    final name = _me?.name.isNotEmpty == true
+        ? _me!.name
+        : AppStrings.t('admin_role');
     final email = FirebaseAuth.instance.currentUser?.email ?? '';
     return Center(
       child: Column(
@@ -239,7 +202,9 @@ class _AdminProfileState extends State<AdminProfile> {
 
   Widget _buildProfileInfo(BuildContext context) {
     final email = FirebaseAuth.instance.currentUser?.email ?? '—';
-    final phone = _me?.phone.isNotEmpty == true ? _me!.phone : 'Not set';
+    final phone = _me?.phone.isNotEmpty == true
+        ? _me!.phone
+        : AppStrings.t('not_set');
     return GlassCard(
       padding: const EdgeInsets.all(18),
       child: Column(
@@ -319,70 +284,13 @@ class _AdminProfileState extends State<AdminProfile> {
           ),
           _OptionRow(
             icon: Icons.reviews_rounded,
-            label: 'App Ratings & Feedback',
+            label: AppStrings.t('app_rating_feedback'),
             onTap: () => context.push('/admin/feedback'),
-          ),
-          _OptionRow(
-            icon: Icons.lock_rounded,
-            label: AppStrings.t('change_password'),
-            onTap: () => _sendPasswordReset(context),
           ),
           _OptionRow(
             icon: Icons.language_rounded,
             label: AppStrings.t('language_settings'),
             onTap: () => _showLanguagePicker(context),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSecurity(BuildContext context) {
-    return GlassCard(
-      padding: const EdgeInsets.all(18),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(
-                Icons.security_rounded,
-                color: AppTheme.adminAccent,
-                size: 20,
-              ),
-              const SizedBox(width: 8),
-              Text(
-                AppStrings.t('security'),
-                style: TextStyle(
-                  color: context.textPrimary,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          _SecurityRow(
-            icon: Icons.history_rounded,
-            label: AppStrings.t('login_session_history'),
-            detail: AppStrings.t('view_sign_in_history'),
-            color: AppTheme.info,
-            onTap: () => context.push('/admin/session-history'),
-          ),
-          _SecurityRow(
-            icon: Icons.schedule_rounded,
-            label: AppStrings.t('last_sign_in_lbl'),
-            detail: _lastSignInDetail(),
-            color: AppTheme.adminEmerald,
-            onTap: () => context.push('/admin/session-history'),
-          ),
-          _SecurityRow(
-            icon: Icons.logout_rounded,
-            label: AppStrings.t('logout_all_sessions'),
-            detail: AppStrings.t('not_available_yet'),
-            color: AppTheme.error,
-            comingSoon: true,
-            onTap: () => _msg(context, 'Logout All Sessions — coming soon'),
           ),
         ],
       ),
@@ -419,14 +327,14 @@ class _AdminProfileState extends State<AdminProfile> {
             ],
           ),
           const SizedBox(height: 12),
-          _SecurityRow(
+          _ControlRow(
             icon: Icons.history_edu_rounded,
             label: AppStrings.t('audit_history'),
             detail: AppStrings.t('now_recording_viewer_soon'),
             color: AppTheme.purple,
             onTap: () => context.push('/admin/audit-history'),
           ),
-          _SecurityRow(
+          _ControlRow(
             icon: Icons.analytics_rounded,
             label: AppStrings.t('admin_activity_tracking'),
             detail: AppStrings.t('view_activity_summary'),
@@ -499,30 +407,6 @@ class _AdminProfileState extends State<AdminProfile> {
     );
   }
 
-  void _msg(BuildContext context, String m) =>
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
-
-  /// Real "Change Password" flow — the admin app has no in-session
-  /// reauthenticate-then-updatePassword form today, so this sends Firebase
-  /// Auth's own password-reset email to the signed-in admin's address
-  /// instead; simpler, and doesn't require the admin to re-type their
-  /// current password inside this screen.
-  Future<void> _sendPasswordReset(BuildContext context) async {
-    final email = _me?.email ?? FirebaseAuth.instance.currentUser?.email;
-    if (email == null || email.isEmpty) {
-      _msg(context, 'No email on this account to send a reset link to.');
-      return;
-    }
-    try {
-      await FirebaseAuth.instance.sendPasswordResetEmail(email: email);
-      if (context.mounted) _msg(context, 'Password reset link sent to $email');
-    } on FirebaseAuthException catch (e) {
-      if (context.mounted) {
-        _msg(context, 'Could not send reset link: ${e.message}');
-      }
-    }
-  }
-
   Future<void> _showLanguagePicker(BuildContext context) {
     return showModalBottomSheet(
       context: context,
@@ -583,7 +467,7 @@ class _LanguagePickerSheet extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Language',
+                AppStrings.t('language_lbl'),
                 style: TextStyle(
                   color: context.textPrimary,
                   fontSize: 16,
@@ -793,23 +677,21 @@ class _OptionRow extends StatelessWidget {
   }
 }
 
-class _SecurityRow extends StatelessWidget {
+class _ControlRow extends StatelessWidget {
   final IconData icon;
   final String label, detail;
   final Color color;
   final VoidCallback onTap;
-  final bool comingSoon;
-  const _SecurityRow({
+  const _ControlRow({
     required this.icon,
     required this.label,
     required this.detail,
     required this.color,
     required this.onTap,
-    this.comingSoon = false,
   });
   @override
   Widget build(BuildContext context) {
-    final rowColor = comingSoon ? context.textTertiary : color;
+    final rowColor = color;
     return Clickable(
       onTap: onTap,
       child: Padding(
@@ -847,17 +729,11 @@ class _SecurityRow extends StatelessWidget {
                   ],
                 ),
               ),
-              if (comingSoon)
-                StatusBadge(
-                  label: AppStrings.t('soon_badge'),
-                  color: context.textTertiary,
-                )
-              else
-                Icon(
-                  Icons.chevron_right_rounded,
-                  color: context.textTertiary,
-                  size: 20,
-                ),
+              Icon(
+                Icons.chevron_right_rounded,
+                color: context.textTertiary,
+                size: 20,
+              ),
             ],
           ),
         ),

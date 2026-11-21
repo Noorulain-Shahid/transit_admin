@@ -1,4 +1,3 @@
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:transit_core/transit_core.dart';
@@ -7,6 +6,7 @@ import '../../app/locale_provider.dart';
 import '../../data/admin_repository.dart';
 import '../../services/audit_service.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/account_controls.dart';
 import '../../widgets/confirm_delete_dialog.dart';
 import '../../widgets/entity_widgets.dart';
 import '../../widgets/glass_card.dart';
@@ -41,16 +41,19 @@ class _AdminStudentDetailState extends State<AdminStudentDetail> {
   /// self-registered student, the parent's for a child (see
   /// [primaryAccountIdFor]). Re-created only if that id changes.
   String? _accountId;
-  Stream<AppUser?>? _accountStream;
+  Stream<AccountRecord?>? _accountStream;
 
-  Stream<AppUser?> _accountFor(Student s) {
+  Stream<AccountRecord?> _accountFor(Student s) {
     final id = primaryAccountIdFor(s);
     if (id != _accountId || _accountStream == null) {
       _accountId = id;
-      _accountStream = id.isEmpty ? Stream.value(null) : _repo.watchUser(id);
+      _accountStream = _repo.watchUserRecord(id);
     }
     return _accountStream!;
   }
+
+  /// The parent's name for an audit line, when this is a child.
+  String? _parentName;
 
   @override
   void initState() {
@@ -85,13 +88,38 @@ class _AdminStudentDetailState extends State<AdminStudentDetail> {
   Future<void> _save(Student s) async {
     setState(() => _saving = true);
     try {
+      final name = _nameCtrl.text.trim();
+      final grade = _gradeCtrl.text.trim();
+      final school = _schoolCtrl.text.trim();
+      final medical = _medicalCtrl.text.trim();
       await _repo.updateStudent(s.id, {
-        'name': _nameCtrl.text.trim(),
-        'grade': _gradeCtrl.text.trim(),
-        'school': _schoolCtrl.text.trim(),
+        'name': name,
+        'grade': grade,
+        'school': school,
         'instituteType': _level,
-        'medicalNotes': _medicalCtrl.text.trim(),
+        'medicalNotes': medical,
       });
+      final changes = [
+        if (name != s.name) AuditChange('Name', s.name, name),
+        if (grade != s.grade) AuditChange('Grade', s.grade, grade),
+        if (school != s.school) AuditChange('School', s.school, school),
+        if (_level != studentLevel(s))
+          AuditChange('Level', studentLevel(s), _level),
+        if (medical != (s.medicalNotes ?? ''))
+          const AuditChange('Medical notes', 'previous text', 'updated'),
+      ];
+      if (changes.isNotEmpty) {
+        await AuditService.instance.logAction(
+          actionType: AuditActionType.update,
+          action: AuditActions.studentEdit,
+          targetEntityId: s.id,
+          targetType: 'student',
+          targetName: name.isEmpty ? s.name : name,
+          targetRole: _studentRole(s),
+          description: 'Edited student ${name.isEmpty ? s.name : name}',
+          changes: changes,
+        );
+      }
       if (mounted) {
         setState(() => _editing = false);
         _msg('Saved');
@@ -101,10 +129,52 @@ class _AdminStudentDetailState extends State<AdminStudentDetail> {
     }
   }
 
+  /// "Student" for a self-registered student, "Student (child of Sara)"
+  /// for a child.
+  String _studentRole(Student s) {
+    if (isSelfRegistered(s)) return 'Student (own account)';
+    final parent = (_parentName ?? '').trim();
+    return parent.isEmpty ? 'Student (child)' : 'Student (child of $parent)';
+  }
+
   Future<void> _toggleSuspended(Student s) async {
-    await _repo.updateStudent(s.id, {
-      'isTransportSuspended': !s.isTransportSuspended,
-    });
+    final suspending = !s.isTransportSuspended;
+    final ok = await showAccountConfirmDialog(
+      context,
+      title: suspending
+          ? 'Suspend transport for ${s.name}?'
+          : 'Re-enable transport for ${s.name}?',
+      lines: [
+        suspending
+            ? 'The student is taken off transport until you re-enable it. '
+                  'The account itself is not changed.'
+            : 'The student can use transport again.',
+      ],
+      confirmLabel: suspending
+          ? AppStrings.t('suspend_action')
+          : AppStrings.t('re_enable_action'),
+      color: suspending ? AppTheme.warning : AppTheme.success,
+    );
+    if (!ok) return;
+    await _repo.updateStudent(s.id, {'isTransportSuspended': suspending});
+    await AuditService.instance.logAction(
+      actionType: AuditActionType.statusChange,
+      action: AuditActions.studentTransport,
+      targetEntityId: s.id,
+      targetType: 'student',
+      targetName: s.name,
+      targetRole: _studentRole(s),
+      description: suspending
+          ? 'Suspended transport for ${s.name}'
+          : 'Re-enabled transport for ${s.name}',
+      changes: [
+        AuditChange(
+          'Transport',
+          suspending ? 'Active' : 'Suspended',
+          suspending ? 'Suspended' : 'Active',
+        ),
+      ],
+    );
     if (mounted) {
       _msg(
         s.isTransportSuspended ? 'Transport re-enabled' : 'Transport suspended',
@@ -112,19 +182,32 @@ class _AdminStudentDetailState extends State<AdminStudentDetail> {
     }
   }
 
-  /// Soft-delete (archive) a single student — see
+  /// Removes (archives) a child of a parent — see
   /// `AdminRepository.deleteStudent`'s doc comment. Does not touch the
-  /// parent's own account (removing the parent instead cascades to every
-  /// one of their students via `deleteParent`).
+  /// parent's own account. A self-registered student is an account and
+  /// uses the account controls instead.
   Future<void> _deleteStudent(Student s) async {
     final confirmed = await showConfirmDeleteDialog(context);
     if (!confirmed) return;
     await _repo.deleteStudent(s.id);
     await AuditService.instance.logAction(
-      adminId: FirebaseAuth.instance.currentUser?.uid ?? 'unknown',
       actionType: AuditActionType.delete,
+      action: AuditActions.studentArchive,
       targetEntityId: s.id,
-      description: 'Archived student ${s.name}',
+      targetType: 'student',
+      targetName: s.name,
+      targetRole: _studentRole(s),
+      description: 'Removed student ${s.name}',
+      changes: const [AuditChange('Student record', 'Active', 'Archived')],
+      details: [
+        if (s.parentId.trim().isNotEmpty)
+          AuditDetail(
+            'Parent',
+            '${(_parentName ?? '').isEmpty ? 'Unknown' : _parentName} '
+                '(ID ${s.parentId.trim()})',
+          ),
+        if (s.school.isNotEmpty) AuditDetail('School', s.school),
+      ],
     );
     if (mounted) context.pop();
   }
@@ -196,7 +279,7 @@ class _AdminStudentDetailState extends State<AdminStudentDetail> {
                   ),
                 );
               } else {
-                body = StreamBuilder<AppUser?>(
+                body = StreamBuilder<AccountRecord?>(
                   stream: _accountFor(s),
                   builder: (context, accountSnap) =>
                       _buildBody(context, s, accountSnap),
@@ -279,15 +362,21 @@ class _AdminStudentDetailState extends State<AdminStudentDetail> {
   Widget _buildBody(
     BuildContext context,
     Student s,
-    AsyncSnapshot<AppUser?> accountSnap,
+    AsyncSnapshot<AccountRecord?> accountSnap,
   ) {
-    final account = accountSnap.data;
+    final self = isSelfRegistered(s);
+    // For a self-registered student an archived student record counts as a
+    // deactivated account (the old admin "Delete" archived only that).
+    final record = self
+        ? accountSnap.data?.withProfileArchived(s.isDeleted)
+        : accountSnap.data;
+    final account = record?.user;
+    if (!self) _parentName = account?.name;
     final accountLoaded =
         accountSnap.hasData ||
         accountSnap.hasError ||
         accountSnap.connectionState == ConnectionState.active ||
         accountSnap.connectionState == ConnectionState.done;
-    final self = isSelfRegistered(s);
     // One column on a phone; on a wide window the student's record sits
     // left, transport and history right.
     return SingleChildScrollView(
@@ -297,10 +386,10 @@ class _AdminStudentDetailState extends State<AdminStudentDetail> {
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: TwoPane(
             primary: [
-              _buildProfileCard(context, s, account, accountLoaded, self),
+              _buildProfileCard(context, s, record, accountLoaded, self),
               _buildDetailsCard(context, s),
               _buildAccountCard(context, s, account, accountLoaded, self),
-              _buildControls(context, s),
+              _buildControls(context, s, record, accountLoaded, self),
             ],
             secondary: [
               _buildTransportCard(context, s),
@@ -345,12 +434,15 @@ class _AdminStudentDetailState extends State<AdminStudentDetail> {
   Widget _buildProfileCard(
     BuildContext context,
     Student s,
-    AppUser? account,
+    AccountRecord? record,
     bool accountLoaded,
     bool self,
   ) {
+    final account = record?.user;
     final subActive = isStudentSubscriptionActive(account);
-    final accountOff = account != null && isAccountDeactivated(account);
+    final accountState = record?.state;
+    final accountOff =
+        accountState != null && accountState != AccountState.active;
     return GlassCard(
       padding: const EdgeInsets.all(18),
       child: Column(
@@ -432,17 +524,20 @@ class _AdminStudentDetailState extends State<AdminStudentDetail> {
                             user: account,
                             prefix: self ? null : 'Parent',
                           ),
-                        if (s.isDeleted)
+                        // A self-registered student's own account state.
+                        if (self && accountState != null)
+                          AccountStatusBadge(state: accountState),
+                        if (!self && s.isDeleted)
                           const StatusBadge(
                             label: 'Archived',
                             color: AppTheme.error,
                           ),
-                        if (accountOff)
+                        if (!self && accountOff)
                           StatusBadge(
-                            label: self
-                                ? 'Account deactivated'
-                                : 'Parent account deactivated',
-                            color: AppTheme.error,
+                            label:
+                                'Parent account '
+                                '${accountStateLabel(accountState).toLowerCase()}',
+                            color: accountStateColor(accountState),
                           ),
                       ],
                     ),
@@ -451,6 +546,10 @@ class _AdminStudentDetailState extends State<AdminStudentDetail> {
               ),
             ],
           ),
+          if (self && record != null && accountOff) ...[
+            const SizedBox(height: 8),
+            AccountStateNote(record: record),
+          ],
           if (accountLoaded) ...[
             const SizedBox(height: 12),
             Text(
@@ -699,7 +798,13 @@ class _AdminStudentDetailState extends State<AdminStudentDetail> {
     );
   }
 
-  Widget _buildControls(BuildContext context, Student s) {
+  Widget _buildControls(
+    BuildContext context,
+    Student s,
+    AccountRecord? record,
+    bool accountLoaded,
+    bool self,
+  ) {
     return GlassCard(
       padding: const EdgeInsets.all(18),
       child: Column(
@@ -742,15 +847,41 @@ class _AdminStudentDetailState extends State<AdminStudentDetail> {
             ],
           ),
           const SizedBox(height: 8),
-          SizedBox(
-            width: double.infinity,
-            child: _ActionBtn(
-              label: AppStrings.t('delete_action'),
-              color: AppTheme.error,
-              icon: Icons.delete_outline_rounded,
-              onTap: s.isDeleted ? null : () => _deleteStudent(s),
+          // A self-registered student is an account of their own:
+          // Deactivate / Activate / Delete permanently, like a parent or a
+          // driver. A child has no sign-in; removing it archives the
+          // record, as before.
+          if (self) ...[
+            const SizedBox(height: 4),
+            Text(
+              AppStrings.t('account_section'),
+              style: TextStyle(
+                color: context.textSecondary,
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+              ),
             ),
-          ),
+            const SizedBox(height: 8),
+            if (record != null)
+              AccountControls(
+                record: record,
+                deleteNote: AppStrings.t('delete_student_note'),
+              )
+            else
+              Text(
+                accountLoaded ? AppStrings.t('no_account_record') : '…',
+                style: TextStyle(color: context.textSecondary, fontSize: 12),
+              ),
+          ] else
+            SizedBox(
+              width: double.infinity,
+              child: _ActionBtn(
+                label: AppStrings.t('delete_action'),
+                color: AppTheme.error,
+                icon: Icons.delete_outline_rounded,
+                onTap: s.isDeleted ? null : () => _deleteStudent(s),
+              ),
+            ),
         ],
       ),
     );

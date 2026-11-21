@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:transit_core/transit_core.dart';
 
 import '../../app/admin_format.dart';
+import '../../app/locale_provider.dart';
 import '../../data/admin_repository.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/entity_widgets.dart';
@@ -10,10 +11,10 @@ import '../../widgets/glass_card.dart';
 import '../../widgets/responsive.dart';
 
 String _roleLabel(String role) => switch (role) {
-  'parent' => 'Parent',
-  'student' => 'Student',
-  'driver' => 'Driver',
-  'admin' => 'Admin',
+  'parent' => AppStrings.t('nav_parent'),
+  'student' => AppStrings.t('nav_student'),
+  'driver' => AppStrings.t('nav_driver'),
+  'admin' => AppStrings.t('admin_role'),
   '' => '',
   _ => '${role[0].toUpperCase()}${role.substring(1)}',
 };
@@ -45,6 +46,20 @@ class _AdminFeedbackScreenState extends State<AdminFeedbackScreen> {
   late final Stream<List<AppFeedback>> _stream = AdminRepository.instance
       .watchAllFeedback();
   int? _stars; // null = all
+
+  @override
+  void initState() {
+    super.initState();
+    LocaleProvider.instance.addListener(_onLangChanged);
+  }
+
+  void _onLangChanged() => setState(() {});
+
+  @override
+  void dispose() {
+    LocaleProvider.instance.removeListener(_onLangChanged);
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -80,7 +95,7 @@ class _AdminFeedbackScreenState extends State<AdminFeedbackScreen> {
                     const SizedBox(width: 14),
                     Expanded(
                       child: Text(
-                        'App Ratings & Feedback',
+                        AppStrings.t('app_rating_feedback'),
                         style: TextStyle(
                           color: context.textPrimary,
                           fontSize: 20,
@@ -125,7 +140,9 @@ class _AdminFeedbackScreenState extends State<AdminFeedbackScreen> {
                           runSpacing: 8,
                           children: [
                             ChoiceChip(
-                              label: Text('All (${all.length})'),
+                              label: Text(
+                                '${AppStrings.t('status_all')} (${all.length})',
+                              ),
                               selected: _stars == null,
                               onSelected: (_) => setState(() => _stars = null),
                             ),
@@ -143,8 +160,8 @@ class _AdminFeedbackScreenState extends State<AdminFeedbackScreen> {
                         if (shown.isEmpty)
                           EmptyHint(
                             text: all.isEmpty
-                                ? 'No one has rated the app yet.'
-                                : 'No ratings with that many stars.',
+                                ? AppStrings.t('no_ratings_yet')
+                                : AppStrings.t('no_ratings_with_stars'),
                             icon: Icons.star_border_rounded,
                           )
                         else
@@ -193,7 +210,9 @@ class _SummaryCard extends StatelessWidget {
               RatingStars(value: avg, size: 16),
               const SizedBox(height: 4),
               Text(
-                '$total rating${total == 1 ? '' : 's'}',
+                AppStrings.t(
+                  total == 1 ? 'rating_count_one' : 'rating_count_many',
+                ).replaceFirst('{count}', '$total'),
                 style: TextStyle(color: context.textSecondary, fontSize: 11),
               ),
             ],
@@ -287,7 +306,7 @@ class FeedbackTile extends StatelessWidget {
                   ? account!.name
                   : (snap.connectionState == ConnectionState.waiting
                         ? 'Loading…'
-                        : 'Anonymous user'));
+                        : AppStrings.t('anonymous_user')));
         final role = f.userRole.isNotEmpty
             ? f.userRole
             : (account?.role.name ?? '');
@@ -318,7 +337,7 @@ class FeedbackTile extends StatelessWidget {
               ),
               const SizedBox(height: 8),
               Text(
-                comment.isEmpty ? 'No comment left.' : comment,
+                comment.isEmpty ? AppStrings.t('no_comment_left') : comment,
                 style: TextStyle(
                   color: comment.isEmpty
                       ? context.textTertiary
@@ -377,12 +396,12 @@ class _AppFeedbackSummaryCardState extends State<AppFeedbackSummaryCard> {
   @override
   Widget build(BuildContext context) {
     return SectionCard(
-      title: 'App Ratings & Feedback',
+      title: AppStrings.t('app_rating_feedback'),
       icon: Icons.reviews_rounded,
       color: AppTheme.studentAmber,
       trailing: TextButton(
         onPressed: () => context.push('/admin/feedback'),
-        child: const Text('View all'),
+        child: Text(AppStrings.t('view_all_action')),
       ),
       child: StreamBuilder<List<AppFeedback>>(
         stream: _stream,
@@ -392,7 +411,7 @@ class _AppFeedbackSummaryCardState extends State<AppFeedbackSummaryCard> {
           builder: (all) {
             if (all.isEmpty) {
               return Text(
-                'No one has rated the app yet.',
+                AppStrings.t('no_ratings_yet'),
                 style: TextStyle(color: context.textSecondary, fontSize: 12),
               );
             }
@@ -417,7 +436,9 @@ class _AppFeedbackSummaryCardState extends State<AppFeedbackSummaryCard> {
                         children: [
                           RatingStars(value: avg),
                           Text(
-                            'Average of ${all.length} rating${all.length == 1 ? '' : 's'}',
+                            AppStrings.t(
+                              'average_of_ratings',
+                            ).replaceFirst('{count}', '${all.length}'),
                             style: TextStyle(
                               color: context.textSecondary,
                               fontSize: 11,

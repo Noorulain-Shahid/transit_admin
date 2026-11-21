@@ -1,4 +1,3 @@
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:transit_core/transit_core.dart';
@@ -7,7 +6,7 @@ import '../../app/locale_provider.dart';
 import '../../data/admin_repository.dart';
 import '../../services/audit_service.dart';
 import '../../theme/app_theme.dart';
-import '../../widgets/confirm_delete_dialog.dart';
+import '../../widgets/account_controls.dart';
 import '../../widgets/entity_widgets.dart';
 import '../../widgets/glass_card.dart';
 import 'admin_history_tabs.dart';
@@ -32,7 +31,7 @@ class _AdminParentDetailState extends State<AdminParentDetail> {
   // Set in `initState` (not a field initializer — `widget` isn't attached
   // yet at that point) exactly once, same fix applied across every other
   // screen in this app that built its stream inline inside `build()`.
-  late final Stream<({AppUser user, String deletedBy})?> _parentStream;
+  late final Stream<AccountRecord?> _parentStream;
 
   /// This parent's children, queried directly (`parentId == uid`). It used
   /// to filter the shared all-students stream, which — being a cached
@@ -73,11 +72,31 @@ class _AdminParentDetailState extends State<AdminParentDetail> {
   Future<void> _save(AppUser p) async {
     setState(() => _saving = true);
     try {
+      final name = _nameCtrl.text.trim();
+      final phone = _phoneCtrl.text.trim();
+      final email = _emailCtrl.text.trim();
       await _repo.updateUser(p.uid, {
-        'name': _nameCtrl.text.trim(),
-        'phone': _phoneCtrl.text.trim(),
-        'email': _emailCtrl.text.trim(),
+        'name': name,
+        'phone': phone,
+        'email': email,
       });
+      final changes = [
+        if (name != p.name) AuditChange('Name', p.name, name),
+        if (phone != p.phone) AuditChange('Phone', p.phone, phone),
+        if (email != p.email) AuditChange('Email', p.email, email),
+      ];
+      if (changes.isNotEmpty) {
+        await AuditService.instance.logAction(
+          actionType: AuditActionType.update,
+          action: AuditActions.accountEdit,
+          targetEntityId: p.uid,
+          targetType: 'parent',
+          targetName: name.isEmpty ? p.name : name,
+          targetRole: 'Parent',
+          description: 'Edited parent ${name.isEmpty ? p.name : name}',
+          changes: changes,
+        );
+      }
       if (mounted) {
         setState(() => _editing = false);
         _msg('Saved');
@@ -85,28 +104,6 @@ class _AdminParentDetailState extends State<AdminParentDetail> {
     } finally {
       if (mounted) setState(() => _saving = false);
     }
-  }
-
-  Future<void> _toggleActive(AppUser p) async {
-    await _repo.updateUser(p.uid, {'isActive': !p.isActive});
-    if (mounted) _msg(p.isActive ? 'Account deactivated' : 'Account activated');
-  }
-
-  /// Soft-delete (archive) — see `AdminRepository.deleteParent`'s doc
-  /// comment. Cascades to the parent's own students, so pops back to the
-  /// list rather than leaving the admin on a detail screen for an account
-  /// that has just been archived.
-  Future<void> _deleteParent(AppUser p) async {
-    final confirmed = await showConfirmDeleteDialog(context);
-    if (!confirmed) return;
-    await _repo.deleteParent(p.uid);
-    await AuditService.instance.logAction(
-      adminId: FirebaseAuth.instance.currentUser?.uid ?? 'unknown',
-      actionType: AuditActionType.delete,
-      targetEntityId: p.uid,
-      description: 'Archived parent ${p.name}',
-    );
-    if (mounted) context.pop();
   }
 
   Future<void> _message(AppUser p) async {
@@ -149,7 +146,7 @@ class _AdminParentDetailState extends State<AdminParentDetail> {
       body: Container(
         decoration: context.scaffoldBg,
         child: SafeArea(
-          child: StreamBuilder<({AppUser user, String deletedBy})?>(
+          child: StreamBuilder<AccountRecord?>(
             stream: _parentStream,
             builder: (context, snap) {
               final record = snap.data;
@@ -169,7 +166,7 @@ class _AdminParentDetailState extends State<AdminParentDetail> {
                   ),
                 );
               } else {
-                body = _buildBody(context, record.user, record.deletedBy);
+                body = _buildBody(context, record);
               }
               return Column(
                 children: [
@@ -185,7 +182,8 @@ class _AdminParentDetailState extends State<AdminParentDetail> {
     );
   }
 
-  Widget _buildBody(BuildContext context, AppUser p, String deletedBy) {
+  Widget _buildBody(BuildContext context, AccountRecord record) {
+    final p = record.user;
     return StreamBuilder<List<Student>>(
       stream: _childrenStream,
       builder: (context, childSnap) {
@@ -199,9 +197,9 @@ class _AdminParentDetailState extends State<AdminParentDetail> {
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: TwoPane(
                 primary: [
-                  _buildProfileCard(context, p, deletedBy),
+                  _buildProfileCard(context, record),
                   _buildContactCard(context, p, children),
-                  _buildControls(context, p),
+                  _buildControls(context, record, children),
                 ],
                 secondary: [
                   _buildChildrenSection(context, childSnap),
@@ -260,8 +258,9 @@ class _AdminParentDetailState extends State<AdminParentDetail> {
     );
   }
 
-  Widget _buildProfileCard(BuildContext context, AppUser p, String deletedBy) {
-    final deactivated = isAccountDeactivated(p);
+  Widget _buildProfileCard(BuildContext context, AccountRecord record) {
+    final p = record.user;
+    final state = record.state;
     return GlassCard(
       padding: const EdgeInsets.all(18),
       child: Column(
@@ -294,14 +293,14 @@ class _AdminParentDetailState extends State<AdminParentDetail> {
                       spacing: 6,
                       runSpacing: 6,
                       children: [
-                        AccountStatusBadge(user: p),
+                        AccountStatusBadge(state: state),
                         PresenceBadge(user: p),
                       ],
                     ),
                   ],
                 ),
               ),
-              if (!_editing && !p.isDeleted)
+              if (!_editing && state != AccountState.deleted)
                 IconButton(
                   onPressed: () => _startEditing(p),
                   icon: Icon(Icons.edit_rounded, color: context.textSecondary),
@@ -310,27 +309,9 @@ class _AdminParentDetailState extends State<AdminParentDetail> {
           ),
           const SizedBox(height: 12),
           LastSeenLine(user: p, fontSize: 12),
-          if (deactivated) ...[
+          if (state != AccountState.active) ...[
             const SizedBox(height: 8),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: AppTheme.error.withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                  color: AppTheme.error.withValues(alpha: 0.2),
-                ),
-              ),
-              child: Text(
-                deactivationReason(p, deletedBy: deletedBy),
-                style: const TextStyle(
-                  color: AppTheme.error,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
+            AccountStateNote(record: record),
           ],
           if (_editing) ...[
             const SizedBox(height: 14),
@@ -351,7 +332,7 @@ class _AdminParentDetailState extends State<AdminParentDetail> {
             Row(
               children: [
                 Expanded(
-                  child: _ActionBtn(
+                  child: AccountActionButton(
                     label: AppStrings.t('cancel_action'),
                     color: AppTheme.error,
                     icon: Icons.close_rounded,
@@ -362,7 +343,7 @@ class _AdminParentDetailState extends State<AdminParentDetail> {
                 ),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: _ActionBtn(
+                  child: AccountActionButton(
                     label: _saving
                         ? AppStrings.t('saving_action')
                         : AppStrings.t('save_action'),
@@ -545,70 +526,40 @@ class _AdminParentDetailState extends State<AdminParentDetail> {
     );
   }
 
-  Widget _buildControls(BuildContext context, AppUser p) {
-    // A deleted account is a tombstone: there is nothing to switch back on
-    // (the user's sign-in is gone, or an admin archived it), so the
-    // activate/delete actions would only mislead.
-    if (p.isDeleted) {
-      return SectionCard(
-        title: AppStrings.t('controls_title'),
-        icon: Icons.tune_rounded,
-        color: AppTheme.parentPurple,
-        child: Text(
-          'This account has been deleted. Its history stays on record; it '
-          'can no longer be activated or messaged.',
-          style: TextStyle(color: context.textSecondary, fontSize: 12),
-        ),
-      );
-    }
-    return GlassCard(
-      padding: const EdgeInsets.all(18),
+  Widget _buildControls(
+    BuildContext context,
+    AccountRecord record,
+    List<Student> children,
+  ) {
+    final p = record.user;
+    final live = children.where((c) => !c.isDeleted).length;
+    return SectionCard(
+      title: AppStrings.t('controls_title'),
+      icon: Icons.tune_rounded,
+      color: AppTheme.parentPurple,
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(
-            AppStrings.t('controls_title'),
-            style: TextStyle(
-              color: context.textPrimary,
-              fontSize: 15,
-              fontWeight: FontWeight.w700,
+          // A deleted account has no inbox any more.
+          if (record.state != AccountState.deleted) ...[
+            AccountActionButton(
+              label: AppStrings.t('message_action'),
+              color: AppTheme.parentPurple,
+              icon: Icons.chat_bubble_rounded,
+              onTap: () => _message(p),
             ),
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: _ActionBtn(
-                  label: p.isActive
-                      ? AppStrings.t('deactivate_action')
-                      : 'Activate', // not requested this pass
-                  color: p.isActive ? AppTheme.error : AppTheme.success,
-                  icon: p.isActive
-                      ? Icons.block_rounded
-                      : Icons.check_circle_rounded,
-                  onTap: () => _toggleActive(p),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _ActionBtn(
-                  label: AppStrings.t('message_action'),
-                  color: AppTheme.parentPurple,
-                  icon: Icons.chat_bubble_rounded,
-                  onTap: () => _message(p),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          SizedBox(
-            width: double.infinity,
-            child: _ActionBtn(
-              label: AppStrings.t('delete_action'),
-              color: AppTheme.error,
-              icon: Icons.delete_outline_rounded,
-              onTap: () => _deleteParent(p),
-            ),
+            const SizedBox(height: 8),
+          ],
+          AccountControls(
+            record: record,
+            deleteNote: live == 0
+                ? null
+                : AppStrings.t(
+                    'delete_parent_children_note',
+                  ).replaceFirst('{count}', '$live'),
+            activateNote: record.isLegacyArchive
+                ? AppStrings.t('activate_parent_children_note')
+                : null,
           ),
         ],
       ),
@@ -637,60 +588,6 @@ class _EditField extends StatelessWidget {
       textDirection: textDirection,
       style: TextStyle(color: context.textPrimary, fontSize: 14),
       decoration: InputDecoration(labelText: label),
-    );
-  }
-}
-
-class _ActionBtn extends StatelessWidget {
-  final String label;
-  final Color color;
-  final IconData icon;
-  final VoidCallback? onTap;
-  const _ActionBtn({
-    required this.label,
-    required this.color,
-    required this.icon,
-    required this.onTap,
-  });
-  @override
-  Widget build(BuildContext context) {
-    final disabled = onTap == null;
-    return Clickable(
-      onTap: onTap,
-      child: Opacity(
-        opacity: disabled ? 0.5 : 1,
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 11),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [
-                color.withValues(alpha: 0.14),
-                color.withValues(alpha: 0.06),
-              ],
-            ),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: color.withValues(alpha: 0.2)),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(icon, color: color, size: 15),
-              const SizedBox(width: 5),
-              Flexible(
-                child: Text(
-                  label,
-                  style: TextStyle(
-                    color: color,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
     );
   }
 }

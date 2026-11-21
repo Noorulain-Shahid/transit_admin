@@ -77,16 +77,18 @@ class _AdminStudentManagementState extends State<AdminStudentManagement> {
   String _levelFilter = 'All';
   // Constructed once — see the identical note on
   // `_AdminDriverManagementState._driversStream`.
+  // Archived self-registered students stay listed (badged Deactivated or
+  // Deleted) — they are accounts, and can be activated again.
   late final Stream<List<Student>> _studentsStream = AdminRepository.instance
-      .watchStudents();
+      .watchStudents(includeArchivedSelfRegistered: true);
 
   // The accounts behind the students — a self-registered student's own
   // `users` doc, a child's parent's — for presence and the subscription
   // chip. Deleted accounts are kept: a child of a parent who deleted their
   // account must read "Inactive", not fall back to looking fine.
-  late final Stream<List<AppUser>> _studentUsersStream = AdminRepository
+  late final Stream<List<AccountRecord>> _studentUsersStream = AdminRepository
       .instance
-      .watchUsersByRole(UserRole.student, includeDeleted: true);
+      .watchAccountsByRole(UserRole.student);
   late final Stream<List<AppUser>> _parentUsersStream = AdminRepository.instance
       .watchUsersByRole(UserRole.parent, includeDeleted: true);
 
@@ -104,9 +106,12 @@ class _AdminStudentManagementState extends State<AdminStudentManagement> {
     super.dispose();
   }
 
-  List<Student> _filtered(List<Student> students) {
+  List<Student> _filtered(
+    List<Student> students,
+    Map<String, AccountRecord> records,
+  ) {
     final q = _search.trim().toLowerCase();
-    return students
+    final list = students
         .where(
           (s) =>
               (q.isEmpty ||
@@ -116,23 +121,34 @@ class _AdminStudentManagementState extends State<AdminStudentManagement> {
               _matchesLevel(s, _levelFilter),
         )
         .toList();
+    // Deactivated and deleted student accounts sink to the bottom.
+    list.sort(
+      (a, b) => _ownAccountState(
+        a,
+        records,
+      ).index.compareTo(_ownAccountState(b, records).index),
+    );
+    return list;
   }
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<List<AppUser>>(
+    return StreamBuilder<List<AccountRecord>>(
       stream: _studentUsersStream,
       builder: (context, studentUsersSnap) => StreamBuilder<List<AppUser>>(
         stream: _parentUsersStream,
         builder: (context, parentUsersSnap) {
+          final studentRecords = <String, AccountRecord>{
+            for (final r in studentUsersSnap.data ?? const <AccountRecord>[])
+              r.uid: r,
+          };
           final accounts = <String, AppUser>{
             for (final u in parentUsersSnap.data ?? const <AppUser>[]) u.uid: u,
-            for (final u in studentUsersSnap.data ?? const <AppUser>[])
-              u.uid: u,
+            for (final r in studentRecords.values) r.uid: r.user,
           };
           final accountsLoaded =
               studentUsersSnap.hasData && parentUsersSnap.hasData;
-          return _buildList(context, accounts, accountsLoaded);
+          return _buildList(context, accounts, studentRecords, accountsLoaded);
         },
       ),
     );
@@ -141,13 +157,14 @@ class _AdminStudentManagementState extends State<AdminStudentManagement> {
   Widget _buildList(
     BuildContext context,
     Map<String, AppUser> accounts,
+    Map<String, AccountRecord> studentRecords,
     bool accountsLoaded,
   ) {
     return StreamBuilder<List<Student>>(
       stream: _studentsStream,
       builder: (context, snap) {
         final students = snap.data ?? const <Student>[];
-        final filtered = _filtered(students);
+        final filtered = _filtered(students, studentRecords);
         return SingleChildScrollView(
           padding: const EdgeInsets.only(bottom: 120),
           child: ResponsiveBody(
@@ -177,6 +194,9 @@ class _AdminStudentManagementState extends State<AdminStudentManagement> {
                             for (final s in filtered)
                               _StudentCard(
                                 student: s,
+                                ownAccount: isSelfRegistered(s)
+                                    ? _ownAccountState(s, studentRecords)
+                                    : null,
                                 account: accounts[primaryAccountIdFor(s)],
                                 accountLoaded: accountsLoaded,
                                 onTap: () => context.push(
@@ -335,9 +355,24 @@ class _AdminStudentManagementState extends State<AdminStudentManagement> {
   }
 }
 
+/// A self-registered student's own account state (an archived student
+/// record counts as Deactivated). A child has no account — always Active
+/// here; its parent's state shows on the parent.
+AccountState _ownAccountState(Student s, Map<String, AccountRecord> records) {
+  if (!isSelfRegistered(s)) return AccountState.active;
+  final record = records[s.id];
+  if (record == null) {
+    return s.isDeleted ? AccountState.deactivated : AccountState.active;
+  }
+  return record.withProfileArchived(s.isDeleted).state;
+}
+
 // ─── Student Card ────────────────────────────────────────────────────────────
 class _StudentCard extends StatelessWidget {
   final Student student;
+
+  /// The student's own account state — self-registered students only.
+  final AccountState? ownAccount;
 
   /// The account that uses the app for this student: their own when
   /// self-registered, otherwise their parent's (see [primaryAccountIdFor]).
@@ -346,6 +381,7 @@ class _StudentCard extends StatelessWidget {
   final VoidCallback onTap;
   const _StudentCard({
     required this.student,
+    required this.ownAccount,
     required this.account,
     required this.accountLoaded,
     required this.onTap,
@@ -405,6 +441,7 @@ class _StudentCard extends StatelessWidget {
             runSpacing: 6,
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
+              if (ownAccount != null) AccountStatusBadge(state: ownAccount!),
               _InfoPill(
                 icon: _needsDriverAttention(student)
                     ? Icons.warning_amber_rounded

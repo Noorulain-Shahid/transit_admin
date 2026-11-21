@@ -28,11 +28,11 @@ class _AdminParentManagementState extends State<AdminParentManagement> {
   // `_AdminDriverManagementState._driversStream`.
   //
   // Deleted parents are deliberately *included*: an account the parent
-  // deleted, or an admin archived, used to vanish from this list (or, before
-  // the tombstone, look like any other account). It now stays, labelled
-  // "Deactivated".
-  late final Stream<List<AppUser>> _parentsStream = AdminRepository.instance
-      .watchUsersByRole(UserRole.parent, includeDeleted: true);
+  // deleted, or an admin deactivated or deleted, used to vanish from this
+  // list. It now stays, badged Active / Deactivated / Deleted.
+  late final Stream<List<AccountRecord>> _parentsStream = AdminRepository
+      .instance
+      .watchAccountsByRole(UserRole.parent);
   late final Stream<List<Student>> _studentsStream = AdminRepository.instance
       .watchStudents();
 
@@ -50,35 +50,32 @@ class _AdminParentManagementState extends State<AdminParentManagement> {
     super.dispose();
   }
 
-  /// Search over name, email and phone; active accounts first, then by
-  /// name, so a list full of tombstones doesn't bury the live families.
-  List<AppUser> _filtered(List<AppUser> parents) {
+  /// Search over name, email and phone; Active accounts first, then
+  /// Deactivated, then Deleted, each by name — so a list full of
+  /// tombstones doesn't bury the live families.
+  List<AccountRecord> _filtered(List<AccountRecord> parents) {
     final q = _search.trim().toLowerCase();
-    final list = parents
-        .where(
-          (p) =>
-              q.isEmpty ||
-              p.name.toLowerCase().contains(q) ||
-              p.email.toLowerCase().contains(q) ||
-              p.phone.toLowerCase().contains(q),
-        )
-        .toList();
+    final list = parents.where((r) {
+      final p = r.user;
+      return q.isEmpty ||
+          p.name.toLowerCase().contains(q) ||
+          p.email.toLowerCase().contains(q) ||
+          p.phone.toLowerCase().contains(q);
+    }).toList();
     list.sort((a, b) {
-      final byState = (isAccountDeactivated(a) ? 1 : 0).compareTo(
-        isAccountDeactivated(b) ? 1 : 0,
-      );
+      final byState = a.state.index.compareTo(b.state.index);
       if (byState != 0) return byState;
-      return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+      return a.user.name.toLowerCase().compareTo(b.user.name.toLowerCase());
     });
     return list;
   }
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<List<AppUser>>(
+    return StreamBuilder<List<AccountRecord>>(
       stream: _parentsStream,
       builder: (context, parentSnap) {
-        final parents = parentSnap.data ?? const <AppUser>[];
+        final parents = parentSnap.data ?? const <AccountRecord>[];
         final filtered = _filtered(parents);
         return StreamBuilder<List<Student>>(
           stream: _studentsStream,
@@ -116,7 +113,7 @@ class _AdminParentManagementState extends State<AdminParentManagement> {
                               children: [
                                 for (final p in filtered)
                                   _ParentCard(
-                                    parent: p,
+                                    record: p,
                                     children:
                                         childrenByParent[p.uid] ?? const [],
                                     onTap: () => context.push(
@@ -218,7 +215,8 @@ class _AdminParentManagementState extends State<AdminParentManagement> {
     );
   }
 
-  Widget _buildStats(BuildContext context, List<AppUser> parents) {
+  Widget _buildStats(BuildContext context, List<AccountRecord> parents) {
+    int count(AccountState s) => parents.where((p) => p.state == s).length;
     return Row(
       children: [
         MiniStat(
@@ -231,14 +229,21 @@ class _AdminParentManagementState extends State<AdminParentManagement> {
         MiniStat(
           icon: Icons.check_circle_rounded,
           label: AppStrings.t('active_lbl'),
-          value: '${parents.where((p) => !isAccountDeactivated(p)).length}',
+          value: '${count(AccountState.active)}',
           color: AppTheme.success,
         ),
         const SizedBox(width: 8),
         MiniStat(
           icon: Icons.pause_circle_rounded,
-          label: 'Deactivated',
-          value: '${parents.where(isAccountDeactivated).length}',
+          label: AppStrings.t('deactivated_status'),
+          value: '${count(AccountState.deactivated)}',
+          color: AppTheme.warning,
+        ),
+        const SizedBox(width: 8),
+        MiniStat(
+          icon: Icons.delete_forever_rounded,
+          label: AppStrings.t('deleted_status'),
+          value: '${count(AccountState.deleted)}',
           color: AppTheme.error,
         ),
       ],
@@ -262,17 +267,21 @@ class _AdminParentManagementState extends State<AdminParentManagement> {
 
 // ─── Parent Card ─────────────────────────────────────────────────────────────
 class _ParentCard extends StatelessWidget {
-  final AppUser parent;
+  final AccountRecord record;
   final List<Student> children;
   final VoidCallback onTap;
   const _ParentCard({
-    required this.parent,
+    required this.record,
     required this.children,
     required this.onTap,
   });
+
+  AppUser get parent => record.user;
+
   @override
   Widget build(BuildContext context) {
-    final deactivated = isAccountDeactivated(parent);
+    final state = record.state;
+    final deactivated = state != AccountState.active;
     final contact = [
       if (parent.phone.isNotEmpty) parent.phone,
       if (parent.email.isNotEmpty) parent.email,
@@ -329,7 +338,7 @@ class _ParentCard extends StatelessWidget {
               spacing: 6,
               runSpacing: 6,
               children: [
-                AccountStatusBadge(user: parent),
+                AccountStatusBadge(state: state),
                 PresenceBadge(user: parent),
                 StatusBadge(
                   label: _childrenLabel(children.length),
@@ -340,9 +349,9 @@ class _ParentCard extends StatelessWidget {
             const SizedBox(height: 8),
             if (deactivated) ...[
               Text(
-                deactivationReason(parent),
-                style: const TextStyle(
-                  color: AppTheme.error,
+                accountStateReason(record),
+                style: TextStyle(
+                  color: accountStateColor(state),
                   fontSize: 11,
                   fontWeight: FontWeight.w600,
                 ),

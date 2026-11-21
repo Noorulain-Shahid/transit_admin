@@ -1,7 +1,9 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:transit_core/transit_core.dart';
 
+/// The category an action is counted under on Admin Activity Tracking.
 enum AuditActionType {
   create,
   update,
@@ -12,13 +14,84 @@ enum AuditActionType {
   emergencyTrigger,
 }
 
+/// Machine keys for the specific action inside a category — what the
+/// Audit History screen turns into a title ("Deactivated account"). Stored
+/// as `auditLogs/{id}.action`; entries written before this existed have
+/// none and fall back to their `description`.
+abstract final class AuditActions {
+  static const accountDeactivate = 'account.deactivate';
+  static const accountActivate = 'account.activate';
+  static const accountDeletePermanently = 'account.deletePermanently';
+  static const accountEdit = 'account.edit';
+  static const driverApprove = 'driver.approve';
+  static const driverSuspend = 'driver.suspend';
+  static const documentVerify = 'document.verify';
+  static const documentReject = 'document.reject';
+  static const studentArchive = 'student.archive';
+  static const studentEdit = 'student.edit';
+  static const studentTransport = 'student.transport';
+}
+
+/// One field an action changed: `Status: Active → Deactivated`.
+class AuditChange {
+  final String label;
+  final String from;
+  final String to;
+  const AuditChange(this.label, this.from, this.to);
+
+  Map<String, String> toMap() => {'label': label, 'from': from, 'to': to};
+
+  static AuditChange? fromMap(Object? raw) {
+    if (raw is! Map) return null;
+    final label = asString(raw['label']);
+    if (label.isEmpty) return null;
+    return AuditChange(label, asString(raw['from']), asString(raw['to']));
+  }
+}
+
+/// One extra fact about an action: `Reason: Photo is blurry`.
+class AuditDetail {
+  final String label;
+  final String value;
+  const AuditDetail(this.label, this.value);
+
+  Map<String, String> toMap() => {'label': label, 'value': value};
+
+  static AuditDetail? fromMap(Object? raw) {
+    if (raw is! Map) return null;
+    final label = asString(raw['label']);
+    final value = asString(raw['value']);
+    if (label.isEmpty && value.isEmpty) return null;
+    return AuditDetail(label, value);
+  }
+}
+
 class AuditLogEntry {
   final String id;
   final DateTime timestamp;
   final String adminId;
+
+  /// The admin's sign-in email when the action was taken (empty on older
+  /// entries — the screen then resolves the name from `users/{adminId}`).
+  final String adminEmail;
   final AuditActionType actionType;
-  final String targetEntityId; // e.g., DriverId, RouteId
+
+  /// See [AuditActions]; empty on older entries.
+  final String action;
+  final String targetEntityId; // e.g. a uid, a student id, a document id
+
+  /// `parent` / `driver` / `student` / `document` — empty on older entries.
+  final String targetType;
+  final String targetName;
+
+  /// Human role line, e.g. "Parent", "Driver", "Student (child of Sara)".
+  final String targetRole;
   final String description;
+
+  /// Ordered — stored as lists, not maps, so they read back in the order
+  /// they were written.
+  final List<AuditChange> changes;
+  final List<AuditDetail> details;
   final String ipAddress;
 
   AuditLogEntry({
@@ -28,20 +101,53 @@ class AuditLogEntry {
     required this.actionType,
     required this.targetEntityId,
     required this.description,
+    this.adminEmail = '',
+    this.action = '',
+    this.targetType = '',
+    this.targetName = '',
+    this.targetRole = '',
+    this.changes = const [],
+    this.details = const [],
     this.ipAddress = 'Unknown',
   });
-}
 
-class LoginSessionEntry {
-  final String id;
-  final DateTime timestamp;
-  final String platform;
+  /// Written before targets, changes and details were recorded.
+  bool get isLegacy =>
+      action.isEmpty &&
+      targetName.isEmpty &&
+      changes.isEmpty &&
+      details.isEmpty;
 
-  LoginSessionEntry({
-    required this.id,
-    required this.timestamp,
-    required this.platform,
-  });
+  factory AuditLogEntry.fromMap(String id, Map<String, dynamic> m) {
+    final created = m['createdAt'];
+    return AuditLogEntry(
+      id: id,
+      timestamp: created is Timestamp
+          ? created.toDate()
+          : (asDateOrNull(created) ?? DateTime.now()),
+      adminId: asString(m['adminId'], 'unknown'),
+      adminEmail: asString(m['adminEmail']),
+      actionType: AuditActionType.values.firstWhere(
+        (t) => t.name == m['actionType'],
+        orElse: () => AuditActionType.update,
+      ),
+      action: asString(m['action']),
+      targetEntityId: asString(m['targetEntityId']),
+      targetType: asString(m['targetType']),
+      targetName: asString(m['targetName']),
+      targetRole: asString(m['targetRole']),
+      description: asString(m['description']),
+      changes: [
+        if (m['changes'] is List)
+          for (final c in m['changes'] as List) ?AuditChange.fromMap(c),
+      ],
+      details: [
+        if (m['details'] is List)
+          for (final d in m['details'] as List) ?AuditDetail.fromMap(d),
+      ],
+      ipAddress: asString(m['ipAddress'], 'Unknown'),
+    );
+  }
 }
 
 /// Service responsible for logging all critical administrative actions.
@@ -51,38 +157,46 @@ class AuditService {
   AuditService._();
   static final AuditService instance = AuditService._();
 
-  final List<AuditLogEntry> _localLogs = [];
-
+  /// Records one admin action. [adminId] defaults to the signed-in admin.
+  ///
+  /// Everything beyond [description] is what the Audit History screen shows
+  /// as the record's detail: who the target was ([targetName],
+  /// [targetRole], [targetType]), what changed ([changes]) and anything
+  /// else worth keeping ([details] — a rejection reason, the children
+  /// restored with a parent, ...).
   Future<void> logAction({
-    required String adminId,
+    String? adminId,
     required AuditActionType actionType,
     required String targetEntityId,
     required String description,
+    String action = '',
+    String targetType = '',
+    String targetName = '',
+    String targetRole = '',
+    List<AuditChange> changes = const [],
+    List<AuditDetail> details = const [],
   }) async {
-    final entry = AuditLogEntry(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      timestamp: DateTime.now(),
-      adminId: adminId,
-      actionType: actionType,
-      targetEntityId: targetEntityId,
-      description: description,
-    );
-
-    _localLogs.add(entry);
+    final current = FirebaseAuth.instance.currentUser;
+    final by = adminId ?? current?.uid ?? 'unknown';
 
     if (kDebugMode) {
-      debugPrint(
-        '[AUDIT] ${entry.timestamp} | ${entry.adminId} | ${entry.actionType.name} | ${entry.description}',
-      );
+      debugPrint('[AUDIT] $by | ${actionType.name} | $action | $description');
     }
 
     try {
       await Db.fs.collection('auditLogs').add({
-        'adminId': entry.adminId,
-        'actionType': entry.actionType.name,
-        'targetEntityId': entry.targetEntityId,
-        'description': entry.description,
-        'ipAddress': entry.ipAddress,
+        'adminId': by,
+        'adminEmail': current?.email ?? '',
+        'actionType': actionType.name,
+        'action': action,
+        'targetEntityId': targetEntityId,
+        'targetType': targetType,
+        'targetName': targetName,
+        'targetRole': targetRole,
+        'description': description,
+        'changes': [for (final c in changes) c.toMap()],
+        'details': [for (final d in details) d.toMap()],
+        'ipAddress': 'Unknown',
         'createdAt': Db.now,
       });
     } catch (e) {
@@ -92,85 +206,20 @@ class AuditService {
     }
   }
 
-  List<AuditLogEntry> getRecentLogs(int count) {
-    return _localLogs.reversed.take(count).toList();
-  }
-
-  /// Logs a successful admin sign-in to the `loginSessions` collection —
-  /// called right after [AuthService.signInWithEmail] confirms the account
-  /// is an admin. Best-effort, same as [logAction]: a failed write here must
-  /// never block the sign-in itself.
-  Future<void> logLogin(String adminId) async {
-    try {
-      await Db.fs.collection('loginSessions').add({
-        'adminId': adminId,
-        'platform': defaultTargetPlatform.name,
-        'createdAt': Db.now,
-      });
-    } catch (e) {
-      if (kDebugMode) debugPrint('[AUDIT] Login session write failed: $e');
-    }
-  }
-
-  /// Session History viewer data for the signed-in admin.
-  ///
-  /// Deliberately filters on `adminId` only and sorts in Dart afterwards,
-  /// rather than adding `.orderBy('createdAt')` to the query — combined with
-  /// the `.where('adminId', ...)` filter, that would need a Firestore
-  /// composite index that was never deployed, which crashed this screen on
-  /// a real device (`failed-precondition`, no index exists) the first time
-  /// this shipped. This app has exactly one admin, so `limit` only needs to
-  /// cap what's sorted, not what's fetched — fine at this app's scale.
-  Future<List<LoginSessionEntry>> fetchLoginSessions({
-    required String adminId,
-    int limit = 50,
-  }) async {
-    final snap = await Db.fs
-        .collection('loginSessions')
-        .where('adminId', isEqualTo: adminId)
-        .get();
-    final entries = snap.docs.map((doc) {
-      final m = doc.data();
-      return LoginSessionEntry(
-        id: doc.id,
-        timestamp: (m['createdAt'] is Timestamp)
-            ? (m['createdAt'] as Timestamp).toDate()
-            : DateTime.now(),
-        platform: (m['platform'] as String?) ?? 'Unknown',
-      );
-    }).toList();
-    entries.sort((a, b) => b.timestamp.compareTo(a.timestamp));
-    return entries.take(limit).toList();
-  }
-
-  /// Real Audit History viewer data — reads the `auditLogs` collection this
-  /// service has always been writing to, which [getRecentLogs] never did
-  /// (it only ever returns this *session's* in-memory `_localLogs`, which
-  /// starts empty on every app launch). A one-time fetch rather than a live
-  /// stream: a history log is read-only and doesn't need to update under
-  /// the admin's finger while they're scrolling it.
-  Future<List<AuditLogEntry>> fetchRecentLogs({int limit = 100}) async {
+  /// The newest [limit] entries of the `auditLogs` collection. One query
+  /// ordered by `createdAt` only (a single-field index, always present);
+  /// Activity Tracking's per-category view filters these in memory rather
+  /// than adding an `actionType + createdAt` composite index. A one-time
+  /// fetch rather than a live stream: a history log is read-only and
+  /// doesn't need to update under the admin's finger while they scroll.
+  Future<List<AuditLogEntry>> fetchRecentLogs({int limit = 300}) async {
     final snap = await Db.fs
         .collection('auditLogs')
         .orderBy('createdAt', descending: true)
         .limit(limit)
         .get();
-    return snap.docs.map((doc) {
-      final m = doc.data();
-      return AuditLogEntry(
-        id: doc.id,
-        timestamp: (m['createdAt'] is Timestamp)
-            ? (m['createdAt'] as Timestamp).toDate()
-            : DateTime.now(),
-        adminId: (m['adminId'] as String?) ?? 'unknown',
-        actionType: AuditActionType.values.firstWhere(
-          (t) => t.name == m['actionType'],
-          orElse: () => AuditActionType.update,
-        ),
-        targetEntityId: (m['targetEntityId'] as String?) ?? '',
-        description: (m['description'] as String?) ?? '',
-        ipAddress: (m['ipAddress'] as String?) ?? 'Unknown',
-      );
-    }).toList();
+    return snap.docs
+        .map((doc) => AuditLogEntry.fromMap(doc.id, doc.data()))
+        .toList();
   }
 }

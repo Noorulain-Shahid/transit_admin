@@ -7,11 +7,13 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:transit_admin/app/admin_format.dart';
 import 'package:transit_admin/app/auth_service.dart';
 import 'package:transit_admin/app/router.dart';
 import 'package:transit_admin/main.dart';
 import 'package:transit_admin/screens/admin/admin_feedback.dart';
 import 'package:transit_admin/theme/app_theme.dart';
+import 'package:transit_admin/widgets/account_controls.dart';
 import 'package:transit_admin/widgets/entity_widgets.dart';
 import 'package:transit_admin/widgets/glass_card.dart';
 import 'package:transit_admin/widgets/mini_stat.dart';
@@ -74,7 +76,7 @@ Widget _sampleScreen() {
           spacing: 6,
           runSpacing: 6,
           children: [
-            AccountStatusBadge(user: user),
+            AccountStatusBadge(state: AccountState.active),
             PresenceBadge(user: user, prefix: 'Parent'),
             const TopRatedBadge(),
             const RatingStars(value: 4.5),
@@ -161,6 +163,42 @@ Widget _sampleScreen() {
                   ),
                 ],
                 secondary: [
+                  // Account controls as the detail screens show them:
+                  // an Active account, and a legacy-archived one.
+                  SectionCard(
+                    title: 'Controls',
+                    icon: Icons.tune_rounded,
+                    color: AppTheme.parentPurple,
+                    child: Column(
+                      children: [
+                        AccountControls(record: AccountRecord(user)),
+                        const SizedBox(height: 8),
+                        AccountStateNote(
+                          record: AccountRecord(
+                            AppUser(
+                              uid: 'u2',
+                              role: UserRole.driver,
+                              name: 'Archived driver',
+                              email: 'a@b.c',
+                              isDeleted: true,
+                              deletedAt: DateTime(2026, 11, 1),
+                            ),
+                          ),
+                        ),
+                        AccountControls(
+                          record: AccountRecord(
+                            AppUser(
+                              uid: 'u2',
+                              role: UserRole.driver,
+                              name: 'Archived driver',
+                              email: 'a@b.c',
+                              isDeleted: true,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                   const HistoryRow(
                     color: AppTheme.success,
                     title: '14 Nov 2026 · Morning trip · Round 1 (early run)',

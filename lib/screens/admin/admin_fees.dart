@@ -5,6 +5,7 @@ import 'package:transit_core/transit_core.dart';
 import '../../app/locale_provider.dart';
 import '../../data/admin_repository.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/ai_check_view.dart';
 import '../../widgets/glass_card.dart';
 import '../../widgets/neumorphic_card.dart';
 import '../../widgets/responsive.dart';
@@ -529,69 +530,78 @@ class _FeeCard extends StatelessWidget {
     final color = _statusColor(payment.status);
     return GlassCard(
       padding: const EdgeInsets.all(14),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            width: 42,
-            height: 42,
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: const Center(
-              child: Text('💰', style: TextStyle(fontSize: 20)),
-            ),
+          _row(context, color),
+          // What the AI check read off the family's screenshot.
+          if (payment.slipCheck != null)
+            SlipCheckView(check: payment.slipCheck!),
+        ],
+      ),
+    );
+  }
+
+  Widget _row(BuildContext context, Color color) {
+    return Row(
+      children: [
+        Container(
+          width: 42,
+          height: 42,
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(14),
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        studentName,
-                        style: TextStyle(
-                          color: context.textPrimary,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    Text(
-                      payment.displayAmount,
+          child: const Center(
+            child: Text('💰', style: TextStyle(fontSize: 20)),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      studentName,
                       style: TextStyle(
                         color: context.textPrimary,
                         fontSize: 14,
-                        fontWeight: FontWeight.w700,
+                        fontWeight: FontWeight.w600,
                       ),
+                      overflow: TextOverflow.ellipsis,
                     ),
-                  ],
-                ),
-                const SizedBox(height: 3),
-                Row(
-                  children: [
-                    Text(
-                      payment.monthKey,
-                      style: TextStyle(
-                        color: context.textTertiary,
-                        fontSize: 12,
-                      ),
+                  ),
+                  Text(
+                    payment.displayAmount,
+                    style: TextStyle(
+                      color: context.textPrimary,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
                     ),
-                    const Spacer(),
-                    StatusBadge(
-                      label: _statusLabel(payment.status),
-                      color: color,
-                    ),
-                  ],
-                ),
-              ],
-            ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 3),
+              Row(
+                children: [
+                  Text(
+                    payment.monthKey,
+                    style: TextStyle(color: context.textTertiary, fontSize: 12),
+                  ),
+                  const Spacer(),
+                  StatusBadge(
+                    label: _statusLabel(payment.status),
+                    color: color,
+                  ),
+                ],
+              ),
+            ],
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }

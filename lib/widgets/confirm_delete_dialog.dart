@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 import '../app/locale_provider.dart';
 import '../theme/app_theme.dart';
 
-/// Shared confirmation dialog for every "Delete" (soft-delete/archive)
-/// action in the admin app — Parent/Student/Driver Detail all show the same
-/// dialog rather than each screen reimplementing its own, so the wording
-/// and warning stay consistent no matter which entity is being removed.
+/// Confirmation for removing (archiving) a parent's child from Student
+/// Detail. Accounts — parents, drivers, self-registered students — use the
+/// Deactivate / Activate / Delete permanently dialogs in
+/// `account_controls.dart` instead.
 ///
 /// Returns `true` only if the admin tapped the destructive confirm button;
 /// `false`/`null` (dismissed) otherwise. Callers should only act on `true`.

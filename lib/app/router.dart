@@ -11,13 +11,13 @@ import '../screens/admin/admin_fees.dart';
 import '../screens/admin/admin_routes.dart';
 import '../screens/admin/admin_vehicles.dart';
 import '../screens/admin/admin_audit_history.dart';
-import '../screens/admin/admin_session_history.dart';
 import '../screens/admin/admin_activity_tracking.dart';
 import '../screens/admin/admin_create_route.dart';
 import '../screens/admin/admin_student_detail.dart';
 import '../screens/admin/admin_parent_detail.dart';
 import '../screens/admin/admin_driver_detail.dart';
 import '../screens/admin/admin_feedback.dart';
+import 'audit_format.dart';
 import 'auth_service.dart';
 
 /// Notifies GoRouter to re-run [_guard] whenever Firebase auth state changes,
@@ -43,9 +43,8 @@ const _publicRoutes = {'/', '/login', '/forgot-password'};
 /// Safely reads a detail route's id out of `state.extra` (an untyped
 /// `Object?` in go_router) — never throws on a null/wrong-type `extra`,
 /// unlike a bare `as String` cast.
-String _idExtra(GoRouterState state) => state.extra is String
-    ? state.extra as String
-    : '';
+String _idExtra(GoRouterState state) =>
+    state.extra is String ? state.extra as String : '';
 
 /// Blocks reaching any `/admin*` route without a verified admin session.
 ///
@@ -63,7 +62,8 @@ String _idExtra(GoRouterState state) => state.extra is String
 /// confirmed the role — so it can't go true during that race window.
 String? _guard(BuildContext context, GoRouterState state) {
   final isVerifiedAdmin =
-      AuthService.instance.isSignedIn && AuthService.instance.cachedRole == 'admin';
+      AuthService.instance.isSignedIn &&
+      AuthService.instance.cachedRole == 'admin';
   final isPublic = _publicRoutes.contains(state.matchedLocation);
 
   if (!isVerifiedAdmin && !isPublic) return '/login';
@@ -103,17 +103,17 @@ final appRouter = GoRouter(
       path: '/admin/vehicles',
       builder: (context, state) => const AdminVehicles(),
     ),
+    // `extra` may name an audit category (`AuditActionType.name`) —
+    // Activity Tracking opens the log already filtered to it.
     GoRoute(
       path: '/admin/audit-history',
-      builder: (context, state) => const AdminAuditHistory(),
+      builder: (context, state) => AdminAuditHistory(
+        initialCategory: auditCategoryFromName(state.extra),
+      ),
     ),
     GoRoute(
       path: '/admin/create-route',
       builder: (context, state) => const AdminCreateRoute(),
-    ),
-    GoRoute(
-      path: '/admin/session-history',
-      builder: (context, state) => const AdminSessionHistory(),
     ),
     GoRoute(
       path: '/admin/activity-tracking',

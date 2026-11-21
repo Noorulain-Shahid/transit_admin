@@ -9,32 +9,170 @@ import 'package:transit_core/transit_core.dart';
 
 // ── Account state ────────────────────────────────────────────────────────────
 
-/// An account an admin archived, one the user deleted themselves (a
-/// tombstone: `isDeleted`), or one an admin switched off (`!isActive`).
-/// The admin panel shows exactly two states: Active or Deactivated.
+/// The three states an account can be in, as the admin panel shows them.
+///
+/// * [active] — signs in normally.
+/// * [deactivated] — reversible: `isActive == false` (an admin switched it
+///   off, or the user paused it from the app), or a *legacy* admin archive
+///   (`isDeleted` written by the old admin "Delete", which never removed
+///   the sign-in). An admin can Activate either.
+/// * [deleted] — final: the sign-in no longer exists. Either an admin
+///   deleted it permanently (`authDeleted`, the email is free again) or the
+///   user deleted their own account from the app (a tombstone whose
+///   `deletedBy` is their own uid). Nothing can be done with it any more.
+enum AccountState { active, deactivated, deleted }
+
+/// A `users/{uid}` document as the admin panel needs it: the parsed
+/// [AppUser] plus the raw fields `AppUser` does not model.
+class AccountRecord {
+  final AppUser user;
+
+  /// Raw `deletedBy`: the user's own uid on a self-delete, `'admin'` on a
+  /// permanent admin delete, empty on a legacy admin archive.
+  final String deletedBy;
+
+  /// True once an admin deleted the Firebase sign-in for good.
+  final bool authDeleted;
+
+  /// Raw `deactivatedBy` / `deactivatedAt`, written by an admin Deactivate
+  /// (the app's own "Deactivate my account" writes neither).
+  final String deactivatedBy;
+  final DateTime? deactivatedAt;
+
+  /// The role's own profile document (`drivers/{uid}`, or `students/{uid}`
+  /// for a self-registered student) is archived while `users/{uid}` is not
+  /// — a half-archived account from the old admin "Delete". It counts as
+  /// Deactivated so Activate can restore it.
+  final bool profileArchived;
+
+  const AccountRecord(
+    this.user, {
+    this.deletedBy = '',
+    this.authDeleted = false,
+    this.deactivatedBy = '',
+    this.deactivatedAt,
+    this.profileArchived = false,
+  });
+
+  factory AccountRecord.fromMap(String uid, Map<String, dynamic> m) =>
+      AccountRecord(
+        AppUser.fromMap(uid, m),
+        deletedBy: asString(m['deletedBy']),
+        authDeleted: asBool(m['authDeleted']),
+        deactivatedBy: asString(m['deactivatedBy']),
+        deactivatedAt: asDateOrNull(m['deactivatedAt']),
+      );
+
+  String get uid => user.uid;
+
+  AccountState get state => accountStateOf(
+    user,
+    deletedBy: deletedBy,
+    authDeleted: authDeleted,
+    profileArchived: profileArchived,
+  );
+
+  /// The user deleted this account themselves from the app.
+  bool get isSelfDeleted =>
+      !authDeleted && isSelfDeletedTombstone(user, deletedBy: deletedBy);
+
+  /// An old admin archive (`isDeleted`, sign-in kept) — restorable.
+  bool get isLegacyArchive =>
+      state == AccountState.deactivated && (user.isDeleted || profileArchived);
+
+  AccountRecord withProfileArchived(bool archived) => AccountRecord(
+    user,
+    deletedBy: deletedBy,
+    authDeleted: authDeleted,
+    deactivatedBy: deactivatedBy,
+    deactivatedAt: deactivatedAt,
+    profileArchived: archived,
+  );
+}
+
+/// A tombstone the user wrote themselves (`AccountService.delete()` in the
+/// mobile app writes their own uid to `deletedBy`). Without a `deletedBy`
+/// the self-delete is recognised by its blanked contact details, which an
+/// admin archive never blanked.
+bool isSelfDeletedTombstone(AppUser user, {String deletedBy = ''}) {
+  if (!user.isDeleted) return false;
+  if (deletedBy.isNotEmpty) return deletedBy == user.uid;
+  return user.email.isEmpty && user.phone.isEmpty;
+}
+
+AccountState accountStateOf(
+  AppUser user, {
+  String deletedBy = '',
+  bool authDeleted = false,
+  bool profileArchived = false,
+}) {
+  if (authDeleted) return AccountState.deleted;
+  if (user.isDeleted) {
+    return isSelfDeletedTombstone(user, deletedBy: deletedBy)
+        ? AccountState.deleted
+        : AccountState.deactivated;
+  }
+  if (!user.isActive || profileArchived) return AccountState.deactivated;
+  return AccountState.active;
+}
+
+/// Not Active — Deactivated or Deleted. What the subscription chip and the
+/// list ordering care about: either way the account can't be used.
 bool isAccountDeactivated(AppUser user) => user.isDeleted || !user.isActive;
 
-String accountStatusLabel(AppUser user) =>
-    isAccountDeactivated(user) ? 'Deactivated' : 'Active';
+String accountStateLabel(AccountState state) => switch (state) {
+  AccountState.active => 'Active',
+  AccountState.deactivated => 'Deactivated',
+  AccountState.deleted => 'Deleted',
+};
 
-/// Why a deactivated account is deactivated, for the detail screen.
-///
-/// [deletedBy] is the raw `users/{uid}.deletedBy` (the mobile app writes the
-/// user's own uid there on a self-delete; an admin archive writes nothing).
-/// When it's unavailable the deletion is attributed by whether the account
-/// blanked its own contact details, which the self-delete tombstone does and
-/// an admin archive does not.
-String deactivationReason(AppUser user, {String? deletedBy}) {
-  if (user.isDeleted) {
-    final selfDeleted = (deletedBy != null && deletedBy.isNotEmpty)
-        ? deletedBy == user.uid
-        : user.email.isEmpty && user.phone.isEmpty;
-    final by = selfDeleted ? 'Deleted by the user' : 'Archived by an admin';
-    final at = user.deletedAt;
-    return at == null ? by : '$by on ${formatExactTime(at)}';
+/// Why an account is not Active, for the detail screen and list cards.
+/// Empty for an Active account.
+String accountStateReason(AccountRecord r, {DateTime? now}) {
+  String on(DateTime? at) =>
+      at == null ? '' : ' on ${formatExactTime(at, now: now)}';
+  final u = r.user;
+  switch (r.state) {
+    case AccountState.active:
+      return '';
+    case AccountState.deleted:
+      if (r.authDeleted) {
+        return 'Permanently deleted by an admin${on(u.deletedAt)}. The '
+            'sign-in is gone and the email can be registered again.';
+      }
+      return 'Deleted by the user${on(u.deletedAt)}';
+    case AccountState.deactivated:
+      if (u.isDeleted || r.profileArchived) {
+        return 'Archived by an admin${on(u.deletedAt)}. Sign-in is blocked '
+            'until an admin activates it.';
+      }
+      if (r.deactivatedBy.isNotEmpty) {
+        return 'Deactivated by an admin${on(r.deactivatedAt)}. Sign-in is '
+            'blocked until an admin activates it.';
+      }
+      return 'Deactivated. Sign-in is blocked until an admin activates it.';
   }
-  if (!user.isActive) return 'Deactivated by an admin';
-  return '';
+}
+
+/// Whether a parent's child was archived together with the parent, so
+/// activating the parent should bring it back.
+///
+/// New cascades mark the child `deletedWithParent: true`. Older ones carry
+/// no flag; for those the child counts when its `deletedAt` is within
+/// [window] of the parent's own `deletedAt` (both were written by one admin
+/// action, seconds apart). A child removed on its own, earlier or later,
+/// stays removed.
+bool wasArchivedWithParent({
+  required bool childDeleted,
+  required bool deletedWithParent,
+  required DateTime? childDeletedAt,
+  required DateTime? parentDeletedAt,
+  Duration window = const Duration(minutes: 2),
+}) {
+  if (!childDeleted) return false;
+  if (deletedWithParent) return true;
+  if (childDeletedAt == null || parentDeletedAt == null) return false;
+  return childDeletedAt.difference(parentDeletedAt).abs() <= window;
 }
 
 // ── Presence ─────────────────────────────────────────────────────────────────

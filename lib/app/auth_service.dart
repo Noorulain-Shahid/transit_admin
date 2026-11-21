@@ -4,7 +4,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:transit_core/transit_core.dart';
-import '../services/audit_service.dart';
 import '../theme/theme_provider.dart';
 import 'locale_provider.dart';
 
@@ -63,9 +62,8 @@ class AuthService {
       defaultTargetPlatform == TargetPlatform.macOS;
 
   GoogleSignIn? _googleSignInInstance;
-  GoogleSignIn? get _googleSignIn => googleSignInSupported
-      ? (_googleSignInInstance ??= GoogleSignIn())
-      : null;
+  GoogleSignIn? get _googleSignIn =>
+      googleSignInSupported ? (_googleSignInInstance ??= GoogleSignIn()) : null;
 
   /// In-memory cache populated by [preload] before runApp().
   String? _cachedRole;
@@ -178,7 +176,6 @@ class AuthService {
       await _firebaseAuth.signOut();
       throw const NotAnAdminException();
     }
-    await AuditService.instance.logLogin(uid!);
   }
 
   /// Rebuilds everything about the admin account that a client is allowed

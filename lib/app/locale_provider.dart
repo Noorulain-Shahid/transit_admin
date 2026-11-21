@@ -82,7 +82,6 @@ class AppStrings {
     'vehicle_management': 'Vehicle Management',
     'notification_preferences': 'Notification Preferences',
     'subscription_management': 'Subscription Management',
-    'security': 'Security',
     'language_settings': 'Language Settings',
 
     // Detail-screen tabs (student & driver detail)
@@ -116,26 +115,18 @@ class AppStrings {
     'no_attendance_records': 'No attendance records yet.',
 
     // Profile screen — Settings/Security/System Controls sections
-    'change_password': 'Change Password',
-    'login_session_history': 'Login Session History',
-    'view_sign_in_history': 'Tap to view your sign-in history',
-    'current_session_badge': 'Current',
-    'no_sessions_recorded': 'No sign-ins recorded yet.',
-    'last_sign_in_lbl': 'Last Sign-In',
-    'logout_all_sessions': 'Logout All Sessions',
     'system_controls': 'System Controls',
-    'soon_badge': 'Soon',
     'advanced_badge': 'Advanced',
-    'not_available_yet': 'Not available yet',
 
     // System Controls rows, theme toggle, sign out
     'audit_history': 'Audit History',
     'admin_activity_tracking': 'Admin Activity Tracking',
-    'view_activity_summary': 'Tap to view a summary of your actions',
+    'view_activity_summary': "Tap a category to see every action in detail",
     'total_actions_lbl': 'Total Actions',
     'today_actions_lbl': 'Today',
     'no_activity_recorded': 'No activity recorded yet.',
-    'now_recording_viewer_soon': 'Every admin action is logged — tap to view',
+    'now_recording_viewer_soon':
+        "Every admin action, with who, when and what changed",
     'light_mode': 'Light Mode',
     'dark_mode': 'Dark Mode',
     'sign_out': 'Sign Out',
@@ -334,9 +325,9 @@ class AppStrings {
 
     // Delete confirmation (Parent/Student/Driver Detail Controls)
     'delete_action': 'Delete',
-    'delete_confirm_title': 'Delete this account?',
+    'delete_confirm_title': "Remove this student?",
     'delete_confirm_body':
-        'This archives the account — it is hidden everywhere in the app and signed out, but its transport and payment history is kept, not erased.',
+        "The student record is archived — hidden everywhere in the app — but its transport and payment history is kept, not erased. The parent's account is not changed.",
     'delete_confirm_action': 'Delete',
 
     // Create Route form
@@ -345,6 +336,77 @@ class AppStrings {
     'stop_name_lbl': 'Stop name',
     'time_lbl': 'Time',
     'add_stop_action': 'Add Stop',
+    // Account states and controls (Deactivate / Activate / Delete permanently)
+    'deactivated_status': "Deactivated",
+    'deleted_status': "Deleted",
+    'deactivated_or_deleted_filter': "Deactivated / Deleted",
+    'account_section': "Account",
+    'no_account_record': "No account record found for this sign-in.",
+    'activate_action': "Activate",
+    're_enable_action': "Re-enable",
+    'delete_permanently_action': "Delete permanently",
+    'action_failed_title': "Could not complete the action",
+    'ok_action': "OK",
+    'deactivate_confirm_title': "Deactivate {name}?",
+    'deactivate_confirm_body':
+        "They won't be able to sign in until you activate the account again. Nothing is deleted.",
+    'account_deactivated_msg': "Account deactivated",
+    'activate_confirm_title': "Activate {name}?",
+    'activate_confirm_body': "They will be able to sign in again.",
+    'activate_archived_note':
+        "This account was archived by the old Delete action; everything archived with it is restored too.",
+    'activate_driver_roster_note':
+        "Students that were unassigned from this driver are not assigned back automatically.",
+    'activate_parent_children_note':
+        "Children archived together with this parent are restored as well.",
+    'account_activated_msg': "Account activated",
+    'delete_permanently_confirm_title': "Delete {name} permanently?",
+    'delete_permanently_body':
+        "This removes the sign-in for good. It cannot be undone.",
+    'delete_permanently_email_note':
+        "{email} becomes free: it can be used to register a new account, in any role.",
+    'delete_permanently_history_note':
+        "The name and role stay on record so past trips and payments still show who they were; email, phone, photo and emergency contacts are erased.",
+    'delete_parent_children_note':
+        "Their {count} child record(s) are archived as well.",
+    'delete_driver_note':
+        "The driver profile is archived and every student assigned to this driver is unassigned.",
+    'delete_student_note': "The student record is archived as well.",
+    'delete_permanently_ack': "I understand this cannot be undone",
+    'account_deleted_msg': "Account deleted permanently",
+    'deleted_no_actions': "No further actions are possible.",
+
+    // Profile and feedback labels
+    'app_rating_feedback': "App Rating and Feedback",
+    'not_set': "Not set",
+    'language_lbl': "Language",
+    'view_all_action': "View all",
+    'no_ratings_yet': "No one has rated the app yet.",
+    'no_ratings_with_stars': "No ratings with that many stars.",
+    'rating_count_one': "{count} rating",
+    'rating_count_many': "{count} ratings",
+    'average_of_ratings': "Average of {count} ratings",
+    'anonymous_user': "Anonymous user",
+    'no_comment_left': "No comment left.",
+
+    // Audit log (Activity Tracking / Audit History)
+    'no_admin_actions': "No administrative actions recorded yet.",
+    'audit_search_hint': "Search by name, action, email or ID",
+    'audit_showing': "Showing {shown} of the latest {total} actions",
+    'no_actions_in_category': "No actions match this filter.",
+    'audit_by_lbl': "By",
+    'audit_target_lbl': "Target",
+    'audit_categories_lbl': "Categories — tap one to see every action in it",
+    'view_all_actions': "View every action",
+    'latest_actions_lbl': "Latest actions",
+    'audit_latest_at': "Latest: {time}",
+    'audit_cat_create': "Create",
+    'audit_cat_update': "Update",
+    'audit_cat_delete': "Delete",
+    'audit_cat_override': "Override",
+    'audit_cat_statusChange': "Status change",
+    'audit_cat_broadcast': "Broadcast",
+    'audit_cat_emergencyTrigger': "Emergency trigger",
   };
 
   static final Map<String, String> _ur = {
@@ -371,7 +433,6 @@ class AppStrings {
     'vehicle_management': 'گاڑیوں کا انتظام',
     'notification_preferences': 'اطلاعات کی ترجیحات',
     'subscription_management': 'سبسکرپشن مینجمنٹ',
-    'security': 'سیکیورٹی',
     'language_settings': 'زبان کی ترتیبات',
 
     // Detail-screen tabs
@@ -405,26 +466,18 @@ class AppStrings {
     'no_attendance_records': 'ابھی تک کوئی حاضری کا ریکارڈ نہیں ہے۔',
 
     // Profile screen — Settings/Security/System Controls sections
-    'change_password': 'پاس ورڈ تبدیل کریں',
-    'login_session_history': 'لاگ ان سیشن کی تاریخ',
-    'view_sign_in_history': 'اپنی سائن اِن تاریخ دیکھنے کے لیے تھپتھپائیں',
-    'current_session_badge': 'موجودہ',
-    'no_sessions_recorded': 'ابھی تک کوئی سائن اِن ریکارڈ نہیں ہوا۔',
-    'last_sign_in_lbl': 'آخری سائن اِن',
-    'logout_all_sessions': 'تمام سیشنز سے لاگ آؤٹ کریں',
     'system_controls': 'سسٹم کنٹرولز',
-    'soon_badge': 'جلد',
     'advanced_badge': 'جدید',
-    'not_available_yet': 'ابھی دستیاب نہیں',
 
     // System Controls rows, theme toggle, sign out
     'audit_history': 'آڈٹ ہسٹری',
     'admin_activity_tracking': 'ایڈمن سرگرمی ٹریکنگ',
-    'view_activity_summary': 'اپنی کارروائیوں کا خلاصہ دیکھنے کے لیے تھپتھپائیں',
+    'view_activity_summary':
+        "ہر کارروائی کی تفصیل دیکھنے کے لیے کسی زمرے پر تھپتھپائیں",
     'total_actions_lbl': 'کل کارروائیاں',
     'today_actions_lbl': 'آج',
     'no_activity_recorded': 'ابھی تک کوئی سرگرمی ریکارڈ نہیں ہوئی۔',
-    'now_recording_viewer_soon': 'ہر ایڈمن کارروائی ریکارڈ ہوتی ہے — دیکھنے کے لیے تھپتھپائیں',
+    'now_recording_viewer_soon': "ہر ایڈمن کارروائی — کس نے، کب اور کیا بدلا",
     'light_mode': 'لائٹ موڈ',
     'dark_mode': 'ڈارک موڈ',
     'sign_out': 'لاگ آؤٹ',
@@ -540,7 +593,8 @@ class AppStrings {
     'vehicle_registration_doc': 'گاڑی کی رجسٹریشن',
     'verified_status': 'تصدیق شدہ',
     'view_action': 'دیکھیں',
-    'no_trips_recorded_driver': 'ابھی تک اس ڈرائیور کا کوئی سفر ریکارڈ نہیں ہوا۔',
+    'no_trips_recorded_driver':
+        'ابھی تک اس ڈرائیور کا کوئی سفر ریکارڈ نہیں ہوا۔',
     'no_attendance_logged_driver':
         'ابھی تک اس ڈرائیور کی کوئی حاضری درج نہیں ہوئی۔',
     'no_sos_alerts_clean_record':
@@ -617,9 +671,9 @@ class AppStrings {
 
     // Delete confirmation (Parent/Student/Driver Detail Controls)
     'delete_action': 'حذف کریں',
-    'delete_confirm_title': 'کیا یہ اکاؤنٹ حذف کرنا ہے؟',
+    'delete_confirm_title': "کیا اس طالب علم کو ہٹانا ہے؟",
     'delete_confirm_body':
-        'یہ اکاؤنٹ آرکائیو ہو جائے گا — یہ ایپ میں ہر جگہ چھپ جائے گا اور سائن آؤٹ ہو جائے گا، لیکن اس کی ٹرانسپورٹ اور ادائیگی کی تاریخ محفوظ رہے گی، مٹائی نہیں جائے گی۔',
+        "طالب علم کا ریکارڈ آرکائیو ہو جائے گا — ایپ میں ہر جگہ چھپ جائے گا — لیکن اس کی ٹرانسپورٹ اور ادائیگی کی تاریخ محفوظ رہے گی۔ والدین کا اکاؤنٹ تبدیل نہیں ہوگا۔",
     'delete_confirm_action': 'حذف کریں',
 
     // Create Route form
@@ -628,5 +682,79 @@ class AppStrings {
     'stop_name_lbl': 'اسٹاپ کا نام',
     'time_lbl': 'وقت',
     'add_stop_action': 'اسٹاپ شامل کریں',
+    // Account states and controls (Deactivate / Activate / Delete permanently)
+    'deactivated_status': "غیر فعال",
+    'deleted_status': "حذف شدہ",
+    'deactivated_or_deleted_filter': "غیر فعال / حذف شدہ",
+    'account_section': "اکاؤنٹ",
+    'no_account_record': "اس سائن اِن کا کوئی اکاؤنٹ ریکارڈ نہیں ملا۔",
+    'activate_action': "فعال کریں",
+    're_enable_action': "دوبارہ فعال کریں",
+    'delete_permanently_action': "مستقل طور پر حذف کریں",
+    'action_failed_title': "کارروائی مکمل نہیں ہو سکی",
+    'ok_action': "ٹھیک ہے",
+    'deactivate_confirm_title': "{name} کو غیر فعال کریں؟",
+    'deactivate_confirm_body':
+        "جب تک آپ اکاؤنٹ دوبارہ فعال نہیں کرتے، وہ سائن اِن نہیں کر سکیں گے۔ کچھ بھی حذف نہیں ہوگا۔",
+    'account_deactivated_msg': "اکاؤنٹ غیر فعال کر دیا گیا",
+    'activate_confirm_title': "{name} کو فعال کریں؟",
+    'activate_confirm_body': "وہ دوبارہ سائن اِن کر سکیں گے۔",
+    'activate_archived_note':
+        "یہ اکاؤنٹ پرانے حذف کے عمل سے آرکائیو ہوا تھا؛ اس کے ساتھ آرکائیو ہونے والا سب کچھ بھی بحال ہو جائے گا۔",
+    'activate_driver_roster_note':
+        "جو طلبہ اس ڈرائیور سے ہٹائے گئے تھے وہ خود بخود دوبارہ اس کے ساتھ نہیں جوڑے جائیں گے۔",
+    'activate_parent_children_note':
+        "اس والدین کے ساتھ آرکائیو ہونے والے بچے بھی بحال ہو جائیں گے۔",
+    'account_activated_msg': "اکاؤنٹ فعال کر دیا گیا",
+    'delete_permanently_confirm_title': "{name} کو مستقل طور پر حذف کریں؟",
+    'delete_permanently_body':
+        "یہ سائن اِن کو ہمیشہ کے لیے ختم کر دیتا ہے۔ اسے واپس نہیں کیا جا سکتا۔",
+    'delete_permanently_email_note':
+        "{email} آزاد ہو جائے گا: اس سے کسی بھی کردار میں نیا اکاؤنٹ بنایا جا سکتا ہے۔",
+    'delete_permanently_history_note':
+        "نام اور کردار ریکارڈ میں رہیں گے تاکہ پرانے سفر اور ادائیگیاں دکھا سکیں کہ وہ کون تھے؛ ای میل، فون، تصویر اور ہنگامی رابطے مٹا دیے جائیں گے۔",
+    'delete_parent_children_note':
+        "ان کے {count} بچوں کے ریکارڈ بھی آرکائیو ہو جائیں گے۔",
+    'delete_driver_note':
+        "ڈرائیور پروفائل آرکائیو ہو جائے گی اور اس ڈرائیور کے ساتھ جڑے تمام طلبہ ہٹا دیے جائیں گے۔",
+    'delete_student_note': "طالب علم کا ریکارڈ بھی آرکائیو ہو جائے گا۔",
+    'delete_permanently_ack':
+        "میں سمجھتا/سمجھتی ہوں کہ اسے واپس نہیں کیا جا سکتا",
+    'account_deleted_msg': "اکاؤنٹ مستقل طور پر حذف کر دیا گیا",
+    'deleted_no_actions': "اب مزید کوئی کارروائی ممکن نہیں۔",
+
+    // Profile and feedback labels
+    'app_rating_feedback': "ایپ ریٹنگ اور فیڈ بیک",
+    'not_set': "درج نہیں",
+    'language_lbl': "زبان",
+    'view_all_action': "سب دیکھیں",
+    'no_ratings_yet': "ابھی تک کسی نے ایپ کی ریٹنگ نہیں دی۔",
+    'no_ratings_with_stars': "اتنے ستاروں والی کوئی ریٹنگ نہیں۔",
+    'rating_count_one': "{count} ریٹنگ",
+    'rating_count_many': "{count} ریٹنگز",
+    'average_of_ratings': "{count} ریٹنگز کا اوسط",
+    'anonymous_user': "گمنام صارف",
+    'no_comment_left': "کوئی تبصرہ نہیں کیا گیا۔",
+
+    // Audit log (Activity Tracking / Audit History)
+    'no_admin_actions': "ابھی تک کوئی انتظامی کارروائی ریکارڈ نہیں ہوئی۔",
+    'audit_search_hint': "نام، کارروائی، ای میل یا آئی ڈی سے تلاش کریں",
+    'audit_showing':
+        "تازہ ترین {total} کارروائیوں میں سے {shown} دکھائی جا رہی ہیں",
+    'no_actions_in_category': "اس فلٹر سے کوئی کارروائی نہیں ملتی۔",
+    'audit_by_lbl': "کس نے",
+    'audit_target_lbl': "ہدف",
+    'audit_categories_lbl':
+        "زمرے — ہر کارروائی دیکھنے کے لیے کسی پر تھپتھپائیں",
+    'view_all_actions': "تمام کارروائیاں دیکھیں",
+    'latest_actions_lbl': "تازہ ترین کارروائیاں",
+    'audit_latest_at': "تازہ ترین: {time}",
+    'audit_cat_create': "تخلیق",
+    'audit_cat_update': "ترمیم",
+    'audit_cat_delete': "حذف",
+    'audit_cat_override': "اوور رائیڈ",
+    'audit_cat_statusChange': "حیثیت کی تبدیلی",
+    'audit_cat_broadcast': "نشریہ",
+    'audit_cat_emergencyTrigger': "ہنگامی الرٹ",
   };
 }

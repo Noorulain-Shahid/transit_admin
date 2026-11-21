@@ -5,6 +5,7 @@ import 'package:transit_core/transit_core.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../app/admin_format.dart';
+import '../app/locale_provider.dart';
 import '../theme/app_theme.dart';
 import 'glass_card.dart';
 import 'responsive.dart';
@@ -121,18 +122,30 @@ class PresenceBadge extends StatelessWidget {
   }
 }
 
-/// Binary account state: Active, or Deactivated (archived by an admin,
-/// deleted by the user, or switched off).
+/// Colour of an [AccountState]: green Active, orange Deactivated (can be
+/// activated again), red Deleted (final).
+Color accountStateColor(AccountState state) => switch (state) {
+  AccountState.active => AppTheme.success,
+  AccountState.deactivated => AppTheme.warning,
+  AccountState.deleted => AppTheme.error,
+};
+
+String accountStateText(AccountState state) => switch (state) {
+  AccountState.active => AppStrings.t('active_lbl'),
+  AccountState.deactivated => AppStrings.t('deactivated_status'),
+  AccountState.deleted => AppStrings.t('deleted_status'),
+};
+
+/// Account state chip: Active, Deactivated or Deleted (see [AccountState]).
 class AccountStatusBadge extends StatelessWidget {
-  final AppUser user;
-  const AccountStatusBadge({super.key, required this.user});
+  final AccountState state;
+  const AccountStatusBadge({super.key, required this.state});
 
   @override
   Widget build(BuildContext context) {
-    final off = isAccountDeactivated(user);
     return StatusBadge(
-      label: off ? 'Deactivated' : 'Active',
-      color: off ? AppTheme.error : AppTheme.success,
+      label: accountStateText(state),
+      color: accountStateColor(state),
     );
   }
 }

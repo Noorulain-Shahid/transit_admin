@@ -3,6 +3,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:transit_core/transit_core.dart';
 
+import '../app/admin_format.dart';
+
 /// Admin-only reads and writes on top of the shared [Db]/[MessagingRepository]
 /// from `transit_core`. These queries (list every driver, list every user of a
 /// role) have no mobile-app equivalent — a parent or driver never needs to see
@@ -31,7 +33,14 @@ class AdminRepository {
 
   // ── Drivers ───────────────────────────────────────────────────────────────
 
-  Stream<List<Driver>> watchDrivers({DriverStatus? status}) {
+  /// Every driver profile. Archived ones (`isDeleted`) are dropped unless
+  /// [includeDeleted] — the Driver Management list keeps them, badged
+  /// Deactivated or Deleted, so an archived driver can still be found and
+  /// activated again.
+  Stream<List<Driver>> watchDrivers({
+    DriverStatus? status,
+    bool includeDeleted = false,
+  }) {
     final query = status == null
         ? Db.drivers
         : Db.drivers.where('status', isEqualTo: status.name);
@@ -41,7 +50,9 @@ class AdminRepository {
     // without needing a new composite index for the common case of also
     // filtering by `status`.
     return query.snapshots().docsList.map(
-      (drivers) => drivers.where((d) => !d.isDeleted).toList(),
+      (drivers) => includeDeleted
+          ? drivers
+          : drivers.where((d) => !d.isDeleted).toList(),
     );
   }
 
@@ -53,47 +64,16 @@ class AdminRepository {
       .doc(driverId)
       .update({'status': status.name, 'updatedAt': Db.now});
 
-  /// Archives the driver (see `Driver.isDeleted`'s doc comment — this never
-  /// physically deletes the document or the matching Firebase Auth
-  /// account; only a server-side Cloud Function with Admin SDK access can
-  /// do that and free the email for reuse). Also clears every student's
-  /// assignment to this driver, so no roster is left silently pointing at
-  /// an archived account.
-  ///
-  /// A driver exists as *two* documents sharing one uid — `drivers/{uid}`
-  /// (this repository's own domain) and `users/{uid}` (`role: driver`,
-  /// read by `transit_pro`'s sign-in gate) — both must be marked deleted or
-  /// the driver could still sign in and use the mobile app even though the
-  /// admin app shows them as removed.
-  Future<void> deleteDriver(String driverId) async {
-    final batch = Db.fs.batch();
-    batch.update(Db.drivers.doc(driverId), {
-      'isDeleted': true,
-      'deletedAt': Db.now,
-      'updatedAt': Db.now,
-    });
-    batch.update(Db.fs.collection('users').doc(driverId), {
-      'isDeleted': true,
-      'deletedAt': Db.now,
-      'updatedAt': Db.now,
-    });
-    await batch.commit();
-    await reassignStudentsOffDriver(driverId);
-  }
-
   /// Clears `driverId`/`routeId`/`scheduleId`/`busId` on every student
-  /// currently assigned to [driverId] — used when a driver is archived (or
-  /// could be reused if a driver is simply removed from a route) so no
-  /// student roster is left pointing at a driver who no longer operates.
-  /// A single `WriteBatch` (first one in this repository): all affected
-  /// students for one driver commit atomically, and realistically never
-  /// approach Firestore's 500-write batch limit for a single driver's
-  /// roster.
-  Future<void> reassignStudentsOffDriver(String driverId) async {
-    final snap = await Db.students
-        .where('driverId', isEqualTo: driverId)
-        .get();
-    if (snap.docs.isEmpty) return;
+  /// currently assigned to [driverId] — used when a driver is deleted
+  /// permanently, so no student roster is left pointing at a driver who no
+  /// longer exists. Returns how many students were reassigned.
+  /// A single `WriteBatch`: all affected students for one driver commit
+  /// atomically, and realistically never approach Firestore's 500-write
+  /// batch limit for a single driver's roster.
+  Future<int> reassignStudentsOffDriver(String driverId) async {
+    final snap = await Db.students.where('driverId', isEqualTo: driverId).get();
+    if (snap.docs.isEmpty) return 0;
     final batch = Db.fs.batch();
     for (final doc in snap.docs) {
       batch.update(doc.reference, {
@@ -105,6 +85,7 @@ class AdminRepository {
       });
     }
     await batch.commit();
+    return snap.docs.length;
   }
 
   Stream<List<DriverDocument>> watchDriverDocuments(String driverId) =>
@@ -135,50 +116,229 @@ class AdminRepository {
       .snapshots()
       .docsList
       .map(
-        (users) => includeDeleted
-            ? users
-            : users.where((u) => !u.isDeleted).toList(),
+        (users) =>
+            includeDeleted ? users : users.where((u) => !u.isDeleted).toList(),
       );
 
   Stream<AppUser?> watchUser(String uid) =>
       Db.users.doc(uid).snapshots().map((s) => s.data());
 
-  /// [watchUser] plus the raw `deletedBy` field (not part of `AppUser`),
-  /// which tells a self-deleted account (its own uid) from an admin archive.
-  Stream<({AppUser user, String deletedBy})?> watchUserRecord(String uid) {
+  /// [watchUser] plus the raw fields `AppUser` does not model (`deletedBy`,
+  /// `authDeleted`, `deactivatedBy`…), which decide whether the account is
+  /// Active, Deactivated or Deleted — see [AccountRecord.state].
+  Stream<AccountRecord?> watchUserRecord(String uid) {
     if (uid.isEmpty) return Stream.value(null);
     return Db.fs.collection('users').doc(uid).snapshots().map((s) {
       final data = s.data();
       if (!s.exists || data == null) return null;
-      return (
-        user: AppUser.fromMap(s.id, data),
-        deletedBy: asString(data['deletedBy']),
-      );
+      return AccountRecord.fromMap(s.id, data);
     });
   }
 
-  /// Archives a parent account (see `AppUser.isDeleted`'s doc comment).
-  /// Their students are dependent profiles, not independent accounts, so
-  /// they're archived alongside the parent rather than left behind as
-  /// orphaned-but-still-active records.
-  Future<void> deleteParent(String uid) async {
-    await Db.fs.collection('users').doc(uid).update({
-      'isDeleted': true,
-      'deletedAt': Db.now,
-      'updatedAt': Db.now,
-    });
-    final snap = await Db.students.where('parentId', isEqualTo: uid).get();
-    if (snap.docs.isEmpty) return;
-    final batch = Db.fs.batch();
-    for (final doc in snap.docs) {
-      batch.update(doc.reference, {
-        'isDeleted': true,
-        'deletedAt': Db.now,
+  /// Every account of [role] as an [AccountRecord], tombstones included —
+  /// the management lists badge them rather than hide them.
+  Stream<List<AccountRecord>> watchAccountsByRole(UserRole role) => Db.fs
+      .collection('users')
+      .where('role', isEqualTo: role.name)
+      .snapshots()
+      .map(
+        (s) => [for (final d in s.docs) AccountRecord.fromMap(d.id, d.data())],
+      );
+
+  // ── Account lifecycle: deactivate / activate / delete permanently ─────────
+  //
+  // Deactivate and Activate are reversible and only flip state; nothing is
+  // erased. "Delete permanently" removes the Firebase sign-in through the
+  // Worker (see `AccountAdminClient`) and only then writes the tombstone
+  // below — so a failed Worker call changes nothing here.
+
+  /// Blocks sign-in (`isActive: false`). Reversible with [activateAccount].
+  /// The mobile app refuses to sign in an inactive account.
+  Future<void> deactivateAccount(String uid) =>
+      Db.fs.collection('users').doc(uid).update({
+        'isActive': false,
+        'deactivatedAt': Db.now,
+        'deactivatedBy': _adminUid ?? 'admin',
         'updatedAt': Db.now,
       });
+
+  /// Makes a Deactivated account Active again. Also undoes a legacy admin
+  /// archive (the old "Delete", which set `isDeleted` and kept the
+  /// sign-in): the user document, the driver profile or self-registered
+  /// student record, and — for a parent — the children archived together
+  /// with the parent (see [wasArchivedWithParent]).
+  Future<AccountRestoreResult> activateAccount(AccountRecord record) async {
+    final uid = record.uid;
+    final batch = Db.fs.batch();
+    batch.update(Db.fs.collection('users').doc(uid), {
+      'isActive': true,
+      'isDeleted': false,
+      'deletedAt': FieldValue.delete(),
+      'deletedBy': FieldValue.delete(),
+      'deactivatedAt': FieldValue.delete(),
+      'deactivatedBy': FieldValue.delete(),
+      'updatedAt': Db.now,
+    });
+
+    var profileRestored = false;
+    final restoredChildren = <String>[];
+    switch (record.user.role) {
+      case UserRole.driver:
+      case UserRole.student:
+        final ref = Db.fs
+            .collection(
+              record.user.role == UserRole.driver ? 'drivers' : 'students',
+            )
+            .doc(uid);
+        final snap = await ref.get();
+        if (snap.exists && asBool(snap.data()?['isDeleted'])) {
+          batch.update(ref, {
+            'isDeleted': false,
+            'deletedAt': FieldValue.delete(),
+            'updatedAt': Db.now,
+          });
+          profileRestored = true;
+        }
+      case UserRole.parent:
+        if (record.user.isDeleted) {
+          final children = await Db.fs
+              .collection('students')
+              .where('parentId', isEqualTo: uid)
+              .get();
+          for (final doc in children.docs) {
+            final m = doc.data();
+            final restore = wasArchivedWithParent(
+              childDeleted: asBool(m['isDeleted']),
+              deletedWithParent: asBool(m['deletedWithParent']),
+              childDeletedAt: asDateOrNull(m['deletedAt']),
+              parentDeletedAt: record.user.deletedAt,
+            );
+            if (!restore) continue;
+            batch.update(doc.reference, {
+              'isDeleted': false,
+              'deletedAt': FieldValue.delete(),
+              'deletedWithParent': FieldValue.delete(),
+              'updatedAt': Db.now,
+            });
+            final name = asString(m['name']);
+            restoredChildren.add(name.isEmpty ? doc.id : name);
+          }
+        }
+      case UserRole.admin:
+        break;
     }
     await batch.commit();
+    return AccountRestoreResult(
+      profileRestored: profileRestored,
+      restoredChildren: restoredChildren,
+    );
   }
+
+  /// The Firestore half of a permanent delete, run only after the Worker
+  /// has removed the Firebase sign-in. `users/{uid}` becomes a tombstone —
+  /// name and role kept so trips, payments and ratings still say who they
+  /// were; email, phone, photo, push tokens and emergency contacts erased —
+  /// and the account's records are archived the way the app expects:
+  /// the driver profile (and every student reassigned off it), a
+  /// self-registered student's record, or a parent's children (marked
+  /// `deletedWithParent`).
+  Future<AccountDeletionResult> tombstoneDeletedAccount(
+    AccountRecord record,
+  ) async {
+    final uid = record.uid;
+    final batch = Db.fs.batch();
+    batch.update(Db.fs.collection('users').doc(uid), {
+      'isDeleted': true,
+      'isActive': false,
+      'deletedAt': Db.now,
+      'deletedBy': 'admin',
+      'deletedByAdmin': _adminUid ?? '',
+      'authDeleted': true,
+      'email': '',
+      'phone': '',
+      'photoUrl': FieldValue.delete(),
+      'fcmTokens': <String>[],
+      'emergencyContacts': <Map<String, dynamic>>[],
+      'isOnline': false,
+      'updatedAt': Db.now,
+    });
+
+    var profileArchived = false;
+    final archivedChildren = <String>[];
+    switch (record.user.role) {
+      case UserRole.driver:
+        final ref = Db.fs.collection('drivers').doc(uid);
+        if ((await ref.get()).exists) {
+          batch.update(ref, {
+            'isDeleted': true,
+            'deletedAt': Db.now,
+            'phone': '',
+            'photoUrl': FieldValue.delete(),
+            'updatedAt': Db.now,
+          });
+          profileArchived = true;
+        }
+      case UserRole.student:
+        final ref = Db.fs.collection('students').doc(uid);
+        final snap = await ref.get();
+        if (snap.exists && !asBool(snap.data()?['isDeleted'])) {
+          batch.update(ref, {
+            'isDeleted': true,
+            'deletedAt': Db.now,
+            'updatedAt': Db.now,
+          });
+          profileArchived = true;
+        }
+      case UserRole.parent:
+        final children = await Db.fs
+            .collection('students')
+            .where('parentId', isEqualTo: uid)
+            .get();
+        for (final doc in children.docs) {
+          final m = doc.data();
+          if (asBool(m['isDeleted'])) continue;
+          batch.update(doc.reference, {
+            'isDeleted': true,
+            'deletedAt': Db.now,
+            'deletedWithParent': true,
+            'updatedAt': Db.now,
+          });
+          final name = asString(m['name']);
+          archivedChildren.add(name.isEmpty ? doc.id : name);
+        }
+      case UserRole.admin:
+        break;
+    }
+    await batch.commit();
+    final reassigned = record.user.role == UserRole.driver
+        ? await reassignStudentsOffDriver(uid)
+        : 0;
+    return AccountDeletionResult(
+      profileArchived: profileArchived,
+      archivedChildren: archivedChildren,
+      studentsReassigned: reassigned,
+    );
+  }
+
+  /// Best-effort display name for an audit entry's target: the account
+  /// (`users/{id}`), else a student record (`students/{id}`). Null when
+  /// neither exists — e.g. a driver document id.
+  Future<String?> resolveTargetName(String id) async {
+    if (id.isEmpty) return null;
+    final user = await fetchUserName(id);
+    if (user != null) return user;
+    return _studentNameCache.putIfAbsent(id, () async {
+      try {
+        final name = (await Db.students.doc(id).get()).data()?.name ?? '';
+        return name.isEmpty ? null : name;
+      } catch (_) {
+        _studentNameCache.remove(id);
+        return null;
+      }
+    });
+  }
+
+  final Map<String, Future<String?>> _studentNameCache = {};
 
   /// Newest accounts across every role — used for the admin notifications
   /// feed's "New Account Activity" section.
@@ -195,20 +355,29 @@ class AdminRepository {
 
   // ── Students ──────────────────────────────────────────────────────────────
 
-  Stream<List<Student>> watchStudents() => Db.students
-      .snapshots()
-      .docsList
-      .map((students) => students.where((s) => !s.isDeleted).toList());
+  /// Every live student. With [includeArchivedSelfRegistered] an archived
+  /// self-registered student (who is also an account) is kept, so Student
+  /// Management can still show and reactivate them; an archived child of a
+  /// parent stays hidden (it comes back with its parent).
+  Stream<List<Student>> watchStudents({
+    bool includeArchivedSelfRegistered = false,
+  }) => Db.students.snapshots().docsList.map(
+    (students) => students
+        .where(
+          (s) =>
+              !s.isDeleted ||
+              (includeArchivedSelfRegistered && isSelfRegistered(s)),
+        )
+        .toList(),
+  );
 
   /// One parent's children, queried directly (`parentId == uid`, the same
   /// query the mobile app's own children list runs) rather than filtered
   /// out of the whole `students` collection. Archived children are kept so
   /// a deactivated family still shows who was on the account; the screen
   /// labels them.
-  Stream<List<Student>> watchStudentsOfParent(String parentId) => Db.students
-      .where('parentId', isEqualTo: parentId)
-      .snapshots()
-      .docsList;
+  Stream<List<Student>> watchStudentsOfParent(String parentId) =>
+      Db.students.where('parentId', isEqualTo: parentId).snapshots().docsList;
 
   /// A driver's roster: `students where driverId == uid`, which is how the
   /// driver app defines it (see `Student.driverId`).
@@ -231,12 +400,10 @@ class AdminRepository {
   /// when a single dependent profile is removed without touching the
   /// parent's own account (removing the parent instead cascades via
   /// [deleteParent]).
-  Future<void> deleteStudent(String studentId) =>
-      Db.fs.collection('students').doc(studentId).update({
-        'isDeleted': true,
-        'deletedAt': Db.now,
-        'updatedAt': Db.now,
-      });
+  Future<void> deleteStudent(String studentId) => Db.fs
+      .collection('students')
+      .doc(studentId)
+      .update({'isDeleted': true, 'deletedAt': Db.now, 'updatedAt': Db.now});
 
   // ── Fleet: buses & routes ─────────────────────────────────────────────────
 
@@ -286,17 +453,17 @@ class AdminRepository {
   Future<int> countDrivers() async =>
       (await Db.drivers.count().get()).count ?? 0;
 
-  Future<int> countParents() async => (await Db.users
-          .where('role', isEqualTo: UserRole.parent.name)
-          .count()
-          .get())
-      .count ??
+  Future<int> countParents() async =>
+      (await Db.users
+              .where('role', isEqualTo: UserRole.parent.name)
+              .count()
+              .get())
+          .count ??
       0;
 
   Future<int> countBuses() async => (await Db.buses.count().get()).count ?? 0;
 
-  Future<int> countRoutes() async =>
-      (await Db.routes.count().get()).count ?? 0;
+  Future<int> countRoutes() async => (await Db.routes.count().get()).count ?? 0;
 
   // ── Payments ──────────────────────────────────────────────────────────────
 
@@ -473,28 +640,27 @@ class AdminRepository {
     }
     final list = byId.values.toList()
       ..sort(
-        (a, b) => (b.createdAt ?? DateTime(0)).compareTo(
-          a.createdAt ?? DateTime(0),
-        ),
+        (a, b) =>
+            (b.createdAt ?? DateTime(0)).compareTo(a.createdAt ?? DateTime(0)),
       );
     return list;
   }
 
   /// Missed-bus pickups a driver accepted (`assignedDriverId`), newest
   /// first, ordered here rather than by a composite index.
-  Stream<List<MissedBusRequest>> watchMissedBusForDriver(String driverId) =>
-      Db.missedBusRequests
-          .where('assignedDriverId', isEqualTo: driverId)
-          .snapshots()
-          .docsList
-          .map(
-            (list) => list
-              ..sort(
-                (a, b) => (b.createdAt ?? DateTime(0)).compareTo(
-                  a.createdAt ?? DateTime(0),
-                ),
-              ),
-          );
+  Stream<List<MissedBusRequest>> watchMissedBusForDriver(String driverId) => Db
+      .missedBusRequests
+      .where('assignedDriverId', isEqualTo: driverId)
+      .snapshots()
+      .docsList
+      .map(
+        (list) => list
+          ..sort(
+            (a, b) => (b.createdAt ?? DateTime(0)).compareTo(
+              a.createdAt ?? DateTime(0),
+            ),
+          ),
+      );
 
   // ── Access history ───────────────────────────────────────────────────────
 
@@ -549,11 +715,8 @@ class AdminRepository {
   /// One driver's ratings. `Driver.rating`/`ratingCount` are never kept
   /// current, so the figure is always computed from these
   /// (`DriverRatingSummary.of`).
-  Stream<List<DriverRating>> watchRatingsForDriver(String driverId) => Db
-      .ratings
-      .where('driverId', isEqualTo: driverId)
-      .snapshots()
-      .docsList;
+  Stream<List<DriverRating>> watchRatingsForDriver(String driverId) =>
+      Db.ratings.where('driverId', isEqualTo: driverId).snapshots().docsList;
 
   /// Every driver rating, for the driver list's per-driver summaries.
   Stream<List<DriverRating>> watchAllRatings() =>
@@ -690,4 +853,34 @@ class AccessLogEntry {
         platform: asString(m['platform']),
         at: asDateOrNull(m['at']),
       );
+}
+
+/// What [AdminRepository.activateAccount] brought back besides the user
+/// document — written into the audit log.
+class AccountRestoreResult {
+  /// The driver profile or self-registered student record was archived and
+  /// has been restored.
+  final bool profileRestored;
+
+  /// Names of a parent's children restored together with the parent.
+  final List<String> restoredChildren;
+
+  const AccountRestoreResult({
+    this.profileRestored = false,
+    this.restoredChildren = const [],
+  });
+}
+
+/// What [AdminRepository.tombstoneDeletedAccount] archived along with the
+/// account — written into the audit log.
+class AccountDeletionResult {
+  final bool profileArchived;
+  final List<String> archivedChildren;
+  final int studentsReassigned;
+
+  const AccountDeletionResult({
+    this.profileArchived = false,
+    this.archivedChildren = const [],
+    this.studentsReassigned = 0,
+  });
 }

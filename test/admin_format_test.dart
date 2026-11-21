@@ -31,34 +31,164 @@ AppUser _user({
 void main() {
   final now = DateTime(2026, 11, 15, 21, 42);
 
-  group('account state is binary: Active or Deactivated', () {
+  group('account state: Active, Deactivated or Deleted', () {
+    AccountState stateOf(
+      AppUser u, {
+      String deletedBy = '',
+      bool auth = false,
+    }) => AccountRecord(u, deletedBy: deletedBy, authDeleted: auth).state;
+
     test('a normal account is Active', () {
+      expect(stateOf(_user()), AccountState.active);
+      expect(accountStateLabel(AccountState.active), 'Active');
       expect(isAccountDeactivated(_user()), isFalse);
-      expect(accountStatusLabel(_user()), 'Active');
     });
 
-    test('an admin-switched-off account is Deactivated', () {
-      expect(accountStatusLabel(_user(isActive: false)), 'Deactivated');
+    test('isActive == false is Deactivated (reversible)', () {
+      expect(stateOf(_user(isActive: false)), AccountState.deactivated);
+      expect(accountStateLabel(AccountState.deactivated), 'Deactivated');
     });
 
-    test('a deleted (tombstone) account is Deactivated even if isActive', () {
-      expect(accountStatusLabel(_user(isDeleted: true)), 'Deactivated');
-    });
-
-    test('deletedBy tells a self-delete from an admin archive', () {
-      final u = _user(isDeleted: true, deletedAt: now);
+    test('a legacy admin archive is Deactivated, not Deleted', () {
+      // The old admin "Delete": isDeleted, no deletedBy, contact kept.
+      final archived = _user(isDeleted: true, deletedAt: now);
+      expect(stateOf(archived), AccountState.deactivated);
       expect(
-        deactivationReason(u, deletedBy: 'u1'),
-        startsWith('Deleted by the user'),
+        stateOf(archived, deletedBy: 'someone-else'),
+        AccountState.deactivated,
       );
+      final r = AccountRecord(archived);
+      expect(r.isLegacyArchive, isTrue);
       expect(
-        deactivationReason(u, deletedBy: 'someone-else'),
+        accountStateReason(r, now: now),
         startsWith('Archived by an admin'),
       );
-      // Without deletedBy, a blanked tombstone reads as a self-delete.
+    });
+
+    test('a self-deleted tombstone is Deleted, with no way back', () {
+      final tomb = _user(
+        isDeleted: true,
+        isActive: false,
+        email: '',
+        phone: '',
+      );
+      expect(stateOf(tomb, deletedBy: 'u1'), AccountState.deleted);
+      // Without deletedBy the blanked contact details give it away.
+      expect(stateOf(tomb), AccountState.deleted);
+      final r = AccountRecord(tomb, deletedBy: 'u1');
+      expect(r.isSelfDeleted, isTrue);
+      expect(r.isLegacyArchive, isFalse);
+      expect(accountStateReason(r), 'Deleted by the user');
+      expect(accountStateLabel(AccountState.deleted), 'Deleted');
+    });
+
+    test('a permanent admin delete is Deleted whatever else the doc says', () {
+      final gone = _user(
+        isDeleted: true,
+        isActive: false,
+        email: '',
+        phone: '',
+      );
+      final r = AccountRecord(gone, deletedBy: 'admin', authDeleted: true);
+      expect(r.state, AccountState.deleted);
+      expect(r.isSelfDeleted, isFalse);
       expect(
-        deactivationReason(_user(isDeleted: true, email: '', phone: '')),
-        'Deleted by the user',
+        accountStateReason(r),
+        startsWith('Permanently deleted by an admin'),
+      );
+      // authDeleted wins even over a doc that still looks active.
+      expect(stateOf(_user(), auth: true), AccountState.deleted);
+    });
+
+    test('an archived driver profile / student record reads Deactivated', () {
+      final r = AccountRecord(_user()).withProfileArchived(true);
+      expect(r.state, AccountState.deactivated);
+      expect(r.isLegacyArchive, isTrue);
+    });
+
+    test('the reason names who deactivated it and when', () {
+      final byAdmin = AccountRecord(
+        _user(isActive: false),
+        deactivatedBy: 'admin-1',
+        deactivatedAt: now,
+      );
+      expect(
+        accountStateReason(byAdmin, now: now),
+        'Deactivated by an admin on 15 Nov, 9:42 PM. Sign-in is blocked '
+        'until an admin activates it.',
+      );
+      // The app's own "pause my account" writes no deactivatedBy.
+      expect(
+        accountStateReason(AccountRecord(_user(isActive: false))),
+        startsWith('Deactivated. Sign-in is blocked'),
+      );
+      expect(accountStateReason(AccountRecord(_user())), isEmpty);
+    });
+
+    test('parses the raw fields AppUser does not model', () {
+      final r = AccountRecord.fromMap('u9', {
+        'role': 'driver',
+        'name': 'Ali',
+        'isDeleted': true,
+        'isActive': false,
+        'deletedBy': 'admin',
+        'authDeleted': true,
+        'deactivatedBy': 'x',
+      });
+      expect(r.uid, 'u9');
+      expect(r.deletedBy, 'admin');
+      expect(r.authDeleted, isTrue);
+      expect(r.deactivatedBy, 'x');
+      expect(r.state, AccountState.deleted);
+    });
+  });
+
+  group('children restored with their parent', () {
+    final parentAt = DateTime(2026, 11, 1, 10, 0, 0);
+
+    test('a flagged child comes back whatever its time', () {
+      expect(
+        wasArchivedWithParent(
+          childDeleted: true,
+          deletedWithParent: true,
+          childDeletedAt: DateTime(2026, 1, 1),
+          parentDeletedAt: parentAt,
+        ),
+        isTrue,
+      );
+    });
+
+    test('an unflagged child comes back only within two minutes', () {
+      bool at(DateTime t) => wasArchivedWithParent(
+        childDeleted: true,
+        deletedWithParent: false,
+        childDeletedAt: t,
+        parentDeletedAt: parentAt,
+      );
+      expect(at(parentAt.add(const Duration(seconds: 3))), isTrue);
+      expect(at(parentAt.subtract(const Duration(seconds: 90))), isTrue);
+      expect(at(parentAt.add(const Duration(minutes: 5))), isFalse);
+      expect(at(parentAt.subtract(const Duration(days: 2))), isFalse);
+    });
+
+    test('a live child or missing times are left alone', () {
+      expect(
+        wasArchivedWithParent(
+          childDeleted: false,
+          deletedWithParent: true,
+          childDeletedAt: parentAt,
+          parentDeletedAt: parentAt,
+        ),
+        isFalse,
+      );
+      expect(
+        wasArchivedWithParent(
+          childDeleted: true,
+          deletedWithParent: false,
+          childDeletedAt: null,
+          parentDeletedAt: parentAt,
+        ),
+        isFalse,
       );
     });
   });
