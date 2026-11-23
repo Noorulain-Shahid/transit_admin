@@ -739,13 +739,6 @@ class _AdminDriverDetailState extends State<AdminDriverDetail> {
                 : 'Not set',
             color: AppTheme.adminEmerald,
           ),
-          if (d.serviceRadiusKm > 0)
-            InfoLine(
-              icon: Icons.radar_rounded,
-              label: 'Service radius',
-              value: '${d.serviceRadiusKm.toStringAsFixed(1)} km',
-              color: AppTheme.info,
-            ),
           if (d.baseLocation != null)
             LocationBlock(
               title: 'Base location (start of day)',
